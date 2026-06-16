@@ -16,6 +16,21 @@ class SettingsGUI:
         
         # Store the current appearance mode for tracking
         self.current_appearance_mode = ctk.get_appearance_mode()
+
+        # Load saved theme on startup
+        self.load_initial_theme()
+
+    def load_initial_theme(self):
+        """Load saved theme preference on startup"""
+        try:
+            saved_theme = self.config.get('theme', 'Dark')
+            ctk.set_appearance_mode(saved_theme)
+            
+            # Also update the dropdown if we're in settings
+            if hasattr(self, 'theme_var'):
+                self.theme_var.set(saved_theme)
+        except:
+            pass  # Use default if can't load
     
     def clear_main_content(self):
         if self.main_content:
@@ -347,48 +362,65 @@ class SettingsGUI:
     def apply_theme(self):
         """Apply selected theme"""
         theme = self.theme_var.get()
+        
+        # Set the global appearance mode
         ctk.set_appearance_mode(theme)
-        self.current_appearance_mode = theme
         
-        # Update all labels to use appropriate text colors
-        self.update_theme_colors()
-        
-        # Show confirmation message
-        if theme == "System":
-            messagebox.showinfo("Theme Applied", f"Theme set to {theme} (follows OS theme).")
-        else:
-            messagebox.showinfo("Theme Applied", f"Theme changed to {theme} mode.")
+        # Update main application theme
+        self.update_main_app_theme()
         
         # Save theme preference
         self.save_theme_preference(theme)
+        
+        # Force settings window to reload
+        if self.main_content:
+            self.show_settings(self.main_content)
+        
+        # Show confirmation
+        message = f"Theme changed to {theme} mode."
+        if theme == "System":
+            message = "Theme set to follow your operating system."
+        
+        messagebox.showinfo("Theme Applied", message)
     
-    def update_theme_colors(self):
-        """Update widget colors based on current theme"""
-        current_theme = ctk.get_appearance_mode()
-        
-        # Define color schemes for different themes
-        if current_theme == "Dark":
-            text_color = "#f0f0f0"  # Light text for dark background
-            bg_color = "#2b2b2b"
-        elif current_theme == "Light":
-            text_color = "#2c2c2c"  # Dark text for light background
-            bg_color = "#f5f5f5"
-        else:  # System
-            # Use appropriate colors based on system theme
-            import platform
-            if platform.system() == "Windows":
-                # You might want to add more sophisticated detection here
-                text_color = "#2c2c2c"
-                bg_color = "#f5f5f5"
-            else:
-                text_color = "#f0f0f0"
-                bg_color = "#2b2b2b"
-        
-        # Update window background if needed
-        self.window.configure(fg_color=bg_color)
-        
-        # Note: In practice, CTk widgets should auto-update when appearance mode changes
-        # This function is kept for manual overrides if needed
+    def update_main_app_theme(self):
+        """Update the main application's theme"""
+        try:
+            # Get main app reference from window
+            if hasattr(self.window, 'main_app'):
+                main_app = self.window.main_app
+                if hasattr(main_app, 'update_theme_colors'):
+                    main_app.update_theme_colors()
+        except Exception as e:
+            print(f"Error updating main app theme: {e}")
+            # Fallback: try to find and update sidebar directly
+            self.fallback_sidebar_update()
+    
+    def fallback_sidebar_update(self):
+        """Fallback method to update sidebar if main app reference not found"""
+        try:
+            # Look for sidebar frame in window children
+            for widget in self.window.winfo_children():
+                if isinstance(widget, ctk.CTkFrame) and widget.winfo_width() < 250:
+                    # Likely the sidebar (narrow frame on left)
+                    current_theme = ctk.get_appearance_mode()
+                    
+                    if current_theme == "Dark":
+                        widget.configure(fg_color="#2b2b2b")
+                        for child in widget.winfo_children():
+                            if isinstance(child, ctk.CTkLabel):
+                                child.configure(text_color="#f0f0f0")
+                            elif isinstance(child, ctk.CTkButton):
+                                child.configure(text_color="#f0f0f0")
+                    else:
+                        widget.configure(fg_color="#f5f5f5")
+                        for child in widget.winfo_children():
+                            if isinstance(child, ctk.CTkLabel):
+                                child.configure(text_color="#2c2c2c")
+                            elif isinstance(child, ctk.CTkButton):
+                                child.configure(text_color="#2c2c2c")
+        except:
+            pass
     
     def save_theme_preference(self, theme):
         """Save theme preference to config"""
@@ -400,7 +432,7 @@ class SettingsGUI:
             if hasattr(self.db, 'config'):
                 self.db.config.update({'theme': theme})
         except:
-            pass  # Silently fail if can't save theme
+            pass  # Silently fail if can't save
     
     def save_preferences(self):
         """Save application preferences"""

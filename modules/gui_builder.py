@@ -20,13 +20,14 @@ class InventoryGUI:
         self.window = window
         self.db = db
         self.config = config
+        self.current_theme = ctk.get_appearance_mode()
         self.products_gui = ProductsGUI(window, db, config)
         self.ingredients_gui = IngredientsGUI(window, db, config)
-        self.recipes_gui = RecipesGUI(window, db, config)        
-        self.sales_gui = SalesGUI(window, db, config)           
-        self.inventory_gui = InventoryModuleGUI(window, db, config) 
-        self.expenses_gui = ExpensesGUI(window, db, config)     
-        self.reports_gui = ReportsGUI(window, db, config)       
+        self.recipes_gui = RecipesGUI(window, db, config)
+        self.sales_gui = SalesGUI(window, db, config)
+        self.inventory_gui = InventoryModuleGUI(window, db, config)
+        self.expenses_gui = ExpensesGUI(window, db, config)
+        self.reports_gui = ReportsGUI(window, db, config)
         self.settings_gui = SettingsGUI(window, db, config)
 
         # Set window properties
@@ -35,6 +36,59 @@ class InventoryGUI:
         
         # Create main container
         self.create_layout()
+
+        # Store reference to self in window for theme updates
+        window.main_app = self
+
+    def update_theme_colors(self):
+        """Update all UI colors based on current theme"""
+        current_theme = ctk.get_appearance_mode()
+        self.current_theme = current_theme
+        
+        # Update sidebar background
+        if hasattr(self, 'sidebar_frame'):
+            if current_theme == "Dark":
+                self.sidebar_frame.configure(fg_color="#2b2b2b")
+            else:
+                self.sidebar_frame.configure(fg_color="#f5f5f5")
+            
+            # Update all widgets in sidebar
+            self.update_widgets_in_frame(self.sidebar_frame)
+        
+        # Update main content area
+        if hasattr(self, 'main_content'):
+            if current_theme == "Dark":
+                self.main_content.configure(fg_color="#2b2b2b")
+            else:
+                self.main_content.configure(fg_color="#f5f5f5")
+    
+    def update_widgets_in_frame(self, frame):
+        """Update colors of all widgets in a frame"""
+        current_theme = ctk.get_appearance_mode()
+        
+        for widget in frame.winfo_children():
+            try:
+                if isinstance(widget, ctk.CTkLabel):
+                    if current_theme == "Dark":
+                        widget.configure(text_color="#f0f0f0")
+                    else:
+                        widget.configure(text_color="#2c2c2c")
+                
+                elif isinstance(widget, ctk.CTkButton):
+                    current_color = widget.cget("fg_color")
+                    # Don't change special colored buttons
+                    if current_color not in ["#27ae60", "#e74c3c", "#3498db", "#9b59b6", "#f39c12"]:
+                        if current_theme == "Dark":
+                            widget.configure(text_color="#f0f0f0")
+                        else:
+                            widget.configure(text_color="#2c2c2c")
+                
+                # Recursively update child frames
+                if isinstance(widget, ctk.CTkFrame):
+                    self.update_widgets_in_frame(widget)
+                    
+            except:
+                pass  # Skip widgets that don't support color changes
     
     def create_layout(self):
         """Create the main layout with sidebar and main area"""
@@ -59,35 +113,38 @@ class InventoryGUI:
         
         # Logo/title area
         title = ctk.CTkLabel(self.sidebar, text="INVENTORY", 
-                            font=("Arial", 22, "bold"))
+                            font=("Arial", 22, "bold"),
+                            text_color=("gray10", "gray90"))
         title.pack(pady=(20, 10))
         
         sub_title = ctk.CTkLabel(self.sidebar, 
                                 text=f"{self.config['business_name']}",
-                                font=("Arial", 12))
+                                font=("Arial", 12),
+                                text_color=("gray10", "gray90"))
         sub_title.pack(pady=(0, 20))
         
-        # Navigation buttons
+        # Navigation buttons - FIXED INDENTATION AND SYNTAX
         buttons = [
             ("📊 Dashboard", self.show_dashboard),
-    ("🏪 Products", lambda: self.products_gui.show_products_management(self.main_content)),
-    ("🥚 Ingredients", lambda: self.ingredients_gui.show_ingredients_management(self.main_content)),
-    ("📝 Recipes", lambda: self.recipes_gui.show_recipes(self.main_content)),           # NEW
-    ("💰 Sales", lambda: self.sales_gui.show_sales(self.main_content)),                 # NEW
-    ("📦 Inventory", lambda: self.inventory_gui.show_inventory(self.main_content)),     # NEW
-    ("💸 Expenses", lambda: self.expenses_gui.show_expenses_management(self.main_content)), # NEW
-    ("📈 Reports", lambda: self.reports_gui.show_reports(self.main_content)),           # NEW
-    ("⚙️ Settings", lambda: self.settings_gui.show_settings(self.main_content)),        # NEW
-]
+            ("🏪 Products", lambda: self.products_gui.show_products_management(self.main_content)),
+            ("🥚 Ingredients", lambda: self.ingredients_gui.show_ingredients_management(self.main_content)),
+            ("📝 Recipes", lambda: self.recipes_gui.show_recipes(self.main_content)),
+            ("💰 Sales", lambda: self.sales_gui.show_sales(self.main_content)),
+            ("📦 Inventory", lambda: self.inventory_gui.show_inventory(self.main_content)),
+            ("💸 Expenses", lambda: self.expenses_gui.show_expenses_management(self.main_content)),
+            ("📈 Reports", lambda: self.reports_gui.show_reports(self.main_content)),
+            ("⚙️ Settings", lambda: self.settings_gui.show_settings(self.main_content)),
+        ]
         
         for text, command in buttons:
             btn = ctk.CTkButton(self.sidebar, text=text, 
                                command=command,
                                height=40,
-                               anchor="w",
+                               font=("Arial", 13),
                                fg_color="transparent",
-                               hover_color=("gray70", "gray30"),
-                               font=("Arial", 13))
+                               text_color=("gray10", "gray90"),
+                               hover_color="#2b7cff",
+                               anchor="w")
             btn.pack(fill="x", padx=10, pady=3)
         
         # Separator
@@ -197,7 +254,7 @@ class InventoryGUI:
                          hover_color="#c0392b",
                          height=35).pack(pady=10)
         
-        # Quick actions (keep this as is)
+        # Quick actions
         ctk.CTkLabel(self.main_content, text="Quick Actions", 
                     font=("Arial", 20, "bold")).pack(pady=(30, 15))
         
@@ -206,10 +263,10 @@ class InventoryGUI:
         
         action_buttons = [
             ("➕ New Product", lambda: self.products_gui.show_products_management(self.main_content), "#3498db"),
-    ("🥚 Add Ingredient", lambda: self.ingredients_gui.show_ingredients_management(self.main_content), "#9b59b6"),
-    ("💰 New Sale", lambda: self.sales_gui.show_sales(self.main_content), "#27ae60"),        # NEW
-    ("📦 Check Inventory", lambda: self.inventory_gui.show_inventory(self.main_content), "#f39c12"),  # NEW
-]
+            ("🥚 Add Ingredient", lambda: self.ingredients_gui.show_ingredients_management(self.main_content), "#9b59b6"),
+            ("💰 New Sale", lambda: self.sales_gui.show_sales(self.main_content), "#27ae60"),
+            ("📦 Check Inventory", lambda: self.inventory_gui.show_inventory(self.main_content), "#f39c12"),
+        ]
         
         for btn_text, command, color in action_buttons:
             btn = ctk.CTkButton(actions_frame, text=btn_text,
@@ -220,7 +277,7 @@ class InventoryGUI:
                                font=("Arial", 13))
             btn.pack(side="left", padx=10, pady=10)
         
-        # NEW: Popular Products Section
+        # Popular Products Section
         ctk.CTkLabel(self.main_content, text="🔥 Popular Products (Last 7 Days)", 
                     font=("Arial", 18, "bold")).pack(pady=(30, 15))
         
@@ -254,7 +311,7 @@ class InventoryGUI:
             ctk.CTkLabel(popular_frame, text="No recent sales data",
                         font=("Arial", 12), text_color="gray").pack(pady=20)
         
-        # NEW: Quick Inventory Status
+        # Quick Inventory Status
         ctk.CTkLabel(self.main_content, text="📦 Quick Inventory Status", 
                     font=("Arial", 18, "bold")).pack(pady=(30, 15))
         
@@ -296,6 +353,7 @@ class InventoryGUI:
         """Darken a hex color for hover effect"""
         # Simple darkening - you can implement more sophisticated color manipulation
         return hex_color
+    
     def get_popular_products(self, days_back=7):
         """Get popular products from recent sales"""
         try:
@@ -324,47 +382,7 @@ class InventoryGUI:
             
             return product_sales.sort_values('Quantity', ascending=False).head(5)
         except:
-            return pd.DataFrame()    
-    
-    # ============================================================================
-    # INGREDIENTS MANAGEMENT SECTION - CLEANED & WORKING
-    # ============================================================================
-    
-    
-
-    
-    # ============================================================================
-    # EXISTING MODULES (Recipes, Sales, Inventory, Reports, Settings)
-    # ============================================================================
-    # [Include all your existing methods from the previous gui_builder.py here]
-    # show_recipes(), create_recipe_form(), show_sales(), show_inventory(), etc.
-    # These should remain exactly as you had them
-    
-    # For brevity, I'll mark where they should be inserted:
-    # INSERT ALL EXISTING METHODS FROM YOUR PREVIOUS gui_builder.py HERE
-    # This includes: show_recipes(), create_recipe_form(), show_sales(), 
-    # show_inventory(), show_reports(), show_settings(), and all their helper methods
-    
-    # ============================================================================
-    # RECIPES MANAGEMENT SECTION - COMPLETE FIXED VERSION
-    # ============================================================================
-    
-
-    
-    # ============================================================================
-    # SALES SECTION - COMPLETE WITH CALENDAR FEATURE
-    # ============================================================================
-    
-
-
-
-    # ============================================================================
-    # EXPENSES MANAGEMENT SECTION - COMPLETE IMPLEMENTATION
-    # ============================================================================
-    
-
-    
-
+            return pd.DataFrame()
     
     def show_settings(self):
         """Show settings interface"""
@@ -545,7 +563,7 @@ class InventoryGUI:
                                       width=200)
         theme_menu.pack(pady=10)
         
-        # Apply theme button
+        # Apply theme button - FIXED: Now updates the sidebar colors
         ctk.CTkButton(theme_frame, text="Apply Theme",
                      command=self.apply_theme,
                      width=150).pack(pady=10)
@@ -588,9 +606,13 @@ class InventoryGUI:
                      width=200, height=40).pack(pady=20)
     
     def apply_theme(self):
-        """Apply selected theme"""
+        """Apply selected theme - UPDATED to fix sidebar colors"""
         theme = self.theme_var.get()
         ctk.set_appearance_mode(theme)
+        
+        # Update the sidebar colors immediately
+        self.update_theme_colors()
+        
         messagebox.showinfo("Theme Applied", f"Theme changed to {theme} mode.")
     
     def save_preferences(self):
@@ -704,44 +726,6 @@ class InventoryGUI:
                 messagebox.showerror("Error", f"Failed to reset demo data: {str(e)}")
     
     def clear_all_data(self):
-        """Clear all data with better error handling"""
-        confirm = messagebox.askyesno("Clear All Data", 
-                                     "⚠️ DELETE ALL DATA? ⚠️\n\n"
-                                     "This will remove ALL records from:\n"
-                                     "• Products\n• Ingredients\n• Recipes\n• Sales\n• Inventory Logs\n\n"
-                                     "MAKE SURE EXCEL IS CLOSED before proceeding!")
-        
-        if not confirm:
-            return
-        
-        try:
-            # Check if file is locked
-            if hasattr(self.db, 'is_file_locked'):
-                if self.db.is_file_locked(self.db.excel_file):
-                    messagebox.showerror("File Locked", 
-                                       "❌ Cannot clear data!\n\n"
-                                       "The Excel file is locked by another program.\n\n"
-                                       "Please:\n"
-                                       "1. Close Microsoft Excel if open\n"
-                                       "2. Close any other program using the file\n"
-                                       "3. Try again")
-                    return
-            
-            # Continue with clearing...
-            # [Keep the rest of your existing clear_all_data code]
-            
-        except Exception as e:
-            if "Permission denied" in str(e) or "locked" in str(e).lower():
-                messagebox.showerror("File Locked", 
-                                   "❌ Cannot clear data!\n\n"
-                                   "The Excel file is locked by another program.\n\n"
-                                   "SOLUTION:\n"
-                                   "1. Close Microsoft Excel\n"
-                                   "2. Restart your computer if needed\n"
-                                   "3. Try again")
-            else:
-                messagebox.showerror("Error", f"Failed to clear data: {str(e)}")
-    def clear_all_data(self):
         """Clear all data - WORKING VERSION"""
         confirm = messagebox.askyesno("Clear All Data", 
                                      "⚠️ DELETE ALL DATA? ⚠️\n\n"
@@ -848,7 +832,7 @@ class InventoryGUI:
         except Exception as e:
             error_msg = f"❌ Error clearing data:\n\n{str(e)}"
             print(error_msg)
-            messagebox.showerror("Error", error_msg) 
+            messagebox.showerror("Error", error_msg)
     
     def recalculate_costs(self):
         """Recalculate all product costs"""
@@ -1012,3 +996,24 @@ System Information:
                 return "File not found"
         except:
             return "Unknown"
+    
+    # Placeholder methods for other modules
+    def export_all_data(self):
+        """Export all data to Excel"""
+        messagebox.showinfo("Export", "Export functionality to be implemented")
+    
+    def show_inventory(self):
+        """Show inventory interface"""
+        self.inventory_gui.show_inventory(self.main_content)
+    
+    def show_recipes(self):
+        """Show recipes interface"""
+        self.recipes_gui.show_recipes(self.main_content)
+    
+    def show_sales(self):
+        """Show sales interface"""
+        self.sales_gui.show_sales(self.main_content)
+    
+    def show_reports(self):
+        """Show reports interface"""
+        self.reports_gui.show_reports(self.main_content)
