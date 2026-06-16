@@ -1,4 +1,4 @@
-# main_app.py - Fixed for Config class
+# main_app.py - Upgraded to support SQLite Database (.db)
 import os
 import sys
 import traceback
@@ -26,16 +26,13 @@ def main():
         
         print("✅ Modules imported successfully")
         
-        # Get config - TWO OPTIONS:
-        # Option A: Use the config object directly
-        app_config = config.config  # This is the dictionary
-        
-        # Option B: Or use CLIENT_CONFIG (backward compatibility)
-        # app_config = config.CLIENT_CONFIG
+        # Get config
+        app_config = config.config  # This is the settings dictionary
         
         print(f"🏢 Business: {app_config.get('business_name', 'Unknown')}")
         
-        # Initialize database
+        # Initialize database 
+        # (It passes the file string from your config.py, which is now our .db file!)
         db = InventoryDB(app_config['excel_file'])
         print(f"💾 Database: {app_config['excel_file']}")
         
@@ -50,7 +47,7 @@ def main():
         window = ctk.CTk()
         window.title(f"Inventory Manager - {app_config['business_name']}")
         
-        # Create app - pass the config DICTIONARY (not the Config object)
+        # Create app - pass the config DICTIONARY
         app = InventoryGUI(window, db, app_config)
         
         print("\n" + "=" * 50)
@@ -63,7 +60,8 @@ def main():
         
     except FileNotFoundError as e:
         print(f"\n❌ FILE ERROR: {e}")
-        print("Please check if data/inventory.xlsx exists")
+        # 🌟 WE CHANGED THIS TEXT: It now tells users to check for the .db file instead of the old excel sheet!
+        print("Please check if data/inventory.db exists")
         
     except ImportError as e:
         print(f"\n❌ IMPORT ERROR: {e}")

@@ -11,7 +11,7 @@ class Config:
             'currency': "₱",
             'date_format': "%Y-%m-%d",
             'low_stock_warning': 20,
-            'excel_file': 'data/inventory.xlsx',
+            'excel_file': 'data/inventory.db',  # 🌟 FIXED: Changed .xlsx to .db
             'tax_rate': 12.0,
             'business_address': "123 Business Street\nCity, Country"
         }
@@ -83,5 +83,5 @@ class Config:
         return self.config
 
 # Create global instances for different access styles
-config = Config()  # For class-style access: config.get('business_name')
-CLIENT_CONFIG = config.config  # For dict-style access: CLIENT_CONFIG['business_name']
+config = Config()  
+CLIENT_CONFIG = config.config
