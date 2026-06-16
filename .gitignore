@@ -75,3 +75,5 @@ data/inventory.xlsx
 data/inventory.xlsx
 Backup/data/inventory.xlsx
 data/inventory.xlsx
+modules/__pycache__/gui_builder.cpython-314.pyc
+modules/__pycache__/settings_gui.cpython-314.pyc
