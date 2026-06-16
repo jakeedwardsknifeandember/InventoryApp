@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Inventory Manager - Dashboard</title>
+    <style>
+        body { font-family: 'Segoe UI', Arial, sans-serif; background-color: #242424; color: #ffffff; margin: 0; display: flex; height: 100vh; overflow: hidden; }
+        .sidebar { width: 220px; background-color: #2b2b2b; padding: 20px 10px; display: flex; flex-direction: column; gap: 5px; border-right: 1px solid #313244; box-sizing: border-box; }
+        .sidebar-title { font-size: 22px; font-weight: bold; padding: 10px; letter-spacing: 1px; }
+        .sidebar-subtitle { font-size: 12px; color: #8a8a8a; padding-left: 10px; margin-bottom: 20px; }
+        .sidebar a { color: #ffffff; text-decoration: none; padding: 12px 15px; border-radius: 4px; font-size: 14px; display: block; }
+        .sidebar a:hover { background-color: #3a3a3a; }
+        .sidebar a.active { background-color: #3a3a3a; border-left: 4px solid #3b8ed0; font-weight: bold; }
+        .exit-btn { margin-top: auto; background-color: #c24b4b; text-align: center; font-weight: bold; }
+        
+        .main-content { flex: 1; padding: 30px 40px; overflow-y: auto; box-sizing: border-box; text-align: center; }
+        .module-headline { font-size: 26px; font-weight: bold; margin-bottom: 25px; }
+        .metrics-grid { display: grid; grid-template-columns: repeat(2, 240px); gap: 20px; justify-content: center; margin-bottom: 40px; }
+        .card { padding: 20px; border-radius: 6px; text-align: center; }
+        .blue-card { background-color: #3b8ed0; } 
+        .green-card { background-color: #2fa572; } 
+        .gray-card { background-color: #727d82; }
+        .action-btn { padding: 8px 16px; border: none; border-radius: 4px; font-weight: bold; color: white; font-size: 13px; cursor: pointer; text-decoration: none; text-align: center; }
+        .btn-blue { background-color: #3b8ed0; }
+    </style>
+</head>
+<body>
+
+    <div class="sidebar">
+        <div class="sidebar-title">INVENTORY</div>
+        <div class="sidebar-subtitle">My Bakery Shop</div>
+        <a class="active" href="/portal/{{ username }}">📊 Dashboard</a>
+        <a href="/portal/{{ username }}/products">📦 Products</a>
+        <a href="/portal/{{ username }}/ingredients">🍎 Ingredients</a>
+        <a href="/portal/{{ username }}/recipes">🍕 Recipes (Linked)</a>
+        <a href="/portal/{{ username }}/sales">💰 Sales</a>
+        <a href="/portal/{{ username }}/inventory">📦 Inventory</a>
+        <a href="/portal/{{ username }}/expenses">💸 Expenses</a>
+        <a href="/portal/{{ username }}/reports">📊 Reports</a>
+        <a href="/portal/{{ username }}/settings">⚙️ Settings</a>
+        <a href="/logout" class="exit-btn">🚪 Exit</a>
+    </div>
+
+    <div class="main-content">
+        <div class="module-headline">Dashboard</div>
+        <div class="metrics-grid">
+            <div class="card blue-card">
+                <div>Total Products</div>
+                <h2>{{ total_products }}</h2>
+            </div>
+            <div class="card green-card">
+                <div>Total Revenue</div>
+                <h2>₱{{ "%.2f"|format(total_revenue) }}</h2>
+            </div>
+            <div class="card gray-card">
+                <div>Low Stock Items</div>
+                <h2>{{ low_stock_count }}</h2>
+            </div>
+            <div class="card gray-card">
+                <div>Total Expenses</div>
+                <h2>₱{{ "%.2f"|format(total_expenses) }}</h2>
+            </div>
+        </div>
+        <a href="/portal/{{ username }}/sales" class="action-btn btn-blue" style="padding:12px 25px;">💰 Open POS Sales Register</a>
+    </div>
+
+</body>
+</html>

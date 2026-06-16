@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Products Management</title>
+    <style>
+        body { font-family: 'Segoe UI', Arial, sans-serif; background-color: #242424; color: #ffffff; margin: 0; display: flex; height: 100vh; overflow: hidden; }
+        .sidebar { width: 220px; background-color: #2b2b2b; padding: 20px 10px; display: flex; flex-direction: column; gap: 5px; border-right: 1px solid #313244; box-sizing: border-box; }
+        .sidebar-title { font-size: 22px; font-weight: bold; padding: 10px; letter-spacing: 1px; }
+        .sidebar-subtitle { font-size: 12px; color: #8a8a8a; padding-left: 10px; margin-bottom: 20px; }
+        .sidebar a { color: #ffffff; text-decoration: none; padding: 12px 15px; border-radius: 4px; font-size: 14px; display: block; }
+        .sidebar a:hover { background-color: #3a3a3a; }
+        .sidebar a.active { background-color: #3a3a3a; border-left: 4px solid #3b8ed0; font-weight: bold; }
+        .exit-btn { margin-top: auto; background-color: #c24b4b; text-align: center; font-weight: bold; }
+        
+        .main-content { flex: 1; padding: 30px 40px; overflow-y: auto; box-sizing: border-box; }
+        .module-headline { text-align: center; font-size: 26px; font-weight: bold; margin-bottom: 25px; }
+        
+        .subtab-header { display: flex; gap: 10px; margin-bottom: 25px; justify-content: center; }
+        .subtab-btn { padding: 8px 20px; background-color: #3a3a3a; color: white; border: none; border-radius: 15px; font-size: 13px; cursor: pointer; text-decoration: none; }
+        .subtab-btn.active { background-color: #3b8ed0; font-weight: bold; }
+        
+        .action-btn { padding: 8px 16px; border: none; border-radius: 4px; font-weight: bold; color: white; font-size: 13px; cursor: pointer; text-decoration: none; text-align: center; }
+        .btn-green { background-color: #2fa572; }
+        
+        .table-container { background-color: #2b2b2b; border-radius: 6px; padding: 10px; box-shadow: inset 0 0 8px rgba(0,0,0,0.5); margin-bottom: 25px; }
+        table { width: 100%; border-collapse: collapse; }
+        th, td { padding: 12px 15px; text-align: left; font-size: 14px; border-bottom: 1px solid #3a3a3a; }
+        th { color: #8a8a8a; font-weight: bold; font-size: 12px; text-transform: uppercase; border-bottom: 2px solid #3a3a3a; }
+        .alert-banner { background: #3b8ed022; color: #3b8ed0; padding: 12px; border-radius: 6px; margin-bottom: 20px; font-weight: bold; text-align: center; }
+        
+        .form-panel { background-color: #1e1e1e; padding: 30px; border-radius: 6px; border: 1px solid #2b2b2b; max-width: 650px; margin: 0 auto; }
+        .form-grid { display: grid; grid-template-columns: 1fr; gap: 15px; margin-bottom: 20px; text-align: left; }
+        .form-grid label { display: block; font-size: 13px; margin-bottom: 6px; color: #a6adc8; }
+        .form-grid input { width: 100%; padding: 10px; background-color: #2b2b2b; color: white; border: 1px solid #3a3a3a; border-radius: 4px; box-sizing: border-box; }
+    </style>
+</head>
+<body>
+
+    <div class="sidebar">
+        <div class="sidebar-title">INVENTORY</div>
+        <div class="sidebar-subtitle">My Bakery Shop</div>
+        <a href="/portal/{{ username }}">📊 Dashboard</a>
+        <a class="active" href="/portal/{{ username }}/products">📦 Products</a>
+        <a href="/portal/{{ username }}/ingredients">🍎 Ingredients</a>
+        <a href="/portal/{{ username }}/recipes">🍕 Recipes (Linked)</a>
+        <a href="/portal/{{ username }}/sales">💰 Sales</a>
+        <a href="/portal/{{ username }}/inventory">📦 Inventory</a>
+        <a href="/portal/{{ username }}/expenses">💸 Expenses</a>
+        <a href="/portal/{{ username }}/reports">📊 Reports</a>
+        <a href="/portal/{{ username }}/settings">⚙️ Settings</a>
+        <a href="/logout" class="exit-btn">🚪 Exit</a>
+    </div>
+
+    <div class="main-content">
+        <div class="subtab-header">
+            <a class="subtab-btn {% if current_tab == 'view' %}active{% endif %}" href="/portal/{{ username }}/products?tab=view">View Product Grid Catalog</a>
+            <a class="subtab-btn {% if current_tab == 'add' %}active{% endif %}" href="/portal/{{ username }}/products?tab=add">➕ Add New Product Profile</a>
+        </div>
+
+        <div class="module-headline">Products Management Dashboard</div>
+
+        {% if msg %}
+            <div class="alert-banner">{{ msg }}</div>
+        {% endif %}
+
+        {% if current_tab == 'view' %}
+            <div class="table-container">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Product ID</th>
+                            <th>Product Name</th>
+                            <th>Category Classification</th>
+                            <th>Selling Price</th>
+                            <th>Calculated Cost</th>
+                            <th>Profit Margin Balance</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for item in products %}
+                            <tr>
+                                <td><b>{{ item.Product_ID }}</b></td>
+                                <td>{{ item.Product_Name }}</td>
+                                <td>{{ item.Category }}</td>
+                                <td style="color:#a6e3a1; font-weight:bold;">	₱{{ "%.2f"|format(item.Selling_Price) }}</td>
+                                <td style="color:#89b4fa;">	₱{{ "%.2f"|format(item.Cost_Price) }}</td>
+                                <td style="color:#f9e2af;">	₱{{ "%.2f"|format(item.Profit_Margin) }} ({{ item.Margin_Percentage }}%)</td>
+                            </tr>
+                        {% else %}
+                            <tr>
+                                <td colspan="6" style="text-align:center; color:#8a8a8a; padding:30px;">No wholesale products found.</td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        {% else %}
+            <div class="form-panel">
+                <form method="post">
+                    <input type="hidden" name="action_type" value="add_product">
+                    <div class="form-grid">
+                        <div><label>Product Name Asset:</label><input type="text" name="name" required autocomplete="off"></div>
+                        <div><label>Category Grouping:</label><input type="text" name="category" placeholder="e.g. Cakes, Pastries"></div>
+                        <div><label>Target Selling Retail Price (₱):</label><input type="number" name="selling_price" step="any" required></div>
+                        <div><label>Description logs:</label><input type="text" name="notes"></div>
+                    </div>
+                    <input type="submit" value="💾 Save Product Profile" class="action-btn btn-green" style="width:100%; padding:12px; margin-top:10px;">
+                </form>
+            </div>
+        {% endif %}
+    </div>
+
+</body>
+</html>
