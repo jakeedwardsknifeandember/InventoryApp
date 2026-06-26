@@ -1,6 +1,8 @@
-# routes/sales.py - Sales Module Blueprint
+# routes/sales.py - EOD Bulk Entry Blueprint
 from flask import Blueprint, request, redirect, session, render_template
 from modules.database import InventoryDB
+import pandas as pd
+from datetime import datetime
 
 sales_bp = Blueprint('sales', __name__)
 
@@ -10,54 +12,172 @@ def web_sales_tab(username):
     if session.get('logged_in_user') != username: 
         return redirect('/login')
         
-    client_db_path = f"data/client_{username}.db"
-    client_db = InventoryDB(client_db_path)
-    
+    client_db = InventoryDB(f"data/client_{username}.db")
     feedback_msg = None
+    alert_type = "success"
     
-    # Process sale checkout transactions
+    # Process End-of-Day Bulk Sheet Post Form Submission
     if request.method == 'POST':
-        prod_id = request.form.get('product_id')
-        try:
-            qty_sold = float(request.form.get('quantity', 0))
-            products_df = client_db.get_all_products()
-            prod_row = products_df[products_df['Product_ID'] == prod_id]
+        product_ids = request.form.getlist('product_id[]')
+        quantities = request.form.getlist('quantity[]')
+        chosen_date = request.form.get('sale_date', datetime.now().strftime("%Y-%m-%d")).strip()
+        audit_note = request.form.get('audit_note', '').strip()
+        
+        # ===== IRONCLAD BACKEND SECURITY ENFORCEMENT =====
+        today_str = datetime.now().strftime("%Y-%m-%d")
+        is_backdated = (chosen_date != today_str)
+        
+        has_negative = False
+        for qty_str in quantities:
+            if qty_str and float(qty_str) < 0:
+                has_negative = True
+                break
+                
+        if (is_backdated or has_negative) and not audit_note:
+            return redirect(f"/portal/{username}/sales?error=Security Policy Violation: Audit entry notes are strictly mandatory for backdated adjustments or negative entries.")
+        # =================================================
+        
+        processed_count = 0
+        blocked_items = []
+        products_df = client_db.get_all_products()
+        
+        for p_id, qty_str in zip(product_ids, quantities):
+            if not qty_str or float(qty_str or 0) == 0:
+                continue
+                
+            qty = float(qty_str)
+            prod_row = products_df[products_df['Product_ID'] == p_id]
+            
             if not prod_row.empty:
+                p_name = prod_row['Product_Name'].values[0]
                 unit_price = float(prod_row['Selling_Price'].values[0])
-                stock_ok, stock_msg = client_db.update_inventory_from_sale(prod_id, qty_sold)
+                
+                stock_ok, stock_msg = client_db.update_inventory_from_sale(p_id, qty)
                 if stock_ok:
-                    if client_db.add_sale(prod_id, qty_sold, unit_price): 
-                        feedback_msg = f"💰 Checkout Success! Total: ₱{qty_sold * unit_price:.2f}."
-                else: 
-                    feedback_msg = f"⚠️ Blocked! {stock_msg}"
-        except ValueError: 
-            feedback_msg = "❌ Error: Invalid quantity fields."
+                    client_db.add_sale(p_id, qty, unit_price)
+                    processed_count += 1
+                else:
+                    blocked_items.append(f"{p_name} ({stock_msg.strip()})")
 
+        if processed_count > 0:
+            sales_df = client_db.read_tab('Sales')
+            if not sales_df.empty:
+                if 'Entry_Reason' not in sales_df.columns:
+                    sales_df['Entry_Reason'] = ""
+                
+                sales_df.iloc[-processed_count:, sales_df.columns.get_loc('Sale_Date')] = chosen_date
+                if audit_note:
+                    sales_df.iloc[-processed_count:, sales_df.columns.get_loc('Entry_Reason')] = audit_note
+                
+                client_db.save_tab('Sales', sales_df)
+
+        if processed_count > 0 and not blocked_items:
+            feedback_msg = f"📋 EOD Sync Complete! Successfully logged operations for {processed_count} items on accounting date: {chosen_date}."
+            alert_type = "success"
+        elif processed_count > 0 and blocked_items:
+            feedback_msg = f"⚠️ Partial Sync: Processed {processed_count} updates for {chosen_date}. Some entries skipped due to ingredient shortages:\n" + " | ".join(blocked_items)
+            alert_type = "warning"
+        elif len(blocked_items) > 0:
+            feedback_msg = "❌ EOD Sync Failed! Insufficient ingredients stock metrics:\n" + " | ".join(blocked_items)
+            alert_type = "danger"
+        else:
+            feedback_msg = "ℹ️ No sales numbers were entered. Ledger entries remain unchanged."
+            alert_type = "info"
+
+    # ===== GET METHOD: DISPLAY DATA PROCESSING =====
     sales_df = client_db.read_tab('Sales')
-    products_df = client_db.get_all_products()
+    master_products_df = client_db.get_all_products() # PRISTINE LOOKUP MASTER LIST
     
-    # Prepare historical logging maps with human-readable names
-    sales_list = []
+    search = request.args.get('search', '').lower().strip()
+    category = request.args.get('category', 'All')
+    sort_by = request.args.get('sort_by', 'name')
+    order = request.args.get('order', 'asc')
+
+    categories = []
+    active_products_list = []
+    
+    # 1. Isolate the filters to only touch the left worksheet dataframe copy
+    filtered_products_df = master_products_df.copy() if not master_products_df.empty else pd.DataFrame()
+    
+    if not master_products_df.empty:
+        if 'Category' in master_products_df.columns:
+            categories = sorted([c for c in master_products_df['Category'].dropna().unique() if c])
+            
+        if search:
+            filtered_products_df = filtered_products_df[filtered_products_df['Product_Name'].str.lower().str.contains(search) | 
+                                                        filtered_products_df['Product_ID'].str.lower().str.contains(search)]
+        if category != 'All':
+            filtered_products_df = filtered_products_df[filtered_products_df['Category'] == category]
+            
+        ascending = (order == 'asc')
+        if sort_by == 'name':
+            filtered_products_df = filtered_products_df.sort_values('Product_Name', ascending=ascending)
+        elif sort_by == 'price':
+            filtered_products_df = filtered_products_df.sort_values('Selling_Price', ascending=ascending)
+
+        active_products_list = filtered_products_df.to_dict(orient='records')
+
+    # 2. BATCH GROUPING ENGINE: Uses the unfiltered master_products_df for reliable name rendering
+    grouped_history_list = []
     if not sales_df.empty:
-        for _, r in sales_df.sort_values('Sale_ID', ascending=False).iterrows():
-            p_name = r['Product_ID']
-            if not products_df.empty:
-                match = products_df[products_df['Product_ID'] == r['Product_ID']]
-                if not match.empty: 
-                    p_name = match['Product_Name'].values[0]
-            sales_list.append({
-                'Sale_ID': r['Sale_ID'], 'Product_Name': p_name,
-                'Quantity': r['Quantity'], 'Sale_Date': r['Sale_Date'],
-                'Sale_Time': r['Sale_Time'] if 'Sale_Time' in sales_df.columns else '',
-                'Total_Amount': r['Total_Amount']
+        sales_df = sales_df.sort_values('Sale_ID', ascending=False)
+        
+        # FIXED: Enforce strict sorted, reverse chronological sorting order on unique dates array
+        unique_dates = sorted(list(sales_df['Sale_Date'].dropna().unique()), reverse=True)
+        
+        for date_val in unique_dates:
+            date_df = sales_df[sales_df['Sale_Date'] == date_val]
+            day_entries = []
+            day_total_qty = 0.0
+            day_total_revenue = 0.0
+            
+            for _, row in date_df.iterrows():
+                p_id = row['Product_ID']
+                p_name = p_id
+                
+                # FIXED: Always read the unfiltered baseline dataset to prevent leakage display errors
+                if not master_products_df.empty:
+                    match = master_products_df[master_products_df['Product_ID'] == p_id]
+                    if not match.empty: 
+                        p_name = match['Product_Name'].values[0]
+                
+                qty = float(row['Quantity'] or 0)
+                revenue = float(row['Total_Amount'] or 0)
+                
+                day_total_qty += qty
+                day_total_revenue += revenue
+                
+                day_entries.append({
+                    'Sale_ID': row['Sale_ID'],
+                    'Product_Name': p_name,
+                    'Quantity': qty,
+                    'Sale_Time': row['Sale_Time'] if 'Sale_Time' in sales_df.columns else '',
+                    'Total_Amount': revenue,
+                    'Reason': row.get('Entry_Reason', '') if 'Entry_Reason' in sales_df.columns else ''
+                })
+            
+            grouped_history_list.append({
+                'date': date_val,
+                'total_qty': day_total_qty,
+                'total_revenue': day_total_revenue,
+                'entries': day_entries
             })
 
-    dropdown_p = products_df.to_dict(orient='records') if not products_df.empty else []
+    server_error = request.args.get('error', '')
+    if server_error:
+        feedback_msg = server_error
+        alert_type = "danger"
 
     return render_template(
         'sales.html',
         username=username,
-        dropdown_products=dropdown_p,
-        sales_history=sales_list,
-        msg=feedback_msg
+        active_products=active_products_list,
+        categories=categories,
+        sales_history=grouped_history_list,
+        msg=feedback_msg,
+        alert_type=alert_type,
+        current_search=request.args.get('search', ''),
+        current_category=request.args.get('category', 'All'),
+        current_sort=request.args.get('sort_by', 'name'),
+        current_order=request.args.get('order', 'asc')
     )

@@ -1,102 +1,334 @@
-<!DOCTYPE html>
-<html>
-<head>
-    <title>Point of Sale Register</title>
-    <style>
-        body { font-family: 'Segoe UI', Arial, sans-serif; background-color: #242424; color: #ffffff; margin: 0; display: flex; height: 100vh; overflow: hidden; }
-        .sidebar { width: 220px; background-color: #2b2b2b; padding: 20px 10px; display: flex; flex-direction: column; gap: 5px; border-right: 1px solid #313244; box-sizing: border-box; }
-        .sidebar-title { font-size: 22px; font-weight: bold; padding: 10px; letter-spacing: 1px; }
-        .sidebar-subtitle { font-size: 12px; color: #8a8a8a; padding-left: 10px; margin-bottom: 20px; }
-        .sidebar a { color: #ffffff; text-decoration: none; padding: 12px 15px; border-radius: 4px; font-size: 14px; display: block; }
-        .sidebar a:hover { background-color: #3a3a3a; }
-        .sidebar a.active { background-color: #3a3a3a; border-left: 4px solid #3b8ed0; font-weight: bold; }
-        .exit-btn { margin-top: auto; background-color: #c24b4b; text-align: center; font-weight: bold; }
-        
-        .main-content { flex: 1; padding: 30px 40px; overflow-y: auto; box-sizing: border-box; }
-        .module-headline { text-align: center; font-size: 26px; font-weight: bold; margin-bottom: 25px; }
-        
-        .action-btn { padding: 8px 16px; border: none; border-radius: 4px; font-weight: bold; color: white; font-size: 13px; cursor: pointer; text-decoration: none; text-align: center; }
-        .btn-green { background-color: #2fa572; }
-        
-        .table-container { background-color: #2b2b2b; border-radius: 6px; padding: 10px; box-shadow: inset 0 0 8px rgba(0,0,0,0.5); margin-bottom: 25px; }
-        table { width: 100%; border-collapse: collapse; }
-        th, td { padding: 12px 15px; text-align: left; font-size: 14px; border-bottom: 1px solid #3a3a3a; }
-        th { color: #8a8a8a; font-weight: bold; font-size: 12px; text-transform: uppercase; border-bottom: 2px solid #3a3a3a; }
-        .alert-banner { background: #3b8ed022; color: #3b8ed0; padding: 12px; border-radius: 6px; margin-bottom: 20px; font-weight: bold; text-align: center; }
-    </style>
-</head>
-<body>
+{% extends 'base.html' %}
+{% block content %}
+<style>
+    .alert-warning {
+        color: #664d03 !important;
+        background-color: #fff3cd !important;
+        border: 1px solid #ffecb5 !important;
+    }
+    .alert-warning small, .alert-warning span {
+        color: #664d03 !important;
+    }
+    .alert-success {
+        color: #0f5132 !important;
+        background-color: #d1e7dd !important;
+    }
+    .alert-danger {
+        color: #842029 !important;
+        background-color: #f8d7da !important;
+    }
+    .high-contrast-id {
+        color: #b9bbbe !important;
+        font-weight: 500;
+        letter-spacing: 0.5px;
+    }
+    .ledger-accordion-btn::after {
+        background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='%23ffffff'%3e%3cpath fill-rule='evenodd' d='M1.646 4.646a.5.5 0 0 1 .708 0L8 10.293l5.646-5.647a.5.5 0 0 1 .708.708l-6 6a.5.5 0 0 1-.708 0l-6-6a.5.5 0 0 1 0-.708z'/%3e%3c/svg%3e") !important;
+    }
+    .neon-mint-green {
+        color: #2dfc8a !important;
+        text-shadow: 0 0 2px rgba(45, 252, 138, 0.2);
+    }
+    .neon-coral-red {
+        color: #ff5555 !important;
+        text-shadow: 0 0 2px rgba(255, 85, 85, 0.2);
+    }
+</style>
 
-    <div class="sidebar">
-        <div class="sidebar-title">INVENTORY</div>
-        <div class="sidebar-subtitle">My Bakery Shop</div>
-        <a href="/portal/{{ username }}">📊 Dashboard</a>
-        <a href="/portal/{{ username }}/products">📦 Products</a>
-        <a href="/portal/{{ username }}/ingredients">🍎 Ingredients</a>
-        <a href="/portal/{{ username }}/recipes">🍕 Recipes (Linked)</a>
-        <a class="active" href="/portal/{{ username }}/sales">💰 Sales</a>
-        <a href="/portal/{{ username }}/inventory">📦 Inventory</a>
-        <a href="/portal/{{ username }}/expenses">💸 Expenses</a>
-        <a href="/portal/{{ username }}/reports">📊 Reports</a>
-        <a href="/portal/{{ username }}/settings">⚙️ Settings</a>
-        <a href="/logout" class="exit-btn">🚪 Exit</a>
-    </div>
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <h3 class="m-0 text-white" style="font-weight: bold;">End-of-Day (EOD) Sales Entry</h3>
+    <span class="badge bg-primary p-2 font-monospace" style="font-size: 13px;">📊 Back-of-House Ledger</span>
+</div>
 
-    <div class="main-content">
-        <div class="module-headline">Point of Sale Transaction Register</div>
-        
-        {% if msg %}
-            <div class="alert-banner">{{ msg }}</div>
-        {% endif %}
-        
-        <div style="background-color:#1e1e2e; padding:25px; border-radius:6px; max-width:450px; margin:0 auto 30px auto; border:1px solid #313244;">
-            <form method="post">
-                <label style="font-size:13px; color:#aaa; display:block; margin-bottom:5px;">Select Basket Item:</label>
-                <select name="product_id" style="width:100%; padding:10px; background:#242424; color:#fff; border:1px solid #3a3a3a; border-radius:4px; margin-bottom:15px;">
-                    {% for prod in dropdown_products %}
-                        <option value="{{ prod.Product_ID }}">{{ prod.Product_Name }} (₱{{ "%.2f"|format(prod.Selling_Price) }})</option>
-                    {% else %}
-                        <option disabled>No active products listed</option>
-                    {% endfor %}
+{% if msg %}
+<div class="alert {% if alert_type == 'success' %}alert-success{% elif alert_type == 'warning' %}alert-warning{% else %}alert-danger{% endif %} border-0 fw-bold mb-3 shadow-sm" style="border-radius: 6px; font-size: 14px;">
+    {{ msg }}
+</div>
+{% endif %}
+
+<div class="content-card mb-3 p-3" style="background-color: #2b2b2b;">
+    <form method="GET" class="row gx-2 gy-2 align-items-center">
+        <div class="col-md-3">
+            <label class="text-light me-1 mb-1 small d-block">Search Worksheet:</label>
+            <input type="text" name="search" value="{{ current_search }}" class="form-control bg-dark text-white border-secondary" placeholder="ID or Product Name" autocomplete="off">
+        </div>
+        <div class="col-md-3">
+            <label class="text-light me-1 mb-1 small d-block">Filter Category:</label>
+            <select name="category" class="form-select bg-dark text-white border-secondary" onchange="this.form.submit()">
+                <option value="All">All Categories</option>
+                {% for cat in categories %}
+                <option value="{{ cat }}" {% if current_category == cat %}selected{% endif %}>{{ cat }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="col-md-4">
+            <label class="text-light me-1 mb-1 small d-block">Sort Columns:</label>
+            <div class="d-flex">
+                <select name="sort_by" class="form-select bg-dark text-white border-secondary me-2" onchange="this.form.submit()">
+                    <option value="name" {% if current_sort == 'name' %}selected{% endif %}>Product Name</option>
+                    <option value="price" {% if current_sort == 'price' %}selected{% endif %}>Selling Price</option>
                 </select>
-                
-                <label style="font-size:13px; color:#aaa; display:block; margin-bottom:5px;">Quantity Sold:</label>
-                <input type="number" name="quantity" min="1" value="1" style="width:100%; padding:10px; background:#242424; color:#fff; border:1px solid #3a3a3a; border-radius:4px; margin-bottom:20px; box-sizing:border-box;">
-                
-                <input type="submit" value="💰 Process Checkout" class="action-btn btn-green" style="width:100%; padding:12px; font-weight:bold;">
-            </form>
+                <select name="order" class="form-select bg-dark text-white border-secondary" onchange="this.form.submit()">
+                    <option value="asc" {% if current_order == 'asc' %}selected{% endif %}>↑ Asc</option>
+                    <option value="desc" {% if current_order == 'desc' %}selected{% endif %}>↓ Desc</option>
+                </select>
+            </div>
         </div>
-        
-        <div style="font-size: 18px; font-weight: bold; margin: 20px 0 10px 0; text-align: left;">📋 Historical Sales Journal Records</div>
-        <div class="table-container">
-            <table>
-                <thead>
-                    <tr>
-                        <th>Sale ID</th>
-                        <th>Product Sold</th>
-                        <th>Quantity</th>
-                        <th>Timestamp</th>
-                        <th>Cash Revenue</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {% for sale in sales_history %}
-                        <tr>
-                            <td><b>{{ sale.Sale_ID }}</b></td>
-                            <td>{{ sale.Product_Name }}</td>
-                            <td>{{ sale.Quantity }} pcs</td>
-                            <td>{{ sale.Sale_Date }} {{ sale.Sale_Time }}</td>
-                            <td style="color:#2fa572; font-weight:bold;">₱{{ "%.2f"|format(sale.Total_Amount) }}</td>
-                        </tr>
-                    {% else %}
-                        <tr>
-                            <td colspan="5" style="text-align: center; padding: 30px; color: #8a8a8a;">No transactions logged yet.</td>
-                        </tr>
-                    {% endfor %}
-                </tbody>
-            </table>
+        <div class="col-md-2 text-end align-self-end">
+            <a href="/portal/{{ username }}/sales" class="btn btn-secondary fw-bold w-100">🗑️ Clear Filters</a>
+        </div>
+    </form>
+</div>
+
+<div class="row g-3">
+    
+    <div class="col-md-6">
+        <div class="card border-secondary bg-dark text-white shadow-sm">
+            <div class="card-header bg-secondary text-white fw-bold d-flex justify-content-between align-items-center">
+                <span>📝 Closing Sales Entry Worksheet</span>
+                <small class="text-white-50">Match counts to your physical POS report</small>
+            </div>
+            <div class="card-body p-0">
+                <form method="post" id="eodSalesMasterForm">
+                    
+                    <div class="p-3 border-bottom border-secondary" style="background-color: #1e1e1e;">
+                        <div class="row g-2">
+                            <div class="col-md-5">
+                                <label class="form-label small text-info fw-bold mb-1">📅 Target Accounting Date:</label>
+                                <input type="date" id="eodClosingDatePicker" name="sale_date" class="form-control bg-dark text-white border-secondary fw-bold" required>
+                            </div>
+                            <div class="col-md-7">
+                                <label class="form-label small text-info fw-bold mb-1">✍️ Audit Entry Notes / Correction Reason:</label>
+                                <input type="text" id="eodAuditNoteInput" name="audit_note" class="form-control bg-dark text-white border-secondary" placeholder="Mandatory for adjustments or backdating" autocomplete="off">
+                            </div>
+                        </div>
+                    </div>
+
+                    <div style="max-height: 48vh; overflow-y: auto;">
+                        <table class="table table-dark table-hover align-middle mb-0">
+                            <thead>
+                                <tr class="text-secondary font-monospace" style="font-size: 11px; letter-spacing: 0.5px;">
+                                    <th>PRODUCT NAME</th>
+                                    <th>CATEGORY</th>
+                                    <th>PRICE</th>
+                                    <th class="text-end" style="width: 140px;">TOTAL UNITS SOLD</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for prod in active_products %}
+                                <tr>
+                                    <td>
+                                        <input type="hidden" name="product_id[]" value="{{ prod.Product_ID }}">
+                                        <span class="fw-bold text-white">{{ prod.Product_Name }}</span>
+                                        <small class="d-block high-contrast-id" style="font-size: 11px;">ID: {{ prod.Product_ID }}</small>
+                                    </td>
+                                    <td><span class="badge bg-secondary" style="font-size: 11px;">{{ prod.Category or 'General' }}</span></td>
+                                    <td class="text-light">₱{{ "%.2f"|format(prod.Selling_Price) }}</td>
+                                    <td class="text-end">
+                                        <input type="number" 
+                                               name="quantity[]" 
+                                               step="any"
+                                               value="0" 
+                                               class="form-control bg-light text-dark text-center fw-bold border-0 mx-auto font-monospace ingredient-qty-input" 
+                                               style="max-width: 100px; font-size: 15px; border-radius: 4px;"
+                                               onfocus="if(this.value=='0') this.value='';" 
+                                               onblur="if(this.value=='') this.value='0';">
+                                    </td>
+                                </tr>
+                                {% else %}
+                                <tr>
+                                    <td colspan="4" class="text-center text-muted py-4">No product profiles found matching active search criteria.</td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                    
+                    <div class="p-3 bg-secondary border-top border-secondary text-end rounded-bottom">
+                        <button type="button" class="btn btn-outline-light fw-bold me-2" onclick="resetClosingFormMatrixFields()">Clear Inputs</button>
+                        <button type="button" class="btn btn-success fw-bold px-4" onclick="triggerSecurityModalCheck()">
+                            💰 Sync & Deduct Inventory
+                        </button>
+                    </div>
+                </form>
+            </div>
         </div>
     </div>
 
-</body>
-</html>
+    <div class="col-md-6">
+        <div class="card border-secondary bg-dark text-white shadow-sm">
+            <div class="card-header bg-secondary text-white fw-bold">📋 Historical Sales Audit Ledger</div>
+            <div class="card-body p-2" style="max-height: 65vh; overflow-y: auto;">
+                
+                <div class="accordion" id="ledgerMasterAccordion">
+                    {% for day in sales_history %}
+                    <div class="accordion-item bg-dark text-white border-secondary mb-2 rounded shadow-sm" style="overflow: hidden;">
+                        
+                        <h2 class="accordion-header" id="ledgerHeading{{ loop.index }}">
+                            <button class="accordion-button ledger-accordion-btn {% if not loop.first %}collapsed{% endif %} bg-secondary text-white fw-bold d-flex justify-content-between align-items-center py-3 px-3" 
+                                    type="button" 
+                                    data-bs-toggle="collapse" 
+                                    data-bs-target="#ledgerCollapse{{ loop.index }}" 
+                                    style="box-shadow: none;">
+                                <div class="d-flex justify-content-between w-100 pe-3 align-items-center">
+                                    <span class="text-white fw-bold font-monospace" style="font-size: 14px;">📅 Entry Date: {{ day.date }}</span>
+                                    <div>
+                                        <span class="badge bg-dark border border-secondary text-light px-2 py-1 me-2 font-monospace" style="font-size: 11px;">
+                                            {{ day.total_qty|int if day.total_qty % 1 == 0 else day.total_qty }} pcs
+                                        </span>
+                                        <span class="fw-bold {% if day.total_revenue >= 0 %}neon-mint-green{% else %}neon-coral-red{% endif %}" style="font-size: 15px;">
+                                            ₱{{ "%.2f"|format(day.total_revenue) }}
+                                        </span>
+                                    </div>
+                                </div>
+                            </button>
+                        </h2>
+                        
+                        <div id="ledgerCollapse{{ loop.index }}" class="accordion-collapse collapse {% if loop.first %}show{% endif %}" data-bs-parent="#ledgerMasterAccordion">
+                            <div class="accordion-body p-0" style="background-color: #1b1b1c;">
+                                <table class="table table-dark table-hover mb-0 align-middle" style="font-size: 12.5px;">
+                                    <thead>
+                                        <tr class="table-active text-secondary font-monospace" style="font-size: 10px;">
+                                            <th class="ps-3">ID / TIME</th>
+                                            <th>PRODUCT SOLD</th>
+                                            <th class="text-end">QTY</th>
+                                            <th class="pe-3">AUDIT EXPLANATION NOTE</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {% for sale in day.entries %}
+                                        <tr>
+                                            <td class="ps-3 font-monospace text-muted">
+                                                <span class="d-block text-light" style="font-size: 11px;">{{ sale.Sale_Time }}</span>
+                                                <small style="font-size: 10px;">{{ sale.Sale_ID }}</small>
+                                            </td>
+                                            <td>
+                                                <span class="text-white fw-bold d-block">{{ sale.Product_Name }}</span>
+                                                <small class="text-success" style="font-size: 11px;">Rev: ₱{{ "%.2f"|format(sale.Total_Amount) }}</small>
+                                            </td>
+                                            <td class="text-end font-monospace fw-bold {% if sale.Quantity < 0 %}text-danger{% else %}text-light{% endif %}">
+                                                {{ sale.Quantity|int if sale.Quantity % 1 == 0 else sale.Quantity }}
+                                            </td>
+                                            <td class="pe-3">
+                                                {% if sale.Reason %}
+                                                    <span class="text-warning small d-block" style="font-style: italic; line-height: 1.2;">💬 {{ sale.Reason }}</span>
+                                                {% else %}
+                                                    <span class="text-muted small">—</span>
+                                                {% endif %}
+                                            </td>
+                                        </tr>
+                                        {% endfor %}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                    {% else %}
+                    <div class="text-center text-muted py-5">No historical ledger records logged in system storage.</div>
+                    {% endfor %}
+                </div>
+
+            </div>
+        </div>
+    </div>
+
+</div>
+
+<div class="modal fade" id="confirmEodModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content bg-dark text-white border border-secondary shadow-lg">
+            <div class="modal-header border-secondary">
+                <h5 class="modal-title fw-bold text-warning">⚠️ Verify Inventory Synchronization</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body p-3" style="background-color: #1e1e1e; font-size: 14px;">
+                <p class="mb-2">You are about to batch-submit today's compiled sales data to the unalterable system ledger tracking history columns.</p>
+                <ul class="text-secondary ps-3 mb-0" style="font-size: 13px;">
+                    <li>Ingredient quantities will instantly reduce based on stored recipe formulas.</li>
+                    <li>An unalterable audit row entry path will pin to the selected date.</li>
+                </ul>
+            </div>
+            <div class="modal-footer border-secondary justify-content-between">
+                <button type="button" class="btn btn-secondary fw-bold" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-success fw-bold px-4" onclick="document.getElementById('eodSalesMasterForm').submit();">Confirm & Sync Ledger</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="modal fade" id="securityWarningModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content bg-dark text-white border border-danger shadow-lg">
+            <div class="modal-header border-danger" style="background: linear-gradient(180deg, #dc3545 0%, #bd2130 100%);">
+                <h5 class="modal-title fw-bold text-white">🛑 SYSTEM SECURITY POLICY BLOCK</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body p-4 text-center" style="background-color: #1a1a1a;">
+                <div class="text-danger mb-2" style="font-size: 45px;">⚠️</div>
+                <h5 class="fw-bold text-white mb-2">Audit Explanation Notes Required</h5>
+                <p class="text-light mb-0" style="font-size: 14px; line-height: 1.5; color: #e0e0e0 !important;">
+                    Audit entry correction notes are <strong class="text-danger">strictly mandatory</strong> whenever attempting backdated ledger submissions or applying negative quantity balancing updates.
+                </p>
+            </div>
+            <div class="modal-footer border-secondary justify-content-center" style="background-color: #1a1a1a;">
+                <button type="button" class="btn btn-danger fw-bold px-5 shadow-sm" data-bs-dismiss="modal">I Understood</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+// FIXED: Changed 'def' keyword to correct JavaScript 'function' keyword
+function getLocalTodayString() {
+    const d = new Date();
+    const year = d.getFullYear();
+    const month = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+}
+
+function resetClosingFormMatrixFields() {
+    const inputs = document.querySelectorAll('#eodSalesMasterForm input[type="number"]');
+    inputs.forEach(input => {
+        input.value = '0';
+    });
+    document.getElementById('eodAuditNoteInput').style.border = "1px solid #3d3d3d";
+}
+
+function triggerSecurityModalCheck() {
+    const datePicker = document.getElementById('eodClosingDatePicker');
+    const auditInput = document.getElementById('eodAuditNoteInput');
+    const qtyInputs = document.querySelectorAll('.ingredient-qty-input');
+    
+    const todayStr = getLocalTodayString();
+    const isBackdated = (datePicker.value !== todayStr);
+    
+    let hasNegativeValue = false;
+    qtyInputs.forEach(input => {
+        if (parseFloat(input.value) < 0) {
+            hasNegativeValue = true;
+        }
+    });
+    
+    if ((isBackdated || hasNegativeValue) && auditInput.value.trim() === "") {
+        auditInput.style.border = "2px solid #ff4d4d";
+        auditInput.focus();
+        
+        const warningModal = new bootstrap.Modal(document.getElementById('securityWarningModal'));
+        warningModal.show();
+        return false;
+    }
+    
+    auditInput.style.border = "1px solid #3d3d3d";
+    const confirmModal = new bootstrap.Modal(document.getElementById('confirmEodModal'));
+    confirmModal.show();
+}
+
+document.addEventListener("DOMContentLoaded", function() {
+    const picker = document.getElementById('eodClosingDatePicker');
+    if (picker && !picker.value) {
+        picker.value = getLocalTodayString();
+    }
+});
+</script>
+{% endblock %}
