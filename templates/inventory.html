@@ -1,75 +1,538 @@
-<!DOCTYPE html>
-<html>
-<head>
-    <title>Stock Inventory Controls</title>
-    <style>
-        body { font-family: 'Segoe UI', Arial, sans-serif; background-color: #242424; color: #ffffff; margin: 0; display: flex; height: 100vh; overflow: hidden; }
-        .sidebar { width: 220px; background-color: #2b2b2b; padding: 20px 10px; display: flex; flex-direction: column; gap: 5px; border-right: 1px solid #313244; box-sizing: border-box; }
-        .sidebar-title { font-size: 22px; font-weight: bold; padding: 10px; letter-spacing: 1px; }
-        .sidebar-subtitle { font-size: 12px; color: #8a8a8a; padding-left: 10px; margin-bottom: 20px; }
-        .sidebar a { color: #ffffff; text-decoration: none; padding: 12px 15px; border-radius: 4px; font-size: 14px; display: block; }
-        .sidebar a:hover { background-color: #3a3a3a; }
-        .sidebar a.active { background-color: #3a3a3a; border-left: 4px solid #3b8ed0; font-weight: bold; }
-        .exit-btn { margin-top: auto; background-color: #c24b4b; text-align: center; font-weight: bold; }
-        
-        .main-content { flex: 1; padding: 30px 40px; overflow-y: auto; box-sizing: border-box; }
-        .module-headline { text-align: center; font-size: 26px; font-weight: bold; margin-bottom: 25px; }
-        
-        .table-container { background-color: #2b2b2b; border-radius: 6px; padding: 10px; box-shadow: inset 0 0 8px rgba(0,0,0,0.5); margin-bottom: 25px; }
-        table { width: 100%; border-collapse: collapse; }
-        th, td { padding: 12px 15px; text-align: left; font-size: 14px; border-bottom: 1px solid #3a3a3a; }
-        th { color: #8a8a8a; font-weight: bold; font-size: 12px; text-transform: uppercase; border-bottom: 2px solid #3a3a3a; }
-    </style>
-</head>
-<body>
+{% extends 'base.html' %}
+{% block content %}
+<style>
+    .alert-warning { color: #664d03 !important; background-color: #fff3cd !important; border: 1px solid #ffecb5 !important; }
+    .alert-success { color: #0f5132 !important; background-color: #d1e7dd !important; }
+    .alert-danger { color: #842029 !important; background-color: #f8d7da !important; }
+    .alert-info { color: #055160 !important; background-color: #cff4fc !important; border: 1px solid #b6effc !important; }
+    .high-contrast-id { color: #ffffff !important; font-weight: bold; font-size: 11px; }
+    .neon-mint-green { color: #2dfc8a !important; text-shadow: 0 0 2px rgba(45, 252, 138, 0.2); }
+    .neon-coral-red { color: #ff5555 !important; text-shadow: 0 0 2px rgba(255, 85, 85, 0.2); }
+    .p-metadata-subtext {
+        color: #e0e0e0 !important;
+        font-weight: 500;
+        font-size: 12px;
+        display: block;
+        margin-top: 2px;
+    }
+    .ledger-accordion-btn::after {
+        background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='%23ffffff'%3e%3cpath fill-rule='evenodd' d='M1.646 4.646a.5.5 0 0 1 .708 0L8 10.293l5.646-5.647a.5.5 0 0 1 .708.708l-6 6a.5.5 0 0 1-.708 0l-6-6a.5.5 0 0 1 0-.708z'/%3e%3c/svg%3e") !important;
+    }
+    .form-label-bright {
+        color: #ffffff !important;
+        font-weight: bold !important;
+        font-size: 12.5px;
+    }
+    .input-disabled-bright {
+        color: #00fa9a !important; 
+        font-weight: bold !important;
+        background-color: #1a1a1a !important;
+        border: 1px solid #444445 !important;
+    }
+    /* FIXED ACCORDION HIGHLIGHTS: Enforces solid white legibility across nested tables (Img 2 Fix) */
+    .accordion-readable-text {
+        color: #ffffff !important;
+        font-size: 13px !important;
+        font-weight: 500;
+    }
+    .accordion-readable-sub {
+        color: #c0c0c2 !important;
+        font-size: 11.5px !important;
+    }
+</style>
 
-    <div class="sidebar">
-        <div class="sidebar-title">INVENTORY</div>
-        <div class="sidebar-subtitle">My Bakery Shop</div>
-        <a href="/portal/{{ username }}">📊 Dashboard</a>
-        <a href="/portal/{{ username }}/products">📦 Products</a>
-        <a href="/portal/{{ username }}/ingredients">🍎 Ingredients</a>
-        <a href="/portal/{{ username }}/recipes">🍕 Recipes (Linked)</a>
-        <a href="/portal/{{ username }}/sales">💰 Sales</a>
-        <a class="active" href="/portal/{{ username }}/inventory">📦 Inventory</a>
-        <a href="/portal/{{ username }}/expenses">💸 Expenses</a>
-        <a href="/portal/{{ username }}/reports">📊 Reports</a>
-        <a href="/portal/{{ username }}/settings">⚙️ Settings</a>
-        <a href="/logout" class="exit-btn">🚪 Exit</a>
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <h3 class="m-0 text-white" style="font-weight: bold;">Warehouse Inventory Command Center</h3>
+    <div>
+        <button class="btn btn-primary fw-bold me-1" data-bs-toggle="modal" data-bs-target="#receiveStockModal">🚚 Log Delivery</button>
+        <button class="btn btn-warning fw-bold text-dark me-1" data-bs-toggle="modal" data-bs-target="#logWasteModal">🗑️ Log Waste</button>
+        <button class="btn btn-success fw-bold" data-bs-toggle="modal" data-bs-target="#reconcileStockModal">⚖️ Physical Count Audit</button>
     </div>
+</div>
 
-    <div class="main-content">
-        <div class="module-headline">Stock Inventory Component Controls</div>
-        
-        <div class="table-container">
-            <table>
-                <thead>
-                    <tr>
-                        <th>Ingredient ID</th>
-                        <th>Ingredient Name</th>
-                        <th>Current Available Stock</th>
-                        <th>Minimum Alert Level</th>
-                        <th>Category Group</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {% for item in inventory_status %}
-                        <tr>
-                            <td><b>{{ item.Ingredient_ID }}</b></td>
-                            <td>{{ item.Ingredient_Name }}</td>
-                            <td>{{ item.Current_Stock }} {{ item.Unit }}</td>
-                            <td>{{ item.Min_Stock_Level }} {{ item.Unit }}</td>
-                            <td>{{ item.Category }}</td>
+<!-- Dynamic Feedback Notifications Alert Strip Banners -->
+{% if msg %}
+<div class="alert {% if alert_type == 'success' %}alert-success{% elif alert_type == 'warning' %}alert-warning{% elif alert_type == 'info' %}alert-info{% else %}alert-danger{% endif %} border-0 fw-bold mb-3 shadow-sm" style="border-radius: 6px; font-size: 14px;">
+    {{ msg }}
+</div>
+{% endif %}
+
+<!-- Unified Search & Activity Date Filter Row Bar Controls -->
+<div class="content-card mb-3 p-3" style="background-color: #2b2b2b;">
+    <form method="GET" class="row gx-2 gy-2 align-items-center">
+        <div class="col-md-3">
+            <label class="text-light me-1 mb-1 small d-block">Search Component Items:</label>
+            <input type="text" name="search" value="{{ current_search }}" class="form-control bg-dark text-white border-secondary" placeholder="ID or Ingredient Name..." autocomplete="off">
+        </div>
+        <div class="col-md-3">
+            <label class="text-light me-1 mb-1 small d-block">Filter Category Classification:</label>
+            <select name="category" class="form-select bg-dark text-white border-secondary" onchange="this.form.submit()">
+                <option value="All">All Categories</option>
+                {% for cat in categories %}
+                <option value="{{ cat }}" {% if current_category == cat %}selected{% endif %}>{{ cat }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <!-- FIXED: Filter option on dates for history logs (DOES NOT affect live stock balance sheet) -->
+        <div class="col-md-4">
+            <label class="text-info me-1 mb-1 small d-block fw-bold">📅 Filter Logs by Specific Activity Date:</label>
+            <input type="date" name="filter_date" value="{{ current_filter_date }}" class="form-control bg-dark text-white border-info fw-bold" onchange="this.form.submit()">
+        </div>
+        <div class="col-md-2 text-end align-self-end">
+            <a href="/portal/{{ username }}/inventory" class="btn btn-secondary fw-bold w-100">🗑️ Clear Filters</a>
+        </div>
+    </form>
+</div>
+
+<!-- THREE-PANEL COMPREHENSIVE SPLIT VIEW WORKSPACE -->
+<div class="row g-3">
+    
+    <!-- COLUMN PANEL 1: Real-time Live Available Balances Spreadsheet Card (col-md-4) -->
+    <div class="col-md-4">
+        <div class="card border-secondary bg-dark text-white shadow-sm" style="height: 68vh;">
+            <div class="card-header bg-secondary text-white fw-bold">📦 Live Stock Balance Sheet</div>
+            <div class="card-body p-0" style="overflow-y: auto; height: 100%;">
+                <table class="table table-dark table-hover align-middle mb-0" style="font-size: 13px;">
+                    <thead>
+                        <tr class="text-secondary font-monospace" style="font-size: 11px;">
+                            <th>INGREDIENT COMPONENT</th>
+                            <th class="text-end">ON-HAND</th>
+                            <th class="text-end">ALERT</th>
                         </tr>
-                    {% else %}
+                    </thead>
+                    <tbody>
+                        {% for item in inventory_status %}
                         <tr>
-                            <td colspan="5" style="text-align:center; color:#8a8a8a; padding:30px;">No warehouse components logged yet.</td>
+                            <td>
+                                <span class="fw-bold text-white d-block" style="font-size: 13.5px;">{{ item.Ingredient_Name }}</span>
+                                <small class="p-metadata-subtext">ID: {{ item.Ingredient_ID }} | <span class="badge bg-secondary" style="font-size:9px;">{{ item.Category }}</span></small>
+                            </td>
+                            <td class="text-end font-monospace fw-bold text-light">
+                                {{ "%.2f"|format(item.Current_Stock) if item.Current_Stock % 1 != 0 else "%.0f"|format(item.Current_Stock) }} {{ item.Unit }}
+                            </td>
+                            <td class="text-end">
+                                {% if item.Current_Stock <= item.Min_Stock_Level %}
+                                    <span class="badge bg-danger text-white p-1 fw-bold" style="font-size: 9.5px;">🚨 REORDER</span>
+                                {% else %}
+                                    <span class="badge bg-success text-white p-1 fw-bold" style="font-size: 9.5px;">✔ OK</span>
+                                {% endif %}
+                            </td>
                         </tr>
-                    {% endfor %}
-                </tbody>
-            </table>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
         </div>
     </div>
 
-</body>
-</html>
+    <!-- COLUMN PANEL 2: Incoming supplier deliveries and verified audits ledger register card (col-md-4) -->
+    <div class="col-md-4">
+        <div class="card border-secondary bg-dark text-white shadow-sm" style="height: 68vh;">
+            <div class="card-header bg-primary text-white fw-bold">🚚 Incoming Deliveries & Audits</div>
+            <div class="card-body p-2" style="overflow-y: auto; height: 100%; background-color: #181819;">
+                <div style="font-size: 12.5px;">
+                    {% for log in delivery_history %}
+                    <div class="p-2 border-bottom border-secondary mb-2 rounded bg-dark shadow-sm">
+                        <div class="d-flex justify-content-between align-items-center mb-1">
+                            <span class="text-info font-monospace fw-bold" style="font-size: 11px;">📅 {{ log.Date }}</span>
+                            <span class="badge bg-secondary font-monospace" style="font-size: 10px;">{{ log.Audit_ID }}</span>
+                        </div>
+                        <div class="d-flex justify-content-between align-items-center">
+                            <span class="text-white fw-bold">{{ log.Ingredient_Name }}</span>
+                            <span class="font-monospace fw-bold text-success">+{{ "%.2f"|format(log.Variance) if log.Variance % 1 != 0 else "%.0f"|format(log.Variance) }}</span>
+                        </div>
+                        <small class="text-warning d-block mt-1" style="font-style: italic; font-size: 11px; line-height: 1.2;">💬 {{ log.Notes }}</small>
+                    </div>
+                    {% else %}
+                    <div class="text-center text-muted py-5">No filtered delivery records found for this scope.</div>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- COLUMN PANEL 3: Spoilage & Wastes module supporting sub-accordion collapses (col-md-4) -->
+    <div class="col-md-4">
+        <div class="card border-secondary bg-dark text-white shadow-sm" style="height: 68vh;">
+            <div class="card-header bg-warning text-dark fw-bold">🗑️ Spoilage & Operational Waste Journal</div>
+            <div class="card-body p-2" style="overflow-y: auto; height: 100%; background-color: #181819;">
+                
+                <div class="accordion" id="wasteMasterJournalAccordion">
+                    {% for waste in waste_history %}
+                        
+                        {% if not waste.is_product %}
+                        <!-- UI Component A: Standard individual card row for raw materials loss -->
+                        <div class="p-2 border-bottom border-secondary mb-2 rounded bg-dark shadow-sm" style="font-size: 12.5px;">
+                            <div class="d-flex justify-content-between align-items-center mb-1">
+                                <span class="text-info font-monospace fw-bold" style="font-size: 11px;">📅 {{ waste.Date }}</span>
+                                <span class="badge bg-secondary font-monospace" style="font-size: 10px;">{{ waste.Audit_ID }}</span>
+                            </div>
+                            <div class="d-flex justify-content-between align-items-center">
+                                <span class="text-white fw-bold">🍎 {{ waste.Ingredient_Name }}</span>
+                                <span class="font-monospace fw-bold text-danger">{{ "%.2f"|format(waste.Variance) if waste.Variance % 1 != 0 else "%.0f"|format(waste.Variance) }}</span>
+                            </div>
+                            <small class="text-warning d-block mt-1" style="font-style: italic; font-size: 11px; line-height: 1.2;">💬 {{ waste.Notes }}</small>
+                        </div>
+                        
+                        {% else %}
+                        <!-- UI Component B: FIXED ACCORDION BUNDLING: Consolidates multi-ingredient entries under the explicit product item name (Img 1 & 2 Fix!) -->
+                        <div class="accordion-item bg-dark text-white border-secondary mb-2 rounded shadow-sm" style="overflow: hidden; font-size: 12.5px;">
+                            <h2 class="accordion-header" id="subWasteHead{{ loop.index }}">
+                                <button class="accordion-button ledger-accordion-btn collapsed bg-secondary text-white fw-bold py-2 px-3" 
+                                        type="button" data-bs-toggle="collapse" data-bs-target="#subWasteCollapse{{ loop.index }}" style="box-shadow: none;">
+                                    <div class="d-flex flex-column text-start">
+                                        <span class="text-info font-monospace fw-bold" style="font-size: 10.5px;">📅 {{ waste.Date }}</span>
+                                        <!-- Displays actual product name title text matching item descriptions -->
+                                        <span class="text-white fw-bold" style="font-size: 13.5px;">🍞 {{ waste.Title }}</span>
+                                    </div>
+                                </button>
+                            </h2>
+                            <div id="subWasteCollapse{{ loop.index }}" class="accordion-collapse collapse" data-bs-parent="#wasteMasterJournalAccordion">
+                                <!-- FIXED INTERIOR CONTRAST: High-visibility styles for inner tracking text summaries -->
+                                <div class="accordion-body p-3" style="background-color: #121213; border-top: 1px solid #2a2a2b;">
+                                    <small class="text-white d-block mb-1 font-monospace" style="font-size: 11px; opacity: 0.85;">Batch ID: {{ waste.Audit_ID }}</small>
+                                    <small class="text-warning d-block mb-3" style="font-size: 12px; font-weight: 500;">Info: {{ waste.Notes }}</small>
+                                    
+                                    <div class="p-2 rounded bg-dark border border-secondary">
+                                        <table class="table table-dark table-sm table-borderless mb-0" style="font-size: 12px;">
+                                            <thead>
+                                                <tr class="text-secondary font-monospace" style="font-size: 10px; border-bottom: 1px solid #333;">
+                                                    <th>DEPLETED INGREDIENT COMPONENT</th>
+                                                    <th class="text-end">QUANTITY</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                {% for comp in waste.components %}
+                                                <tr>
+                                                    <td class="accordion-readable-text">📉 {{ comp.name }}</td>
+                                                    <td class="text-end font-monospace fw-bold text-danger" style="font-size:13px;">{{ "%.2f"|format(comp.variance) if comp.variance % 1 != 0 else "%.0f"|format(comp.variance) }}</td>
+                                                </tr>
+                                                {% endfor %}
+                                            </tbody>
+                                        </table>
+                                    </div>
+
+                                </div>
+                            </div>
+                        </div>
+                        {% endif %}
+                        
+                    {% else %}
+                    <div class="text-center text-muted py-5">No filtered waste incident records found for this scope.</div>
+                    {% endfor %}
+                </div>
+
+            </div>
+        </div>
+    </div>
+
+</div>
+
+<!-- 1. RECEIVE DELIVERY MODAL WINDOW -->
+<div class="modal fade" id="receiveStockModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content bg-dark text-white border border-secondary shadow-lg">
+            <form method="post" onsubmit="return validateDeliveryMetaData();">
+                <input type="hidden" name="action_type" value="receive_stock">
+                <div class="modal-header border-secondary">
+                    <h5 class="modal-title fw-bold text-primary">🚚 Log Incoming Supplier Delivery</h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="p-3 border-bottom border-secondary" style="background-color: #1e1e1e;">
+                    <div class="row g-2 mb-2">
+                        <div class="col-md-4">
+                            <label class="form-label small form-label-bright mb-1">🏢 Supplier Name:</label>
+                            <input type="text" id="deliverySupplierInput" name="supplier" class="form-control bg-dark text-white border-secondary" placeholder="e.g., San Miguel Mills" required autocomplete="off">
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label small form-label-bright mb-1">👤 Received By (Staff Name):</label>
+                            <input type="text" id="deliveryReceiverInput" name="received_by" class="form-control bg-dark text-white border-secondary" placeholder="e.g., Manager Jake" required autocomplete="off">
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label small form-label-bright mb-1">📅 Date & Time Received:</label>
+                            <input type="text" id="deliveryDateDisplay" class="form-control input-disabled-bright font-monospace" readonly>
+                        </div>
+                    </div>
+                    <div>
+                        <label class="form-label small form-label-bright mb-1">📝 Invoice Number / Delivery Notes:</label>
+                        <input type="text" name="delivery_notes" class="form-control bg-dark text-white border-secondary" placeholder="Optional: e.g., Invoice #SI-99102" autocomplete="off">
+                    </div>
+                </div>
+                <div class="modal-body p-0" style="max-height: 40vh; overflow-y: auto; background-color: #1a1a1a;">
+                    <table class="table table-dark table-hover mb-0 align-middle">
+                        <thead>
+                            <tr class="table-active text-muted small">
+                                <th class="ps-3">INGREDIENT ITEM</th>
+                                <th class="text-end pe-3" style="width: 250px;">INCOMING QUANTITY</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for item in inventory_status %}
+                            <tr>
+                                <td class="ps-3">
+                                    <input type="hidden" name="ingredient_id[]" value="{{ item.Ingredient_ID }}">
+                                    <span class="fw-bold text-white d-block">{{ item.Ingredient_Name }}</span>
+                                    <small class="p-metadata-subtext">Current Stock Balance: {{ "%.2f"|format(item.Current_Stock) if item.Current_Stock % 1 != 0 else "%.0f"|format(item.Current_Stock) }} {{ item.Unit }}</small>
+                                </td>
+                                <td class="pe-3">
+                                    <div class="input-group input-group-sm">
+                                        <!-- FIXED field spacing bounds -->
+                                        <input type="number" step="any" name="quantity[]" min="0" placeholder="0.00 (Uncounted)" class="form-control text-center bg-light text-dark fw-bold border-0 font-monospace" style="font-size: 14px;">
+                                        <span class="input-group-text bg-secondary border-0 text-white font-monospace" style="min-width: 50px; font-size: 12px;">{{ item.Unit }}</span>
+                                    </div>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                <div class="modal-footer border-secondary">
+                    <button type="submit" class="btn btn-primary fw-bold w-100">✔ Sync & Receive Delivery Into Stock Ledger</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- 2. BIFURCATED WASTE LOG MODAL WINDOW -->
+<div class="modal fade" id="logWasteModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content bg-dark text-white border border-secondary shadow-lg">
+            <form method="post" onsubmit="return validateOperationalWasteNotes();">
+                <input type="hidden" name="action_type" value="log_waste">
+                <div class="modal-header border-secondary">
+                    <h5 class="modal-title fw-bold text-warning">🗑️ Log Spoilage, Damage & Waste Logs</h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                </div>
+                
+                <div class="p-3 border-bottom border-secondary" style="background-color: #1e1e1e;">
+                    <div class="row g-2 mb-2">
+                        <div class="col-md-4">
+                            <label class="form-label small form-label-bright mb-1">👤 Authorized By (Personnel):</label>
+                            <input type="text" id="wastePersonnelInput" name="wasted_by" class="form-control bg-dark text-white border-secondary" placeholder="e.g., Chef Edwards" required autocomplete="off">
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label small form-label-bright mb-1">❓ Main Classification Reason:</label>
+                            <select id="wasteReasonSelect" name="waste_reason" class="form-select bg-dark text-white border-secondary" required>
+                                <option value="" disabled selected>Choose loss reason...</option>
+                                <option value="Baking/Production Error">Baking/Production Error</option>
+                                <option value="Dropped / Spilled Material">Dropped / Spilled Material</option>
+                                <option value="Expired Shelf Life">Expired Shelf Life / Spoilage</option>
+                                <option value="Customer Return / Quality Reject">Customer Return / Quality Reject</option>
+                            </select>
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label small form-label-bright mb-1">📅 Locked Audit Date:</label>
+                            <input type="text" id="wasteDateDisplay" class="form-control input-disabled-bright font-monospace" readonly>
+                        </div>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label small form-label-bright mb-1">📝 Descriptive Incident Notes:</label>
+                        <input type="text" id="wasteNotesInput" name="operational_note" class="form-control bg-dark text-white border-secondary" placeholder="Provide extra detail" autocomplete="off">
+                    </div>
+
+                    <label class="form-label small form-label-bright mb-1 d-block">🎯 Choose Target Loss Classification Type:</label>
+                    <div class="btn-group w-100 border border-secondary p-1 rounded" style="background-color: #111112;">
+                        <input type="radio" class="btn-check" name="waste_target_type" id="wasteTypeIng" value="ingredients" checked onclick="toggleWasteMode('ingredients')">
+                        <label class="btn btn-outline-warning fw-bold border-0 py-2" for="wasteTypeIng">🍎 Raw Ingredients Loss</label>
+
+                        <input type="radio" class="btn-check" name="waste_target_type" id="wasteTypeProd" value="products" onclick="toggleWasteMode('products')">
+                        <label class="btn btn-outline-warning fw-bold border-0 py-2" for="wasteTypeProd">🍞 Finished Products (Auto-Deplete Recipe)</label>
+                    </div>
+                </div>
+
+                <div id="wasteIngredientsContainerBlock" class="modal-body p-0" style="max-height: 35vh; overflow-y: auto; background-color: #1a1a1a;">
+                    <table class="table table-dark table-hover mb-0 align-middle">
+                        <thead>
+                            <tr class="table-active text-muted small">
+                                <th class="ps-3">INGREDIENT ITEM</th>
+                                <th class="text-end pe-3" style="width: 250px;">WASTED QUANTITY</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for item in inventory_status %}
+                            <tr>
+                                <td class="ps-3">
+                                    <input type="hidden" name="ingredient_id[]" value="{{ item.Ingredient_ID }}">
+                                    <span class="fw-bold text-white d-block">{{ item.Ingredient_Name }}</span>
+                                    <small class="p-metadata-subtext">Current Stock: {{ "%.2f"|format(item.Current_Stock) if item.Current_Stock % 1 != 0 else "%.0f"|format(item.Current_Stock) }} {{ item.Unit }}</small>
+                                </td>
+                                <td class="pe-3">
+                                    <div class="input-group input-group-sm">
+                                        <input type="number" step="any" name="quantity[]" min="0" placeholder="0.00 (Uncounted)" class="form-control text-center bg-light text-dark fw-bold border-0 font-monospace" style="font-size: 14px;">
+                                        <span class="input-group-text bg-secondary border-0 text-white font-monospace" style="min-width: 50px; font-size: 12px;">{{ item.Unit }}</span>
+                                    </div>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+
+                <div id="wasteProductsContainerBlock" class="modal-body p-0" style="max-height: 35vh; overflow-y: auto; background-color: #1a1a1a; display: none;">
+                    <table class="table table-dark table-hover mb-0 align-middle">
+                        <thead>
+                            <tr class="table-active text-muted small">
+                                <th class="ps-3">FINISHED MENU ITEM PRODUCT</th>
+                                <th class="text-end pe-3" style="width: 250px;">WASTED ORDERS</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for prod in all_products %}
+                            <tr>
+                                <td class="ps-3">
+                                    <input type="hidden" name="product_id[]" value="{{ prod.Product_ID }}">
+                                    <span class="fw-bold text-white d-block">{{ prod.Product_Name }}</span>
+                                    <small class="p-metadata-subtext">Product Code Reference: {{ prod.Product_ID }}</small>
+                                </td>
+                                <td class="pe-3">
+                                    <div class="input-group input-group-sm">
+                                        <input type="number" step="any" name="product_quantity[]" min="0" placeholder="0 (Uncounted)" class="form-control text-center bg-light text-dark fw-bold border-0 font-monospace" style="font-size: 14px;">
+                                        <span class="input-group-text bg-secondary border-0 text-white font-monospace" style="min-width: 50px; font-size: 12px;">pcs</span>
+                                    </div>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+
+                <div class="modal-footer border-secondary">
+                    <button type="submit" class="btn btn-warning fw-bold text-dark w-100">✔ Deduct Registered Operational Waste from Warehouse Logs</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- 3. PHYSICAL STOCK RECONCILE MODAL WINDOW -->
+<div class="modal fade" id="reconcileStockModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content bg-dark text-white border border-secondary shadow-lg">
+            <form method="post" onsubmit="return validateReconcileNotes();">
+                <input type="hidden" name="action_type" value="reconcile_stock">
+                <div class="modal-header border-secondary">
+                    <h5 class="modal-title fw-bold text-success">⚖️ Finalize Physical Stock-Taking Audit</h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="p-3 border-bottom border-secondary" style="background-color: #1e1e1e;">
+                    <div class="row g-2">
+                        <div class="col-md-6">
+                            <label class="form-label small form-label-bright mb-1">👤 Lead Compliance Auditor Name:</label>
+                            <input type="text" id="reconcileAuditorInput" name="reconcile_by" class="form-control bg-dark text-white border-secondary" placeholder="e.g., Auditor Edwards" required autocomplete="off">
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label small form-label-bright mb-1">📋 Scope / Verification Reason:</label>
+                            <input type="text" id="reconcileReasonInput" name="reconcile_reason" class="form-control bg-dark text-white border-secondary" placeholder="e.g., End-of-Month Routine Warehouse Audit" required autocomplete="off">
+                        </div>
+                    </div>
+                    <div class="mt-2">
+                        <label class="form-label small form-label-bright mb-1">📅 Locked Evaluation Timestamp:</label>
+                        <input type="text" id="reconcileDateDisplay" class="form-control input-disabled-bright font-monospace" readonly>
+                    </div>
+                </div>
+                <div class="modal-body p-0" style="max-height: 40vh; overflow-y: auto; background-color: #1a1a1a;">
+                    <table class="table table-dark table-hover mb-0 align-middle">
+                        <thead>
+                            <tr class="table-active text-muted small">
+                                <th class="ps-3">INGREDIENT COMPONENT</th>
+                                <th class="text-end pe-3" style="width: 250px;">PHYSICAL COUNT REALITY</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for item in inventory_status %}
+                            <tr>
+                                <td class="ps-3">
+                                    <input type="hidden" name="ingredient_id[]" value="{{ item.Ingredient_ID }}">
+                                    <span class="fw-bold text-white d-block">{{ item.Ingredient_Name }}</span>
+                                    <small class="p-metadata-subtext">Theoretical System Inventory: {{ "%.2f"|format(item.Current_Stock) if item.Current_Stock % 1 != 0 else "%.0f"|format(item.Current_Stock) }} {{ item.Unit }}</small>
+                                </td>
+                                <td class="pe-3">
+                                    <div class="input-group input-group-sm">
+                                        <input type="number" step="any" name="quantity[]" placeholder="0.00 (Uncounted)" class="form-control text-center bg-light text-dark fw-bold border-0 font-monospace" style="font-size: 14px;">
+                                        <span class="input-group-text bg-secondary border-0 text-white font-monospace" style="min-width: 50px; font-size: 12px;">{{ item.Unit }}</span>
+                                    </div>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                <div class="modal-footer border-secondary">
+                    <button type="submit" class="btn btn-success fw-bold w-100">✔ Commit Verified Physical Counts & Adjust Ledger</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<script>
+function toggleWasteMode(mode) {
+    const ingBlock = document.getElementById('wasteIngredientsContainerBlock');
+    const prodBlock = document.getElementById('wasteProductsContainerBlock');
+    if (mode === 'ingredients') {
+        ingBlock.style.display = "block";
+        prodBlock.style.display = "none";
+    } else {
+        ingBlock.style.display = "none";
+        prodBlock.style.display = "block";
+    }
+}
+
+function validateDeliveryMetaData() {
+    const supplier = document.getElementById('deliverySupplierInput');
+    const receiver = document.getElementById('deliveryReceiverInput');
+    if (supplier.value.trim() === "" || receiver.value.trim() === "") {
+        alert("⚠️ Compliance Protection:\nYou must supply a valid Supplier Name and receiver staff identity.");
+        return false;
+    }
+    return true;
+}
+
+function validateOperationalWasteNotes() {
+    const personnel = document.getElementById('wastePersonnelInput');
+    const selectReason = document.getElementById('wasteReasonSelect');
+    if (personnel.value.trim() === "") {
+        alert("⚠️ Compliance Protection:\nYou must log who authorized this operational waste item entry.");
+        personnel.style.border = "2px solid #ff4d4d";
+        personnel.focus();
+        return false;
+    }
+    if (selectReason.value === "") {
+        alert("⚠️ Compliance Protection:\nYou must classify a valid loss category classification reason.");
+        return false;
+    }
+    return true;
+}
+
+function validateReconcileNotes() {
+    const auditor = document.getElementById('reconcileAuditorInput');
+    const reason = document.getElementById('reconcileReasonInput');
+    if (auditor.value.trim() === "" || reason.value.trim() === "") {
+        alert("⚠️ Compliance Protection:\nAuditor identity and verification scope reason fields are strictly mandatory.");
+        return false;
+    }
+    return true;
+}
+
+function getLocalTodayString() {
+    const d = new Date();
+    const year = d.getFullYear();
+    const month = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    const hours = String(d.getHours()).padStart(2, '0');
+    const minutes = String(d.getMinutes()).padStart(2, '0');
+    return `${year}-${month}-${day} ${hours}:${minutes}`;
+}
+
+document.addEventListener("DOMContentLoaded", function() {
+    const formatted = getLocalTodayString();
+    const d1 = document.getElementById('deliveryDateDisplay');
+    const d2 = document.getElementById('wasteDateDisplay');
+    const d3 = document.getElementById('reconcileDateDisplay');
+    if (d1) d1.value = formatted;
+    if (d2) d2.value = formatted;
+    if (d3) d3.value = formatted;
+});
+</script>
+{% endblock %}
