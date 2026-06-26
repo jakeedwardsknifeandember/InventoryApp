@@ -1,114 +1,167 @@
-<!DOCTYPE html>
-<html>
-<head>
-    <title>Recipes Matrix Configuration</title>
-    <style>
-        body { font-family: 'Segoe UI', Arial, sans-serif; background-color: #242424; color: #ffffff; margin: 0; display: flex; height: 100vh; overflow: hidden; }
-        .sidebar { width: 220px; background-color: #2b2b2b; padding: 20px 10px; display: flex; flex-direction: column; gap: 5px; border-right: 1px solid #313244; box-sizing: border-box; }
-        .sidebar-title { font-size: 22px; font-weight: bold; padding: 10px; letter-spacing: 1px; }
-        .sidebar-subtitle { font-size: 12px; color: #8a8a8a; padding-left: 10px; margin-bottom: 20px; }
-        .sidebar a { color: #ffffff; text-decoration: none; padding: 12px 15px; border-radius: 4px; font-size: 14px; display: block; }
-        .sidebar a:hover { background-color: #3a3a3a; }
-        .sidebar a.active { background-color: #3a3a3a; border-left: 4px solid #3b8ed0; font-weight: bold; }
-        .exit-btn { margin-top: auto; background-color: #c24b4b; text-align: center; font-weight: bold; }
-        
-        .main-content { flex: 1; padding: 30px 40px; overflow-y: auto; box-sizing: border-box; }
-        .module-headline { text-align: center; font-size: 26px; font-weight: bold; margin-bottom: 25px; }
-        
-        .action-btn { padding: 8px 16px; border: none; border-radius: 4px; font-weight: bold; color: white; font-size: 13px; cursor: pointer; text-decoration: none; text-align: center; }
-        .btn-blue { background-color: #3b8ed0; }
-        
-        .table-container { background-color: #2b2b2b; border-radius: 6px; padding: 10px; box-shadow: inset 0 0 8px rgba(0,0,0,0.5); margin-bottom: 25px; }
-        table { width: 100%; border-collapse: collapse; }
-        th, td { padding: 12px 15px; text-align: left; font-size: 14px; border-bottom: 1px solid #3a3a3a; }
-        th { color: #8a8a8a; font-weight: bold; font-size: 12px; text-transform: uppercase; border-bottom: 2px solid #3a3a3a; }
-        .alert-banner { background: #3b8ed022; color: #3b8ed0; padding: 12px; border-radius: 6px; margin-bottom: 20px; font-weight: bold; text-align: center; }
-    </style>
-</head>
-<body>
+{% extends 'base.html' %}
 
-    <div class="sidebar">
-        <div class="sidebar-title">INVENTORY</div>
-        <div class="sidebar-subtitle">My Bakery Shop</div>
-        <a href="/portal/{{ username }}">📊 Dashboard</a>
-        <a href="/portal/{{ username }}/products">📦 Products</a>
-        <a href="/portal/{{ username }}/ingredients">🍎 Ingredients</a>
-        <a class="active" href="/portal/{{ username }}/recipes">🍕 Recipes (Linked)</a>
-        <a href="/portal/{{ username }}/sales">💰 Sales</a>
-        <a href="/portal/{{ username }}/inventory">📦 Inventory</a>
-        <a href="/portal/{{ username }}/expenses">💸 Expenses</a>
-        <a href="/portal/{{ username }}/reports">📊 Reports</a>
-        <a href="/portal/{{ username }}/settings">⚙️ Settings</a>
-        <a href="/logout" class="exit-btn">🚪 Exit</a>
+{% block content %}
+<div class="container mt-4">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h3 class="text-white">All Product Recipes</h3>
+        <a href="?view=create" class="btn btn-success">+ Create New Recipe</a>
     </div>
 
-    <div class="main-content">
-        <div class="module-headline">Recipes Link Master Engine Matrix</div>
-        
-        {% if msg %}
-            <div class="alert-banner">{{ msg }}</div>
-        {% endif %}
-        
-        <div style="background-color: #1e1e2e; padding: 25px; border-radius: 6px; border: 1px solid #313244; max-width: 600px; margin: 0 auto 35px auto;">
-            <h3 style="margin-top:0; color: #f9e2af;">🥣 Recipe Component Builder</h3>
-            <form method="post">
-                <div style="display:grid; grid-template-columns: 1fr 1fr; gap:15px; margin-bottom:15px; text-align:left;">
-                    <div>
-                        <label style="font-size:12px; color:#aaa; display:block; margin-bottom:5px;">Select Product Target:</label>
-                        <select name="product_id" style="width:100%; padding:10px; background:#242424; color:#fff; border:1px solid #3a3a3a; border-radius:4px;">
-                            {% for prod in dropdown_products %}
-                                <option value="{{ prod.Product_ID }}">{{ prod.Product_Name }}</option>
-                            {% endfor %}
-                        </select>
-                    </div>
-                    <div>
-                        <label style="font-size:12px; color:#aaa; display:block; margin-bottom:5px;">Link Raw Ingredient:</label>
-                        <select name="ingredient_id" style="width:100%; padding:10px; background:#242424; color:#fff; border:1px solid #3a3a3a; border-radius:4px;">
-                            {% for ing in dropdown_ingredients %}
-                                <option value="{{ ing.Ingredient_ID }}">{{ ing.Ingredient_Name }} ({{ ing.Unit }})</option>
-                            {% endfor %}
-                        </select>
-                    </div>
-                </div>
-                <div style="text-align:left; margin-bottom:20px;">
-                    <label style="font-size:12px; color:#aaa; display:block; margin-bottom:5px;">Quantity Required for 1 Unit:</label>
-                    <input type="number" name="quantity_required" step="any" required placeholder="0.00" style="width:100%; padding:10px; background:#242424; color:#fff; border:1px solid #3a3a3a; border-radius:4px; box-sizing:border-box;">
-                </div>
-                <input type="submit" value="🔗 Bind Ingredient to Product Recipe" class="action-btn btn-blue" style="width:100%; padding:12px; font-weight:bold;">
-            </form>
-        </div>
-        
-        <div class="table-container">
-            <table>
-                <thead>
-                    <tr>
-                        <th>Product ID</th>
-                        <th>Product Destination Description</th>
-                        <th>Category Group</th>
-                        <th>🥣 Interlinked Ingredient Ratios</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {% for row in matrix_rows %}
-                        <tr>
-                            <td><b>{{ row.product_id }}</b></td>
-                            <td>{{ row.product_name }}</td>
-                            <td>{{ row.category }}</td>
-                            <td>
-                                <ul style="margin:0; padding-left:15px; color:#a6adc8; font-size:13px;">
-                                    {% for sub_item in row.recipe_items %}
-                                        <li>🥣 {{ sub_item.Ingredient_Name }}: <b>{{ sub_item.Quantity_Required }} {{ sub_item.Unit }}</b></li>
-                                    {% else %}
-                                        <li style="color:#777; font-style:italic;">No linked raw materials tracked yet.</li>
-                                    {% endfor %}
-                                </ul>
-                            </td>
-                        </tr>
-                    {% endfor %}
-                </tbody>
-            </table>
+    <div class="bg-dark p-3 rounded mb-4 border border-secondary">
+        <div class="row g-2 align-items-center">
+            <div class="col-md-4">
+                <input type="text" id="searchInput" class="form-control" placeholder="Search products...">
+            </div>
+            <div class="col-md-3">
+                <select class="form-select bg-secondary text-white">
+                    <option>All Categories</option>
+                </select>
+            </div>
+            <div class="col-md-2">
+                <button class="btn btn-primary w-100">Search</button>
+            </div>
+            <div class="col-md-2">
+                <button class="btn btn-secondary w-100">Clear</button>
+            </div>
         </div>
     </div>
 
-</body>
-</html>
+    {% for r in recipe_data %}
+    <div class="content-card mb-4 border border-secondary bg-dark text-white shadow">
+        <div class="p-3 bg-secondary d-flex justify-content-between align-items-center">
+            <h5 class="m-0">{{ r['Product_Name'] }} ({{ r['Product_ID'] }})</h5>
+            <span>Price: ₱{{ "%.2f"|format(r.get('Selling_Price', 0)) }}</span>
+        </div>
+        
+        <table class="table table-dark table-hover mb-0 border border-secondary">
+            <thead>
+                <tr>
+                    <th>Ingredient</th>
+                    <th>Quantity</th>
+                    <th>Unit</th>
+                    <th>Cost/Unit</th>
+                    <th>Total Cost</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for item in r['Items'] %}
+                <tr>
+                    <td>{{ item['Name'] }}</td>
+                    <td>{{ item['Qty'] }}</td>
+                    <td>{{ item['Unit'] }}</td>
+                    <td>₱{{ "%.2f"|format(item['Cost']) }}</td>
+                    <td>₱{{ "%.2f"|format(item['Total']) }}</td>
+                </tr>
+                {% else %}
+                <tr>
+                    <td colspan="5" class="text-center text-muted">No ingredients added yet.</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+
+        <div class="p-3 d-flex justify-content-between align-items-center border-top border-secondary">
+            <span class="fw-bold">Total Cost: ₱{{ "%.2f"|format(r['Total_Cost']) }}</span>
+            <span class="text-success fw-bold">Profit: ₱{{ "%.2f"|format(r['Profit']) }}</span>
+            <div>
+                <button class="btn btn-sm btn-info" data-bs-toggle="modal" data-bs-target="#editModal{{ r['Product_ID'] }}">Edit Recipe</button>
+                <form method="post" class="d-inline">
+                    <input type="hidden" name="action_type" value="delete_recipe">
+                    <input type="hidden" name="product_id" value="{{ r['Product_ID'] }}">
+                    <button class="btn btn-sm btn-danger">Delete</button>
+                </form>
+            </div>
+        </div>
+    </div>
+    
+    <div class="modal fade" id="editModal{{ r['Product_ID'] }}" tabindex="-1">
+        <div class="modal-dialog modal-xl">
+            <div class="modal-content bg-dark text-white border border-secondary">
+                <form method="post">
+                    <input type="hidden" name="action_type" value="edit_recipe">
+                    <input type="hidden" name="product_id" value="{{ r['Product_ID'] }}">
+                    <div class="modal-header border-secondary">
+                        <h5>Edit: {{ r['Product_Name'] }}</h5>
+                    </div>
+                    <div class="modal-body">
+                        <div class="row text-secondary fw-bold mb-2">
+                            <div class="col-4">Ingredient</div>
+                            <div class="col-2">Qty</div>
+                            <div class="col-2">Unit</div>
+                            <div class="col-3">Calculation</div>
+                            <div class="col-1"></div>
+                        </div>
+                        <div id="recipeRows{{ r['Product_ID'] }}">
+                            {% for item in r['Items'] %}
+                            <div class="row mb-2 align-items-center">
+                                <div class="col-4">
+                                    <select name="ingredient_id[]" class="form-select bg-secondary text-white">
+                                        {% for i in ingredients %}
+                                            <option value="{{ i.Ingredient_ID }}" {% if i.Ingredient_ID == item.ID %}selected{% endif %}>{{ i.Ingredient_Name }}</option>
+                                        {% endfor %}
+                                    </select>
+                                </div>
+                                <div class="col-2">
+                                    <input type="number" step="any" name="quantity[]" class="form-control" value="{{ item.Qty }}" oninput="calculate(this)">
+                                </div>
+                                <div class="col-2">
+                                    <select name="unit[]" class="form-select bg-secondary text-white" onchange="calculate(this)">
+                                        <option value="kg" {% if item.Unit == 'kg' %}selected{% endif %}>kg</option>
+                                        <option value="g" {% if item.Unit == 'g' %}selected{% endif %}>g</option>
+                                        <option value="L" {% if item.Unit == 'L' %}selected{% endif %}>L</option>
+                                        <option value="ml" {% if item.Unit == 'ml' %}selected{% endif %}>ml</option>
+                                    </select>
+                                </div>
+                                <div class="col-3 text-info calc-result">Base: {{ item.Qty }} {{ item.Unit }}</div>
+                                <div class="col-1">
+                                    <button type="button" class="btn btn-danger btn-sm" onclick="this.parentElement.parentElement.remove()">X</button>
+                                </div>
+                            </div>
+                            {% endfor %}
+                        </div>
+                    </div>
+                    <div class="modal-footer border-secondary">
+                        <button type="button" class="btn btn-info" onclick="addRow('recipeRows{{ r['Product_ID'] }}')">+ Add</button>
+                        <button type="submit" class="btn btn-success">Save</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+    {% endfor %}
+</div>
+
+<script>
+    function calculate(el) {
+        const row = el.parentElement.parentElement;
+        const qty = parseFloat(row.querySelector('input[name="quantity[]"]').value) || 0;
+        const unit = row.querySelector('select[name="unit[]"]').value;
+        let base = (unit === 'g' || unit === 'ml') ? qty / 1000 : qty;
+        let dispU = (unit === 'g') ? 'kg' : (unit === 'ml') ? 'L' : unit;
+        row.querySelector('.calc-result').innerText = `Base: ${base.toFixed(4)} ${dispU}`;
+    }
+
+    function addRow(id) { 
+        document.getElementById(id).insertAdjacentHTML('beforeend', `
+            <div class="row mb-2 align-items-center">
+                <div class="col-4">
+                    <select name="ingredient_id[]" class="form-select bg-secondary text-white">
+                        {% for i in ingredients %}<option value="{{ i.Ingredient_ID }}">{{ i.Ingredient_Name }}</option>{% endfor %}
+                    </select>
+                </div>
+                <div class="col-2">
+                    <input type="number" step="any" name="quantity[]" class="form-control" placeholder="Qty" oninput="calculate(this)">
+                </div>
+                <div class="col-2">
+                    <select name="unit[]" class="form-select bg-secondary text-white" onchange="calculate(this)">
+                        <option value="kg">kg</option><option value="g">g</option><option value="L">L</option><option value="ml">ml</option>
+                    </select>
+                </div>
+                <div class="col-3 text-info calc-result">Base: 0</div>
+                <div class="col-1">
+                    <button type="button" class="btn btn-danger btn-sm" onclick="this.parentElement.parentElement.remove()">X</button>
+                </div>
+            </div>`); 
+    }
+</script>
+{% endblock %}

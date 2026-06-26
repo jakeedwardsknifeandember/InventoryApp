@@ -1,147 +1,127 @@
-<!DOCTYPE html>
-<html>
-<head>
-    <title>Ingredients Management</title>
-    <style>
-        body { font-family: 'Segoe UI', Arial, sans-serif; background-color: #242424; color: #ffffff; margin: 0; display: flex; height: 100vh; overflow: hidden; }
-        .sidebar { width: 220px; background-color: #2b2b2b; padding: 20px 10px; display: flex; flex-direction: column; gap: 5px; border-right: 1px solid #313244; box-sizing: border-box; }
-        .sidebar-title { font-size: 22px; font-weight: bold; padding: 10px; letter-spacing: 1px; }
-        .sidebar-subtitle { font-size: 12px; color: #8a8a8a; padding-left: 10px; margin-bottom: 20px; }
-        .sidebar a { color: #ffffff; text-decoration: none; padding: 12px 15px; border-radius: 4px; font-size: 14px; display: block; }
-        .sidebar a:hover { background-color: #3a3a3a; }
-        .sidebar a.active { background-color: #3a3a3a; border-left: 4px solid #3b8ed0; font-weight: bold; }
-        .exit-btn { margin-top: auto; background-color: #c24b4b; text-align: center; font-weight: bold; }
-        
-        .main-content { flex: 1; padding: 30px 40px; overflow-y: auto; box-sizing: border-box; }
-        .module-headline { text-align: center; font-size: 26px; font-weight: bold; margin-bottom: 25px; }
-        
-        .subtab-header { display: flex; gap: 10px; margin-bottom: 25px; justify-content: center; }
-        .subtab-btn { padding: 8px 20px; background-color: #3a3a3a; color: white; border: none; border-radius: 15px; font-size: 13px; cursor: pointer; text-decoration: none; }
-        .subtab-btn.active { background-color: #3b8ed0; font-weight: bold; }
-        
-        .filter-container { background-color: #1e1e1e; padding: 20px; border-radius: 6px; margin-bottom: 25px; display: grid; grid-template-columns: 2fr 1fr 1fr; gap: 15px; align-items: center; border: 1px solid #2b2b2b; }
-        .filter-item { display: flex; align-items: center; gap: 10px; font-size: 13px; color: #e0e0e0; }
-        .filter-item input, .filter-item select { background-color: #2b2b2b; color: white; border: 1px solid #3a3a3a; padding: 8px 10px; border-radius: 4px; width: 100%; box-sizing: border-box; }
-        
-        .action-buttons-row { grid-column: 1 / -1; display: flex; gap: 10px; margin-top: 5px; }
-        .action-btn { padding: 8px 16px; border: none; border-radius: 4px; font-weight: bold; color: white; font-size: 13px; cursor: pointer; text-decoration: none; text-align: center; }
-        .btn-blue { background-color: #3b8ed0; } .btn-orange { background-color: #e68a00; } .btn-red { background-color: #c24b4b; } .btn-green { background-color: #2fa572; }
-        
-        .table-container { background-color: #2b2b2b; border-radius: 6px; padding: 10px; box-shadow: inset 0 0 8px rgba(0,0,0,0.5); margin-bottom: 25px; }
-        table { width: 100%; border-collapse: collapse; }
-        th, td { padding: 12px 15px; text-align: left; font-size: 14px; border-bottom: 1px solid #3a3a3a; }
-        th { color: #8a8a8a; font-weight: bold; font-size: 12px; text-transform: uppercase; border-bottom: 2px solid #3a3a3a; }
-        .alert-banner { background: #3b8ed022; color: #3b8ed0; padding: 12px; border-radius: 6px; margin-bottom: 20px; font-weight: bold; text-align: center; }
-        
-        .form-panel { background-color: #1e1e1e; padding: 30px; border-radius: 6px; border: 1px solid #2b2b2b; max-width: 650px; margin: 0 auto; }
-        .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-bottom: 20px; text-align: left; }
-        .form-grid label { display: block; font-size: 13px; margin-bottom: 6px; color: #a6adc8; }
-        .form-grid input, .form-grid select { width: 100%; padding: 10px; background-color: #2b2b2b; color: white; border: 1px solid #3a3a3a; border-radius: 4px; box-sizing: border-box; }
-    </style>
-</head>
-<body>
+{% extends 'base.html' %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h3 class="m-0 text-white" style="font-weight: bold;">Ingredients Management</h3>
+    <button class="btn btn-primary fw-bold" data-bs-toggle="modal" data-bs-target="#addModal">+ Add New Ingredient</button>
+</div>
 
-    <div class="sidebar">
-        <div class="sidebar-title">INVENTORY</div>
-        <div class="sidebar-subtitle">My Bakery Shop</div>
-        <a href="/portal/{{ username }}">📊 Dashboard</a>
-        <a href="/portal/{{ username }}/products">📦 Products</a>
-        <a class="active" href="/portal/{{ username }}/ingredients">🍎 Ingredients</a>
-        <a href="/portal/{{ username }}/recipes">🍕 Recipes (Linked)</a>
-        <a href="/portal/{{ username }}/sales">💰 Sales</a>
-        <a href="/portal/{{ username }}/inventory">📦 Inventory</a>
-        <a href="/portal/{{ username }}/expenses">💸 Expenses</a>
-        <a href="/portal/{{ username }}/reports">📊 Reports</a>
-        <a href="/portal/{{ username }}/settings">⚙️ Settings</a>
-        <a href="/logout" class="exit-btn">🚪 Exit</a>
-    </div>
+<div class="content-card mb-3 p-3 d-flex gap-3 align-items-center" style="background-color: #2b2b2b;">
+    <form method="GET" class="d-flex w-100 gap-3 align-items-center">
+        <label class="text-light fw-bold">Search:</label>
+        <input type="text" name="search" value="{{ current_search }}" class="form-control bg-dark text-white border-secondary w-25" placeholder="Name or ID..." autocomplete="off">
+        
+        <label class="text-light fw-bold ms-2">Sort by:</label>
+        <select name="sort_by" class="form-select bg-primary text-white border-primary" style="width: auto;" onchange="this.form.submit()">
+            <option value="name" {% if current_sort == 'name' %}selected{% endif %}>Name</option>
+            <option value="id" {% if current_sort == 'id' %}selected{% endif %}>ID</option>
+            <option value="category" {% if current_sort == 'category' %}selected{% endif %}>Category</option>
+            <option value="stock" {% if current_sort == 'stock' %}selected{% endif %}>Current Stock</option>
+            <option value="cost" {% if current_sort == 'cost' %}selected{% endif %}>Cost/Unit</option>
+        </select>
+        <select name="order" class="form-select bg-primary text-white border-primary" style="width: auto;" onchange="this.form.submit()">
+            <option value="asc" {% if current_order == 'asc' %}selected{% endif %}>↑ Asc</option>
+            <option value="desc" {% if current_order == 'desc' %}selected{% endif %}>↓ Desc</option>
+        </select>
+        
+        <a href="/portal/{{ username }}/ingredients" class="btn btn-secondary fw-bold ms-auto">🗑️ Clear</a>
+    </form>
+</div>
 
-    <div class="main-content">
-        <div class="subtab-header">
-            <a class="subtab-btn {% if current_tab == 'view' %}active{% endif %}" href="/portal/{{ username }}/ingredients?tab=view">View Ingredients Registry</a>
-            <a class="subtab-btn {% if current_tab == 'add' %}active{% endif %}" href="/portal/{{ username }}/ingredients?tab=add">➕ Add New Ingredient</a>
-        </div>
+<div class="content-card">
+    <table class="table table-dark table-hover align-middle" style="background-color: transparent;">
+        <thead>
+            <tr>
+                <th class="text-white"><a href="?sort_by=id&order={{ 'desc' if current_sort == 'id' and current_order == 'asc' else 'asc' }}" class="text-white text-decoration-none">ID ↕</a></th>
+                <th class="text-white"><a href="?sort_by=name&order={{ 'desc' if current_sort == 'name' and current_order == 'asc' else 'asc' }}" class="text-white text-decoration-none">Name ↕</a></th>
+                <th class="text-white"><a href="?sort_by=category&order={{ 'desc' if current_sort == 'category' and current_order == 'asc' else 'asc' }}" class="text-white text-decoration-none">Category ↕</a></th>
+                <th class="text-white">Unit</th>
+                <th class="text-white"><a href="?sort_by=stock&order={{ 'desc' if current_sort == 'stock' and current_order == 'asc' else 'asc' }}" class="text-white text-decoration-none">Stock ↕</a></th>
+                <th class="text-white">Min</th>
+                <th class="text-white"><a href="?sort_by=cost&order={{ 'desc' if current_sort == 'cost' and current_order == 'asc' else 'asc' }}" class="text-white text-decoration-none">Cost ↕</a></th>
+                <th class="text-white">Status</th>
+                <th class="text-white text-end">Actions</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for i in ingredients %}
+            <tr>
+                <td class="text-light">{{ i.Ingredient_ID }}</td>
+                <td class="text-light">{{ i.Ingredient_Name }}</td>
+                <td class="text-light">{{ i.Category }}</td>
+                <td class="text-light">{{ i.Unit }}</td>
+                <td class="text-success fw-bold">{{ "%.2f"|format(i.Current_Stock) }}</td>
+                <td class="text-light">{{ "%.2f"|format(i.Min_Stock) }}</td>
+                <td class="text-light">₱{{ "%.2f"|format(i.Cost_Per_Unit) }}</td>
+                <td>
+                    <span class="badge {{ 'bg-success' if i.Status == 'Normal' else 'bg-danger' }} px-3 py-2">{{ i.Status }}</span>
+                </td>
+                <td class="text-end">
+                    <button class="btn btn-sm btn-primary fw-bold px-3 me-1" data-bs-toggle="modal" data-bs-target="#addStockModal{{ i.Ingredient_ID }}">Add</button>
+                    <button class="btn btn-sm btn-warning text-dark fw-bold px-3" data-bs-toggle="modal" data-bs-target="#editModal{{ i.Ingredient_ID }}">Edit</button>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
 
-        <div class="module-headline">Ingredients Management</div>
-
-        {% if msg %}
-            <div class="alert-banner">{{ msg }}</div>
-        {% endif %}
-
-        {% if current_tab == 'view' %}
-            <form method="get" class="filter-container">
-                <div class="filter-item">🔍 Search: <input type="text" name="search" value="{{ search_query }}" onchange="this.form.submit()"></div>
-                <div class="filter-item">Status Filter: 
-                    <select name="filter_status" onchange="this.form.submit()">
-                        <option value="all" {% if filter_status == 'all' %}selected{% endif %}>All Statuses</option>
-                        <option value="low" {% if filter_status == 'low' %}selected{% endif %}>Low Stock</option>
-                        <option value="critical" {% if filter_status == 'critical' %}selected{% endif %}>Critical Only</option>
-                    </select>
+<div class="modal fade" id="addModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content bg-dark text-white border-secondary">
+            <form method="post">
+                <input type="hidden" name="action_type" value="add_ingredient">
+                <div class="modal-header border-secondary">
+                    <h5 class="modal-title">Register New Ingredient</h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
                 </div>
-                <div class="action-buttons-row">
-                    <a href="/portal/{{ username }}/ingredients" class="action-btn btn-blue">🔄 Refresh List</a>
-                    <a href="/portal/{{ username }}/ingredients?filter_status=low" class="action-btn btn-orange">📋 Low Stock Items</a>
-                    <a href="/portal/{{ username }}/ingredients?filter_status=critical" class="action-btn btn-red">🚨 Critical Rows</a>
-                </div>
-            </form>
-
-            <div class="table-container">
-                <table>
-                    <thead>
-                        <tr>
-                            <th>ID</th>
-                            <th>Ingredient Name</th>
-                            <th>Current Stock</th>
-                            <th>Minimum Alert</th>
-                            <th>Category</th>
-                            <th>Status Flag</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {% for item in ingredients %}
-                            <tr>
-                                <td>{{ item.Ingredient_ID }}</td>
-                                <td>{{ item.Ingredient_Name }}</td>
-                                <td>{{ item.Current_Stock }} {{ item.Unit }}</td>
-                                <td>{{ item.Min_Stock_Level }} {{ item.Unit }}</td>
-                                <td>{{ item.Category }}</td>
-                                <td>
-                                    {% if item.Status == 'Low Stock' %}
-                                        <span style="padding:4px 8px; border-radius:4px; background:#e68a00; font-weight:bold;">{{ item.Status }}</span>
-                                    {% elif item.Status == 'Critical' %}
-                                        <span style="padding:4px 8px; border-radius:4px; background:#c24b4b; font-weight:bold;">{{ item.Status }}</span>
-                                    {% else %}
-                                        <span style="padding:4px 8px; border-radius:4px; background:#3a3a3a;">{{ item.Status }}</span>
-                                    {% endif %}
-                                </td>
-                            </tr>
-                        {% else %}
-                            <tr>
-                                <td colspan="6" style="text-align:center; color:#8a8a8a; padding: 30px;">No matching materials found.</td>
-                            </tr>
-                        {% endfor %}
-                    </tbody>
-                </table>
-            </div>
-        {% else %}
-            <div class="form-panel">
-                <form method="post">
-                    <input type="hidden" name="action_type" value="add_new_item">
-                    <div class="form-grid">
-                        <div><label>Ingredient Name:</label><input type="text" name="name" required autocomplete="off"></div>
-                        <div><label>Category Group:</label><input type="text" name="category" placeholder="e.g. Baking Supplies"></div>
-                        <div><label>Unit Label:</label><input type="text" name="unit" required placeholder="e.g. kg, jar, pcs"></div>
-                        <div><label>Initial Stock:</label><input type="number" name="stock" step="any" required></div>
-                        <div><label>Min Alert Level:</label><input type="number" name="min_stock" step="any" required></div>
-                        <div><label>Cost Value (₱):</label><input type="number" name="cost" step="any" required></div>
-                        <div><label>Supplier Details:</label><input type="text" name="supplier" placeholder="Main Distributor"></div>
-                        <div><label>Notes:</label><input type="text" name="description"></div>
+                <div class="modal-body">
+                    <input type="text" name="name" class="form-control bg-secondary text-white mb-2" placeholder="Ingredient Name" required>
+                    <input type="text" name="category" class="form-control bg-secondary text-white mb-2" placeholder="Category">
+                    <input type="text" name="unit" class="form-control bg-secondary text-white mb-2" placeholder="Unit (kg, L, jar)">
+                    <div class="row">
+                        <div class="col-6"><input type="number" step="any" name="stock" class="form-control bg-secondary text-white mb-2" placeholder="Initial Stock"></div>
+                        <div class="col-6"><input type="number" step="any" name="min_stock" class="form-control bg-secondary text-white mb-2" placeholder="Min Stock"></div>
                     </div>
-                    <input type="submit" value="💾 Save Ingredient Component" class="action-btn btn-green" style="width:100%; padding:12px;">
-                </form>
-            </div>
-        {% endif %}
+                    <input type="number" step="any" name="cost" class="form-control bg-secondary text-white" placeholder="Cost per Unit">
+                </div>
+                <div class="modal-footer border-secondary"><button type="submit" class="btn btn-success w-100">Save</button></div>
+            </form>
+        </div>
     </div>
+</div>
 
-</body>
-</html>
+{% for i in ingredients %}
+<div class="modal fade" id="addStockModal{{ i.Ingredient_ID }}" tabindex="-1">
+    <div class="modal-dialog modal-sm">
+        <div class="modal-content bg-dark text-white border-secondary">
+            <form method="post">
+                <input type="hidden" name="action_type" value="add_stock">
+                <input type="hidden" name="ingredient_id" value="{{ i.Ingredient_ID }}">
+                <div class="modal-header border-secondary"><h6 class="modal-title">Add Stock: {{ i.Ingredient_Name }}</h6></div>
+                <div class="modal-body"><input type="number" step="any" name="quantity" class="form-control bg-secondary text-white" required placeholder="Qty"></div>
+                <div class="modal-footer border-secondary"><button type="submit" class="btn btn-primary w-100">Confirm</button></div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<div class="modal fade" id="editModal{{ i.Ingredient_ID }}" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content bg-dark text-white border-secondary">
+            <form method="post">
+                <input type="hidden" name="action_type" value="edit_ingredient">
+                <input type="hidden" name="ingredient_id" value="{{ i.Ingredient_ID }}">
+                <div class="modal-header border-secondary"><h5 class="modal-title">Edit {{ i.Ingredient_Name }}</h5></div>
+                <div class="modal-body">
+                    <input type="text" name="name" class="form-control bg-secondary text-white mb-2" value="{{ i.Ingredient_Name }}">
+                    <input type="text" name="category" class="form-control bg-secondary text-white mb-2" value="{{ i.Category }}">
+                    <input type="number" step="any" name="min_stock" class="form-control bg-secondary text-white mb-2" value="{{ i.Min_Stock }}">
+                    <input type="number" step="any" name="cost" class="form-control bg-secondary text-white" value="{{ i.Cost_Per_Unit }}">
+                </div>
+                <div class="modal-footer border-secondary"><button type="submit" class="btn btn-warning w-100">Save Changes</button></div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endfor %}
+{% endblock %}

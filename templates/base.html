@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Bakery Inventory</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        /* Custom Theme Overrides to match your Desktop App */
+        body { font-family: 'Segoe UI', Arial, sans-serif; background-color: #242424; color: #ffffff; margin: 0; display: flex; height: 100vh; overflow: hidden; }
+        .sidebar { width: 220px; background-color: #2b2b2b; padding: 20px 10px; display: flex; flex-direction: column; gap: 5px; border-right: 1px solid #313244; flex-shrink: 0; }
+        .sidebar-title { font-size: 22px; font-weight: bold; padding: 10px; color: #fff; letter-spacing: 1px; }
+        .sidebar-subtitle { font-size: 12px; color: #8a8a8a; padding-left: 10px; margin-bottom: 20px; }
+        .sidebar a { color: #ffffff; text-decoration: none; padding: 12px 15px; border-radius: 4px; font-size: 14px; display: block; border-left: 4px solid transparent; }
+        .sidebar a:hover { background-color: #3a3a3a; }
+        .sidebar a.active { background-color: #3a3a3a; border-left: 4px solid #3b8ed0; font-weight: bold; }
+        .exit-btn { margin-top: auto; background-color: #c24b4b !important; text-align: center; font-weight: bold; }
+        
+        .main-content { flex: 1; padding: 30px 40px; overflow-y: auto; background-color: #242424; }
+        .content-card { background-color: #2b2b2b; padding: 25px; border-radius: 6px; border: 1px solid #313244; margin-bottom: 20px; }
+        .table { color: #ffffff; margin-bottom: 0; }
+        .table thead th { background-color: #3a3a3a; color: #8a8a8a; font-weight: bold; border-bottom: 2px solid #242424; }
+        .table tbody td { border-bottom: 1px solid #3a3a3a; background-color: transparent; }
+    </style>
+</head>
+<body>
+    <div class="sidebar">
+        <div class="sidebar-title">INVENTORY</div>
+        <div class="sidebar-subtitle">My Bakery Shop</div>
+        
+        <a href="/portal/{{ username }}" class="{{ 'active' if request.path == '/portal/' + username else '' }}">📊 Dashboard</a>
+        <a href="/portal/{{ username }}/products" class="{{ 'active' if 'products' in request.path else '' }}">📦 Products</a>
+        <a href="/portal/{{ username }}/ingredients" class="{{ 'active' if 'ingredients' in request.path else '' }}">🍎 Ingredients</a>
+        <a href="/portal/{{ username }}/recipes" class="{{ 'active' if 'recipes' in request.path else '' }}">🍕 Recipes (Linked)</a>
+        <a href="/portal/{{ username }}/sales" class="{{ 'active' if 'sales' in request.path else '' }}">💰 Sales</a>
+        <a href="/portal/{{ username }}/inventory" class="{{ 'active' if 'inventory' in request.path else '' }}">📦 Inventory</a>
+        <a href="/portal/{{ username }}/expenses" class="{{ 'active' if 'expenses' in request.path else '' }}">💸 Expenses</a>
+        <a href="/portal/{{ username }}/reports" class="{{ 'active' if 'reports' in request.path else '' }}">📊 Reports</a>
+        <a href="/portal/{{ username }}/settings" class="{{ 'active' if 'settings' in request.path else '' }}">⚙️ Settings</a>
+        <a href="/logout" class="exit-btn">🚪 Exit</a>
+    </div>
+
+    <div class="main-content">
+        {% block content %}{% endblock %}
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>
