@@ -699,11 +699,11 @@ class InventoryDB:
             return False, f"Error updating product: {str(e)}"
     
     def delete_product(self, product_id):
-        """Delete a product (soft delete by marking as inactive)"""
+        """Completely delete a product permanently from the database table (Hard Delete)"""
         try:
             products_df = self.read_tab('Products')
             
-            # Find the product
+            # Find the product's index row number
             product_idx = products_df[products_df['Product_ID'] == product_id].index
             
             if len(product_idx) == 0:
@@ -711,36 +711,42 @@ class InventoryDB:
             
             idx = product_idx[0]
             
-            # Soft delete - mark as inactive
-            if 'Active' in products_df.columns:
-                products_df.at[idx, 'Active'] = 'No'
-            else:
-                # Hard delete if no Active column
-                products_df = products_df.drop(idx).reset_index(drop=True)
+            # HARD DELETE: Drop the product row completely from the spreadsheet dataset
+            products_df = products_df.drop(idx).reset_index(drop=True)
             
-            # Save
+            # CLEANUP: Automatically wipe any secret recipes assigned to this dead product ID
+            self.delete_recipe(product_id)
+            
+            # Save the clean table back to SQLite
             self.save_tab('Products', products_df)
-            print(f"✅ Deleted (marked inactive) product: {product_id}")
-            return True, f"Product {product_id} deleted (marked as inactive)"
+            print(f"🗑️ Permanently erased product and recipe structures: {product_id}")
+            return True, f"Product {product_id} completely removed from system"
             
         except Exception as e:
-            print(f"❌ Error deleting product: {e}")
+            print(f"❌ Error permanently deleting product: {e}")
             return False, f"Error deleting product: {str(e)}"
     
     def add_ingredient(self, ingredient_data):
-        """Add a new ingredient to the database"""
+        """Add a new ingredient to the database with unique name verification rules"""
         try:
             ingredients_df = self.read_tab('Ingredients')
             
-            # Check if ingredient ID already exists
+            # Safety Rule 1: Prevent absolute duplicate ID generation
             if ingredient_data['Ingredient_ID'] in ingredients_df['Ingredient_ID'].values:
                 return False, f"Ingredient ID {ingredient_data['Ingredient_ID']} already exists"
             
-            # Add new ingredient
+            # Safety Rule 2: Case-Insensitive Name Duplicate Guard (Solves the "Sugar" duplication problem)
+            if 'Ingredient_Name' in ingredients_df.columns and not ingredients_df.empty:
+                existing_names = ingredients_df['Ingredient_Name'].astype(str).str.lower().str.strip().values
+                new_name = str(ingredient_data['Ingredient_Name']).lower().strip()
+                if new_name in existing_names:
+                    return False, f"An ingredient named '{ingredient_data['Ingredient_Name']}' is already registered."
+            
+            # Add new ingredient row if cleared
             new_ingredient_df = pd.DataFrame([ingredient_data])
             ingredients_df = pd.concat([ingredients_df, new_ingredient_df], ignore_index=True)
             
-            # Save
+            # Save to SQLite
             self.save_tab('Ingredients', ingredients_df)
             print(f"✅ Added ingredient: {ingredient_data['Ingredient_Name']} ({ingredient_data['Ingredient_ID']})")
             return True, f"Ingredient '{ingredient_data['Ingredient_Name']}' added successfully"
@@ -750,11 +756,11 @@ class InventoryDB:
             return False, f"Error adding ingredient: {str(e)}"
     
     def update_ingredient(self, ingredient_id, updated_data):
-        """Update an existing ingredient"""
+        """Update an existing ingredient with modification safety name collision checks"""
         try:
             ingredients_df = self.read_tab('Ingredients')
             
-            # Find the ingredient
+            # Find the target ingredient row index
             ingredient_idx = ingredients_df[ingredients_df['Ingredient_ID'] == ingredient_id].index
             
             if len(ingredient_idx) == 0:
@@ -762,7 +768,17 @@ class InventoryDB:
             
             idx = ingredient_idx[0]
             
-            # Update fields
+            # Modification Safety Rule: Prevent users from renaming an item into another existing item's name
+            if 'Ingredient_Name' in updated_data and not ingredients_df.empty:
+                new_name = str(updated_data['Ingredient_Name']).lower().strip()
+                # Exclude the current row item we are editing from the search list
+                other_rows = ingredients_df[ingredients_df['Ingredient_ID'] != ingredient_id]
+                if 'Ingredient_Name' in other_rows.columns:
+                    existing_other_names = other_rows['Ingredient_Name'].astype(str).str.lower().str.strip().values
+                    if new_name in existing_other_names:
+                        return False, f"Cannot rename! Another ingredient named '{updated_data['Ingredient_Name']}' already exists."
+            
+            # Update fields safely
             for key, value in updated_data.items():
                 if key in ingredients_df.columns:
                     ingredients_df.at[idx, key] = value
@@ -777,7 +793,7 @@ class InventoryDB:
             return False, f"Error updating ingredient: {str(e)}"
     
     def delete_ingredient(self, ingredient_id):
-        """Delete an ingredient"""
+        """Delete an ingredient safely if unlinked to any product formula"""
         try:
             ingredients_df = self.read_tab('Ingredients')
             
@@ -795,9 +811,9 @@ class InventoryDB:
                 used_in = recipes_df[recipes_df['Ingredient_ID'] == ingredient_id]
                 if not used_in.empty:
                     product_ids = used_in['Product_ID'].unique()
-                    return False, f"Cannot delete! Used in recipes for products: {', '.join(product_ids)}"
+                    return False, f"Cannot delete! This ingredient is linked inside active product formulas: {', '.join(product_ids)}"
             
-            # Delete the ingredient
+            # Delete the ingredient row completely
             ingredients_df = ingredients_df.drop(idx).reset_index(drop=True)
             
             # Save

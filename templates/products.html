@@ -5,6 +5,12 @@
     <button class="btn btn-primary fw-bold" data-bs-toggle="modal" data-bs-target="#addProductModal">+ Add New Product</button>
 </div>
 
+{% if error_msg %}
+<div class="alert alert-danger border-0 text-white fw-bold mb-3 shadow-sm" style="background-color: #dc3545; border-radius: 6px;">
+    ⚠️ Safety Notice: {{ error_msg }}
+</div>
+{% endif %}
+
 <div class="content-card mb-3 p-3" style="background-color: #2b2b2b;">
     <form method="GET" class="row gx-2 gy-3 align-items-center">
         <div class="col-md-4 d-flex align-items-center">
@@ -90,7 +96,13 @@
                 </td>
                 <td class="text-end">
                     <a href="/portal/{{ username }}/recipes?product_id={{ p.Product_ID }}" class="btn btn-sm btn-info text-white fw-bold me-1">📝 Recipe</a>
-                    <button class="btn btn-sm btn-primary fw-bold" data-bs-toggle="modal" data-bs-target="#editModal{{ p.Product_ID }}">✏️ Edit</button>
+                    <button class="btn btn-sm btn-primary fw-bold me-1" data-bs-toggle="modal" data-bs-target="#editModal{{ p.Product_ID }}">✏️ Edit</button>
+                    
+                    <form method="post" style="display: inline;" onsubmit="return confirm('Are you sure you want to completely delete {{ p.Product_Name }}? This action cannot be undone.');">
+                        <input type="hidden" name="action_type" value="delete_product">
+                        <input type="hidden" name="product_id" value="{{ p.Product_ID }}">
+                        <button type="submit" class="btn btn-sm btn-danger fw-bold">🗑️ Delete</button>
+                    </form>
                 </td>
             </tr>
             {% else %}
@@ -111,10 +123,25 @@
                 </div>
                 <div class="modal-body">
                     <label class="form-label">Name:</label>
-                    <input type="text" name="name" class="form-control bg-secondary text-white border-0 mb-3" required>
+                    <input type="text" id="addProductNameInput" name="name" class="form-control bg-secondary text-white border-0 mb-1" oninput="checkDuplicateProductNameAdd(this)" required autocomplete="off">
+                    <div id="addProductNameErrorMsg" class="mb-3" style="display: none; color: #ff4d4d; font-size: 13px; font-weight: bold;">⚠️ This product name already exists in your system.</div>
                     
                     <label class="form-label">Category:</label>
-                    <input type="text" name="category" class="form-control bg-secondary text-white border-0 mb-3" placeholder="e.g. Signature Drinks">
+                    <div class="input-group mb-2">
+                        <select name="category" id="addCategorySelect" class="form-select bg-secondary text-white border-0 category-dropdown" required>
+                            <option value="" disabled selected>Choose a category...</option>
+                            {% for c in categories %}
+                            <option value="{{ c }}">{{ c }}</option>
+                            {% endfor %}
+                        </select>
+                        <button class="btn btn-primary fw-bold px-3" type="button" title="Add New Category" onclick="showInlineCategoryInput('addInlineCategoryDiv')">＋</button>
+                    </div>
+                    
+                    <div id="addInlineCategoryDiv" class="input-group mb-3 px-2 py-2 rounded shadow-sm" style="display: none; background-color: #1e1e1e; border: 1px solid #3d3d3d;">
+                        <input type="text" id="addInlineCategoryInput" class="form-control bg-dark text-white border-secondary" placeholder="Enter new category name..." autocomplete="off">
+                        <button class="btn btn-success fw-bold px-3" type="button" onclick="confirmInlineCategory('addCategorySelect', 'addInlineCategoryInput', 'addInlineCategoryDiv')">✔ Save</button>
+                        <button class="btn btn-secondary fw-bold px-2" type="button" onclick="hideInlineCategoryInput('addInlineCategoryDiv', 'addInlineCategoryInput')">✖</button>
+                    </div>
                     
                     <label class="form-label">Selling Price (₱):</label>
                     <input type="number" step="0.01" name="selling_price" class="form-control bg-secondary text-white border-0 mb-3" required>
@@ -126,7 +153,7 @@
                     </select>
                 </div>
                 <div class="modal-footer border-secondary">
-                    <button type="submit" class="btn btn-success text-white fw-bold w-100">Save Product</button>
+                    <button type="submit" id="addProductSubmitBtn" class="btn btn-success text-white fw-bold w-100">Save Product</button>
                 </div>
             </form>
         </div>
@@ -146,10 +173,27 @@
                 </div>
                 <div class="modal-body">
                     <label class="form-label">Name:</label>
-                    <input type="text" name="name" class="form-control bg-secondary text-white border-0 mb-3" value="{{ p.Product_Name }}" required>
+                    <input type="text" id="editProductNameInput{{ p.Product_ID }}" name="name" class="form-control bg-secondary text-white border-0 mb-1" value="{{ p.Product_Name }}" oninput="checkDuplicateProductNameEdit(this, '{{ p.Product_ID }}')" required autocomplete="off">
+                    <div id="editProductNameErrorMsg{{ p.Product_ID }}" class="mb-3" style="display: none; color: #ff4d4d; font-size: 13px; font-weight: bold;">⚠️ This name is already used on another active product profile.</div>
                     
                     <label class="form-label">Category:</label>
-                    <input type="text" name="category" class="form-control bg-secondary text-white border-0 mb-3" value="{{ p.Category }}" required>
+                    <div class="input-group mb-2">
+                        <select name="category" id="editCategorySelect{{ p.Product_ID }}" class="form-select bg-secondary text-white border-0 category-dropdown" required>
+                            {% for c in categories %}
+                            <option value="{{ c }}" {% if p.Category == c %}selected{% endif %}>{{ c }}</option>
+                            {% endfor %}
+                            {% if p.Category not in categories and p.Category %}
+                            <option value="{{ p.Category }}" selected>{{ p.Category }}</option>
+                            {% endif %}
+                        </select>
+                        <button class="btn btn-primary fw-bold px-3" type="button" title="Add New Category" onclick="showInlineCategoryInput('editInlineCategoryDiv{{ p.Product_ID }}')">＋</button>
+                    </div>
+                    
+                    <div id="editInlineCategoryDiv{{ p.Product_ID }}" class="input-group mb-3 px-2 py-2 rounded shadow-sm" style="display: none; background-color: #1e1e1e; border: 1px solid #3d3d3d;">
+                        <input type="text" id="editInlineCategoryInput{{ p.Product_ID }}" class="form-control bg-dark text-white border-secondary" placeholder="Enter new category name..." autocomplete="off">
+                        <button class="btn btn-success fw-bold px-3" type="button" onclick="confirmInlineCategory('editCategorySelect{{ p.Product_ID }}', 'editInlineCategoryInput{{ p.Product_ID }}', 'editInlineCategoryDiv{{ p.Product_ID }}')">✔ Save</button>
+                        <button class="btn btn-secondary fw-bold px-2" type="button" onclick="hideInlineCategoryInput('editInlineCategoryDiv{{ p.Product_ID }}', 'editInlineCategoryInput{{ p.Product_ID }}')">✖</button>
+                    </div>
 
                     <label class="form-label">Selling Price (₱):</label>
                     <input type="number" step="0.01" name="selling_price" class="form-control bg-secondary text-white border-0 mb-3" value="{{ p.Selling_Price }}" required>
@@ -161,11 +205,95 @@
                     </select>
                 </div>
                 <div class="modal-footer border-secondary">
-                    <button type="submit" class="btn btn-success text-white fw-bold w-100">Save Changes</button>
+                    <button type="submit" id="editProductSubmitBtn{{ p.Product_ID }}" class="btn btn-success text-white fw-bold w-100">Save Changes</button>
                 </div>
             </form>
         </div>
     </div>
 </div>
 {% endfor %}
+
+<script>
+// Fixed typo: replaced |strip with |trim to keep Jinja2 compilation stable
+const globalMasterProductObjectsMap = [
+    {% for prod in all_products_raw %}
+        { id: "{{ prod.Product_ID }}", name: "{{ prod.Product_Name|lower|trim|escape }}" }{% if not loop.last %},{% endif %}
+    {% endfor %}
+];
+
+function checkDuplicateProductNameAdd(inputElement) {
+    const typedName = inputElement.value.trim().toLowerCase();
+    const errorTextLabel = document.getElementById('addProductNameErrorMsg');
+    const submitActionBtn = document.getElementById('addProductSubmitBtn');
+    
+    const isConflictFound = globalMasterProductObjectsMap.some(p => p.name === typedName);
+    
+    if (isConflictFound) {
+        errorTextLabel.style.display = 'block';
+        submitActionBtn.disabled = true;
+    } else {
+        errorTextLabel.style.display = 'none';
+        submitActionBtn.disabled = false;
+    }
+}
+
+function checkDuplicateProductNameEdit(inputElement, currentEditingId) {
+    const typedName = inputElement.value.trim().toLowerCase();
+    const errorTextLabel = document.getElementById('editProductNameErrorMsg' + currentEditingId);
+    const submitActionBtn = document.getElementById('editProductSubmitBtn' + currentEditingId);
+    
+    const isConflictFound = globalMasterProductObjectsMap.some(p => p.id !== currentEditingId && p.name === typedName);
+    
+    if (isConflictFound) {
+        errorTextLabel.style.display = 'block';
+        submitActionBtn.disabled = true;
+    } else {
+        errorTextLabel.style.display = 'none';
+        submitActionBtn.disabled = false;
+    }
+}
+
+function showInlineCategoryInput(divId) {
+    document.getElementById(divId).style.display = 'flex';
+}
+
+function hideInlineCategoryInput(divId, inputId) {
+    document.getElementById(divId).style.display = 'none';
+    document.getElementById(inputId).value = "";
+}
+
+function confirmInlineCategory(selectId, inputId, divId) {
+    let inputField = document.getElementById(inputId);
+    let newCategory = inputField.value.trim();
+    
+    if (newCategory === "") return;
+    
+    let dropdowns = document.querySelectorAll('.category-dropdown');
+    let alreadyExists = false;
+    
+    if (dropdowns.length > 0) {
+        let referenceSelect = dropdowns[0];
+        for (let i = 0; i < referenceSelect.options.length; i++) {
+            if (referenceSelect.options[i].value.toLowerCase() === newCategory.toLowerCase()) {
+                alreadyExists = true;
+                newCategory = referenceSelect.options[i].value;
+                break;
+            }
+        }
+    }
+    
+    if (!alreadyExists) {
+        dropdowns.forEach(select => {
+            let option = document.createElement('option');
+            option.value = newCategory;
+            option.text = newCategory;
+            select.appendChild(option);
+        });
+    }
+    
+    document.getElementById(selectId).value = newCategory;
+    hideInlineCategoryInput(divId, inputId);
+}
+</script>
+
 {% endblock %}

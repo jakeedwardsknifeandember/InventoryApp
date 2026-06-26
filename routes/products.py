@@ -8,34 +8,63 @@ products_bp = Blueprint('products', __name__)
 @products_bp.route('/portal/<username>/products', methods=['GET', 'POST'])
 def web_products_tab(username):
     username = username.lower().strip()
-    if session.get('logged_in_user') != username: return redirect('/login')
+    if session.get('logged_in_user') != username: 
+        return redirect('/login')
     
     db = InventoryDB(f"data/client_{username}.db")
     
     if request.method == 'POST':
         action = request.form.get('action_type')
+        
+        # 1. Action to add a product
         if action == 'add_product':
+            product_name = request.form.get('name').strip()
+            df_check = db.read_tab('Products')
+            if not df_check.empty and 'Product_Name' in df_check.columns:
+                if product_name.lower() in [str(n).lower().strip() for n in df_check['Product_Name'].dropna()]:
+                    return redirect(f"/portal/{username}/products?error=A product named '{product_name}' already exists.")
+                    
             db.add_product({
                 'Product_ID': db.generate_product_id(),
-                'Product_Name': request.form.get('name'),
+                'Product_Name': product_name,
                 'Category': request.form.get('category', 'General'),
                 'Selling_Price': float(request.form.get('selling_price', 0)),
                 'Active': request.form.get('status', 'Yes')
             })
+            
+        # 2. Action to edit an existing product
         elif action == 'edit_product':
-            db.update_product(request.form.get('product_id'), {
-                'Product_Name': request.form.get('name'),
+            product_name = request.form.get('name').strip()
+            product_id = request.form.get('product_id')
+            df_check = db.read_tab('Products')
+            if not df_check.empty and 'Product_Name' in df_check.columns:
+                other_prods = df_check[df_check['Product_ID'] != product_id]
+                if product_name.lower() in [str(n).lower().strip() for n in other_prods['Product_Name'].dropna()]:
+                    return redirect(f"/portal/{username}/products?error=Another product named '{product_name}' already exists.")
+                    
+            db.update_product(product_id, {
+                'Product_Name': product_name,
                 'Category': request.form.get('category', 'General'),
                 'Selling_Price': float(request.form.get('selling_price', 0)),
                 'Active': request.form.get('status', 'Yes')
             })
-        # Auto-recalculate margins when prices change
+            
+        # 3. Action to completely delete a product
+        elif action == 'delete_product':
+            product_id = request.form.get('product_id')
+            db.delete_product(product_id)
+
+        # Auto-recalculate margins when prices or data change
         db.update_all_product_costs()
         return redirect(f"/portal/{username}/products")
 
     # ===== GET DATA & APPLY FILTERS =====
-    # Use read_tab directly instead of get_all_products to ensure we see 'Inactive' items too
     df = db.read_tab('Products')
+    
+    # Capture complete data list for real-time validation tracking before running layout filters
+    all_products_raw = []
+    if not df.empty:
+        all_products_raw = df.to_dict('records')
     
     categories = []
     products_list = []
@@ -47,31 +76,30 @@ def web_products_tab(username):
         df['Cost_Price'] = pd.to_numeric(df['Cost_Price'], errors='coerce').fillna(0.0)
         df['Margin_Percentage'] = pd.to_numeric(df['Margin_Percentage'], errors='coerce').fillna(0.0)
 
-        # Get unique categories for the dropdown
+        # Get unique categories for the dropdown menu
         if 'Category' in df.columns:
             categories = sorted([c for c in df['Category'].dropna().unique() if c])
 
-        # Get URL parameters
+        # Get URL filtering parameters
         search = request.args.get('search', '').lower()
         status = request.args.get('status', 'All')
         category = request.args.get('category', 'All')
         sort_by = request.args.get('sort_by', 'name')
         order = request.args.get('order', 'asc')
 
-        # 1. Apply Search
+        # Filter Rule 1: Apply Search
         if search:
             df = df[df['Product_Name'].str.lower().str.contains(search) | df['Product_ID'].str.lower().str.contains(search)]
 
-        # 2. Apply Status Filter
+        # Filter Rule 2: Apply Status Filter (Active / Inactive)
         if status != 'All':
-            # Database stores "Yes" or "No"
             df = df[df['Active'].astype(str).str.upper() == status.upper()]
 
-        # 3. Apply Category Filter
+        # Filter Rule 3: Apply Category Filter
         if category != 'All':
             df = df[df['Category'] == category]
 
-        # 4. Apply Sorting
+        # Filter Rule 4: Apply Sorting
         ascending = (order == 'asc')
         if sort_by == 'name':
             df = df.sort_values('Product_Name', ascending=ascending)
@@ -87,9 +115,10 @@ def web_products_tab(username):
         'products.html', 
         username=username, 
         products=products_list,
+        all_products_raw=all_products_raw,
         categories=categories,
         total_count=total_count,
-        # Pass current filters back to template so the dropdowns stay selected
+        error_msg=request.args.get('error', ''),
         current_search=request.args.get('search', ''),
         current_status=request.args.get('status', 'All'),
         current_category=request.args.get('category', 'All'),

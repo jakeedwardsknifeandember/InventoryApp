@@ -1,167 +1,332 @@
 {% extends 'base.html' %}
 
 {% block content %}
-<div class="container mt-4">
-    <div class="d-flex justify-content-between align-items-center mb-4">
-        <h3 class="text-white">All Product Recipes</h3>
-        <a href="?view=create" class="btn btn-success">+ Create New Recipe</a>
+<div class="container-fluid mt-3">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <h3 class="text-white m-0" style="font-weight: bold;">Product Recipes Studio</h3>
+        <button class="btn btn-success fw-bold" data-bs-toggle="modal" data-bs-target="#createRecipeModal">+ Create New Recipe</button>
     </div>
 
-    <div class="bg-dark p-3 rounded mb-4 border border-secondary">
+    <div class="bg-dark p-2 rounded mb-3 border border-secondary shadow-sm">
         <div class="row g-2 align-items-center">
-            <div class="col-md-4">
-                <input type="text" id="searchInput" class="form-control" placeholder="Search products...">
+            <div class="col-md-5">
+                <input type="text" id="recipeSearchInput" class="form-control bg-secondary text-white border-0" placeholder="Type name or ID to filter..." onkeyup="runSplitDashboardFilters()" autocomplete="off">
             </div>
-            <div class="col-md-3">
-                <select class="form-select bg-secondary text-white">
-                    <option>All Categories</option>
+            <div class="col-md-5">
+                <select id="recipeCategorySelect" class="form-select bg-secondary text-white border-0" onchange="runSplitDashboardFilters()">
+                    <option value="All">All Categories Dropdown</option>
+                    {% for cat in categories %}
+                    <option value="{{ cat }}">{{ cat }}</option>
+                    {% endfor %}
                 </select>
             </div>
             <div class="col-md-2">
-                <button class="btn btn-primary w-100">Search</button>
-            </div>
-            <div class="col-md-2">
-                <button class="btn btn-secondary w-100">Clear</button>
+                <button class="btn btn-secondary w-100 fw-bold" onclick="clearRecipeDashboardFilters()">Clear</button>
             </div>
         </div>
     </div>
 
-    {% for r in recipe_data %}
-    <div class="content-card mb-4 border border-secondary bg-dark text-white shadow">
-        <div class="p-3 bg-secondary d-flex justify-content-between align-items-center">
-            <h5 class="m-0">{{ r['Product_Name'] }} ({{ r['Product_ID'] }})</h5>
-            <span>Price: ₱{{ "%.2f"|format(r.get('Selling_Price', 0)) }}</span>
-        </div>
+    <div class="row g-3">
         
-        <table class="table table-dark table-hover mb-0 border border-secondary">
-            <thead>
-                <tr>
-                    <th>Ingredient</th>
-                    <th>Quantity</th>
-                    <th>Unit</th>
-                    <th>Cost/Unit</th>
-                    <th>Total Cost</th>
-                </tr>
-            </thead>
-            <tbody>
-                {% for item in r['Items'] %}
-                <tr>
-                    <td>{{ item['Name'] }}</td>
-                    <td>{{ item['Qty'] }}</td>
-                    <td>{{ item['Unit'] }}</td>
-                    <td>₱{{ "%.2f"|format(item['Cost']) }}</td>
-                    <td>₱{{ "%.2f"|format(item['Total']) }}</td>
-                </tr>
-                {% else %}
-                <tr>
-                    <td colspan="5" class="text-center text-muted">No ingredients added yet.</td>
-                </tr>
-                {% endfor %}
-            </tbody>
-        </table>
-
-        <div class="p-3 d-flex justify-content-between align-items-center border-top border-secondary">
-            <span class="fw-bold">Total Cost: ₱{{ "%.2f"|format(r['Total_Cost']) }}</span>
-            <span class="text-success fw-bold">Profit: ₱{{ "%.2f"|format(r['Profit']) }}</span>
-            <div>
-                <button class="btn btn-sm btn-info" data-bs-toggle="modal" data-bs-target="#editModal{{ r['Product_ID'] }}">Edit Recipe</button>
-                <form method="post" class="d-inline">
-                    <input type="hidden" name="action_type" value="delete_recipe">
-                    <input type="hidden" name="product_id" value="{{ r['Product_ID'] }}">
-                    <button class="btn btn-sm btn-danger">Delete</button>
-                </form>
+        <div class="col-md-4">
+            <div class="card border-secondary bg-dark text-white" style="max-height: 65vh; overflow-y: auto;">
+                <div class="card-header bg-secondary text-white fw-bold">Menu Item Folders</div>
+                <div class="list-group list-group-flush" id="leftProductListGroup">
+                    {% for r in recipe_data %}
+                    <button type="button" 
+                            id="btn-nav-{{ r['Product_ID'] }}"
+                            class="list-group-item list-group-item-action bg-dark text-white border-secondary py-3 item-nav-action-block" 
+                            data-target-id="detail-card-{{ r['Product_ID'] }}"
+                            data-product-name="{{ r['Product_Name']|lower }}" 
+                            data-product-id="{{ r['Product_ID']|lower }}" 
+                            data-product-category="{{ r['Category'] }}"
+                            onclick="switchActiveRecipeDisplay('{{ r['Product_ID'] }}')">
+                        <div class="d-flex justify-content-between align-items-center">
+                            <div>
+                                <h6 class="m-0 fw-bold">{{ r['Product_Name'] }}</h6>
+                                <small class="text-muted">{{ r['Product_ID'] }} • {{ r['Category'] }}</small>
+                            </div>
+                            <span class="badge bg-primary">₱{{ "%.2f"|format(r['Selling_Price']) }}</span>
+                        </div>
+                    </button>
+                    {% else %}
+                    <div class="text-center text-muted py-4">No active products found in storage data sheet.</div>
+                    {% endfor %}
+                </div>
             </div>
         </div>
-    </div>
-    
-    <div class="modal fade" id="editModal{{ r['Product_ID'] }}" tabindex="-1">
-        <div class="modal-dialog modal-xl">
-            <div class="modal-content bg-dark text-white border border-secondary">
-                <form method="post">
-                    <input type="hidden" name="action_type" value="edit_recipe">
-                    <input type="hidden" name="product_id" value="{{ r['Product_ID'] }}">
-                    <div class="modal-header border-secondary">
-                        <h5>Edit: {{ r['Product_Name'] }}</h5>
+
+        <div class="col-md-8">
+            <div class="card border-secondary bg-dark text-white h-100" style="min-height: 45vh;">
+                <div class="card-header bg-secondary text-white fw-bold">Recipe Specifications Summary Report</div>
+                <div class="card-body p-0" id="rightRecipeViewerCanvas">
+                    
+                    <div id="blankViewerStateCard" class="text-center py-5">
+                        <h4 class="text-muted mt-4">No Active Menu Folder Selected</h4>
+                        <p class="text-secondary">Click on any product item located in the left sidebar directory layout to open its structural ingredients formulation sheet logs.</p>
                     </div>
-                    <div class="modal-body">
-                        <div class="row text-secondary fw-bold mb-2">
-                            <div class="col-4">Ingredient</div>
-                            <div class="col-2">Qty</div>
-                            <div class="col-2">Unit</div>
-                            <div class="col-3">Calculation</div>
-                            <div class="col-1"></div>
+
+                    {% for r in recipe_data %}
+                    <div id="detail-card-{{ r['Product_ID'] }}" class="recipe-detail-summary-block" style="display: none;">
+                        <div class="p-3 border-bottom border-secondary bg-secondary d-flex justify-content-between align-items-center">
+                            <h5 class="m-0 fw-bold">📊 Formula Overview: {{ r['Product_Name'] }}</h5>
+                            <div class="d-flex gap-2">
+                                <button class="btn btn-sm btn-primary fw-bold px-3" data-bs-toggle="modal" data-bs-target="#editModal{{ r['Product_ID'] }}">✏️ Edit Recipe</button>
+                                <form method="post" class="d-inline" onsubmit="return confirm('Completely purge this recipe compilation matrix?');">
+                                    <input type="hidden" name="action_type" value="delete_recipe">
+                                    <input type="hidden" name="product_id" value="{{ r['Product_ID'] }}">
+                                    <button type="submit" class="btn btn-sm btn-danger fw-bold px-3">🗑️ Delete</button>
+                                </form>
+                            </div>
                         </div>
-                        <div id="recipeRows{{ r['Product_ID'] }}">
-                            {% for item in r['Items'] %}
-                            <div class="row mb-2 align-items-center">
+
+                        <table class="table table-dark table-hover mb-0 border-bottom border-secondary">
+                            <thead>
+                                <tr class="text-secondary font-monospace" style="font-size: 13px;">
+                                    <th>INGREDIENT COMPONENT</th>
+                                    <th>QTY METRIC</th>
+                                    <th>UNIT</th>
+                                    <th>COST / UNIT</th>
+                                    <th class="text-end">LINE COST</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for item in r['Items'] %}
+                                <tr>
+                                    <td class="text-white fw-bold">{{ item['Name'] }}</td>
+                                    <td class="text-light">{{ item['Qty'] }}</td>
+                                    <td><span class="badge bg-secondary">{{ item['Unit'] }}</span></td>
+                                    <td class="text-light">₱{{ "%.2f"|format(item['Cost']) }} / {{ item['Base_Unit'] }}</td>
+                                    <td class="text-end text-warning fw-bold">₱{{ "%.2f"|format(item['Total']) }}</td>
+                                </tr>
+                                {% else %}
+                                <tr>
+                                    <td colspan="5" class="text-center text-muted py-4">No structural ingredient costs mapped to this folder yet. Click edit recipe above to begin matching.</td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+
+                        <div class="p-3 bg-dark rounded-bottom">
+                            <div class="row g-2 text-center">
                                 <div class="col-4">
-                                    <select name="ingredient_id[]" class="form-select bg-secondary text-white">
-                                        {% for i in ingredients %}
-                                            <option value="{{ i.Ingredient_ID }}" {% if i.Ingredient_ID == item.ID %}selected{% endif %}>{{ i.Ingredient_Name }}</option>
-                                        {% endfor %}
-                                    </select>
+                                    <div class="p-3 rounded border border-secondary" style="background-color: #222222;">
+                                        <span class="d-block text-info fw-bold text-uppercase mb-1" style="font-size: 12px; letter-spacing: 0.5px;">Total Cost</span>
+                                        <h3 class="m-0 text-warning fw-bold">₱{{ "%.2f"|format(r['Total_Cost']) }}</h3>
+                                    </div>
                                 </div>
-                                <div class="col-2">
-                                    <input type="number" step="any" name="quantity[]" class="form-control" value="{{ item.Qty }}" oninput="calculate(this)">
+                                <div class="col-4">
+                                    <div class="p-3 rounded border border-secondary" style="background-color: #222222;">
+                                        <span class="d-block text-info fw-bold text-uppercase mb-1" style="font-size: 12px; letter-spacing: 0.5px;">Net Profit</span>
+                                        <h3 class="m-0 text-success fw-bold">₱{{ "%.2f"|format(r['Profit']) }}</h3>
+                                    </div>
                                 </div>
-                                <div class="col-2">
-                                    <select name="unit[]" class="form-select bg-secondary text-white" onchange="calculate(this)">
-                                        <option value="kg" {% if item.Unit == 'kg' %}selected{% endif %}>kg</option>
-                                        <option value="g" {% if item.Unit == 'g' %}selected{% endif %}>g</option>
-                                        <option value="L" {% if item.Unit == 'L' %}selected{% endif %}>L</option>
-                                        <option value="ml" {% if item.Unit == 'ml' %}selected{% endif %}>ml</option>
-                                    </select>
-                                </div>
-                                <div class="col-3 text-info calc-result">Base: {{ item.Qty }} {{ item.Unit }}</div>
-                                <div class="col-1">
-                                    <button type="button" class="btn btn-danger btn-sm" onclick="this.parentElement.parentElement.remove()">X</button>
+                                <div class="col-4">
+                                    <div class="p-3 rounded border border-secondary" style="background-color: #222222;">
+                                        <span class="d-block text-info fw-bold text-uppercase mb-1" style="font-size: 12px; letter-spacing: 0.5px;">Margin %</span>
+                                        <h3 class="m-0 text-info fw-bold">{{ "%.1f"|format(r['Margin']) }}%</h3>
+                                    </div>
                                 </div>
                             </div>
-                            {% endfor %}
                         </div>
                     </div>
-                    <div class="modal-footer border-secondary">
-                        <button type="button" class="btn btn-info" onclick="addRow('recipeRows{{ r['Product_ID'] }}')">+ Add</button>
-                        <button type="submit" class="btn btn-success">Save</button>
-                    </div>
-                </form>
+                    {% endfor %}
+
+                </div>
             </div>
         </div>
+
     </div>
-    {% endfor %}
 </div>
 
-<script>
-    function calculate(el) {
-        const row = el.parentElement.parentElement;
-        const qty = parseFloat(row.querySelector('input[name="quantity[]"]').value) || 0;
-        const unit = row.querySelector('select[name="unit[]"]').value;
-        let base = (unit === 'g' || unit === 'ml') ? qty / 1000 : qty;
-        let dispU = (unit === 'g') ? 'kg' : (unit === 'ml') ? 'L' : unit;
-        row.querySelector('.calc-result').innerText = `Base: ${base.toFixed(4)} ${dispU}`;
-    }
+<div class="modal fade" id="createRecipeModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content bg-dark text-white border border-secondary">
+            <form method="post">
+                <input type="hidden" name="action_type" value="save_recipe">
+                <div class="modal-header border-secondary">
+                    <h5 class="modal-title fw-bold text-success">Build Brand New Product Recipe Formula</h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <label class="form-label fw-bold text-light">Select Target Base Product Item Profile:</label>
+                    <select name="product_id" class="form-select bg-secondary text-white border-0 mb-4" required>
+                        <option value="" disabled selected>Choose target product directory entry...</option>
+                        {% for prod in all_products %}
+                            <option value="{{ prod.Product_ID }}">{{ prod.Product_Name }} ({{ prod.Product_ID }})</option>
+                        {% endfor %}
+                    </select>
 
-    function addRow(id) { 
-        document.getElementById(id).insertAdjacentHTML('beforeend', `
-            <div class="row mb-2 align-items-center">
-                <div class="col-4">
-                    <select name="ingredient_id[]" class="form-select bg-secondary text-white">
-                        {% for i in ingredients %}<option value="{{ i.Ingredient_ID }}">{{ i.Ingredient_Name }}</option>{% endfor %}
-                    </select>
+                    <div class="row text-secondary fw-bold mb-2 font-monospace" style="font-size: 12px;">
+                        <div class="col-5">INGREDIENT COMPONENT</div>
+                        <div class="col-3">QTY REQUIRED</div>
+                        <div class="col-3">MEASUREMENT UNIT AUTO-SCALE</div>
+                        <div class="col-1"></div>
+                    </div>
+                    
+                    <div id="creationRecipeRowsDiv">
+                        </div>
                 </div>
-                <div class="col-2">
-                    <input type="number" step="any" name="quantity[]" class="form-control" placeholder="Qty" oninput="calculate(this)">
+                <div class="modal-footer border-secondary justify-content-between">
+                    <button type="button" class="btn btn-info fw-bold" onclick="appendDynamicIngredientInputRow('creationRecipeRowsDiv')">＋ Add Component Line</button>
+                    <button type="submit" class="btn btn-success fw-bold px-4">✔ Confirm Formula Data Entry</button>
                 </div>
-                <div class="col-2">
-                    <select name="unit[]" class="form-select bg-secondary text-white" onchange="calculate(this)">
-                        <option value="kg">kg</option><option value="g">g</option><option value="L">L</option><option value="ml">ml</option>
-                    </select>
+            </form>
+        </div>
+    </div>
+</div>
+
+{% for r in recipe_data %}
+<div class="modal fade" id="editModal{{ r['Product_ID'] }}" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content bg-dark text-white border border-secondary">
+            <form method="post">
+                <input type="hidden" name="action_type" value="save_recipe">
+                <input type="hidden" name="product_id" value="{{ r['Product_ID'] }}">
+                <div class="modal-header border-secondary">
+                    <h5 class="modal-title fw-bold text-info">Modify Formula Specification Matrix: {{ r['Product_Name'] }}</h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
                 </div>
-                <div class="col-3 text-info calc-result">Base: 0</div>
-                <div class="col-1">
-                    <button type="button" class="btn btn-danger btn-sm" onclick="this.parentElement.parentElement.remove()">X</button>
+                <div class="modal-body">
+                    <div class="row text-secondary fw-bold mb-2 font-monospace" style="font-size: 12px;">
+                        <div class="col-5">INGREDIENT COMPONENT</div>
+                        <div class="col-3">QTY REQUIRED</div>
+                        <div class="col-3">MEASUREMENT UNIT AUTO-SCALE</div>
+                        <div class="col-1"></div>
+                    </div>
+                    <div id="recipeRows{{ r['Product_ID'] }}">
+                        {% for item in r['Items'] %}
+                        <div class="row mb-2 align-items-center tracking-ingredient-row-block">
+                            <div class="col-5">
+                                <select name="ingredient_id[]" class="form-select bg-secondary text-white border-0 ingredient-selector-node" onchange="synchronizeRowMeasurementUnitOptions(this)" required>
+                                    {% for i in ingredients %}
+                                        <option value="{{ i.Ingredient_ID }}" data-native-unit="{{ i.Unit }}" {% if i.Ingredient_ID == item.ID %}selected{% endif %}>{{ i.Ingredient_Name }}</option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                            <div class="col-3">
+                                <input type="number" step="any" name="quantity[]" class="form-control bg-light border-0 text-dark fw-bold" value="{{ item.Qty }}" required>
+                            </div>
+                            <div class="col-3">
+                                <select name="unit[]" class="form-select bg-secondary text-white border-0 unit-selector-node" required>
+                                    <option value="{{ item.Unit }}" selected>{{ item.Unit }}</option>
+                                </select>
+                            </div>
+                            <div class="col-1 text-center">
+                                <button type="button" class="btn btn-sm btn-danger fw-bold" onclick="this.parentElement.parentElement.remove()">✖</button>
+                            </div>
+                        </div>
+                        {% endfor %}
+                    </div>
                 </div>
-            </div>`); 
+                <div class="modal-footer border-secondary justify-content-between">
+                    <button type="button" class="btn btn-info fw-bold" onclick="appendDynamicIngredientInputRow('recipeRows{{ r['Product_ID'] }}')">＋ Add Line</button>
+                    <button type="submit" class="btn btn-success fw-bold px-4">✔ Update Recipe Matrix</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endfor %}
+
+<script>
+function synchronizeRowMeasurementUnitOptions(selectElement) {
+    const row = selectElement.parentElement.parentElement;
+    const activeOption = selectElement.options[selectElement.selectedIndex];
+    const nativeUnit = activeOption.getAttribute('data-native-unit') || 'pcs';
+    const unitDropdown = row.querySelector('.unit-selector-node');
+    
+    const previousSelectionValue = unitDropdown.value;
+    unitDropdown.innerHTML = '';
+    
+    if (nativeUnit === 'kg' || nativeUnit === 'g') {
+        unitDropdown.innerHTML = `<option value="kg">kg</option><option value="g">g</option>`;
+        unitDropdown.value = (previousSelectionValue === 'g' || previousSelectionValue === 'kg') ? previousSelectionValue : 'kg';
+    } else if (nativeUnit === 'L' || nativeUnit === 'ml') {
+        unitDropdown.innerHTML = `<option value="L">L</option><option value="ml">ml</option>`;
+        unitDropdown.value = (previousSelectionValue === 'ml' || previousSelectionValue === 'L') ? previousSelectionValue : 'L';
+    } else {
+        unitDropdown.innerHTML = `<option value="${nativeUnit}">${nativeUnit}</option>`;
+        unitDropdown.value = nativeUnit;
     }
+}
+
+function appendDynamicIngredientInputRow(containerElementId) {
+    document.getElementById(containerElementId).insertAdjacentHTML('beforeend', `
+        <div class="row mb-2 align-items-center tracking-ingredient-row-block">
+            <div class="col-5">
+                <select name="ingredient_id[]" class="form-select bg-secondary text-white border-0 ingredient-selector-node" onchange="synchronizeRowMeasurementUnitOptions(this)" required>
+                    <option value="" disabled selected>Select stock ingredient...</option>
+                    {% for i in ingredients %}
+                    <option value="{{ i.Ingredient_ID }}" data-native-unit="{{ i.Unit }}">{{ i.Ingredient_Name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-3">
+                <input type="number" step="any" name="quantity[]" class="form-control bg-light border-0 text-dark fw-bold" placeholder="0.00" required>
+            </div>
+            <div class="col-3">
+                <select name="unit[]" class="form-select bg-secondary text-white border-0 unit-selector-node" required>
+                    <option value="" disabled selected>Unit...</option>
+                </select>
+            </div>
+            <div class="col-1 text-center">
+                <button type="button" class="btn btn-sm btn-danger fw-bold" onclick="this.parentElement.parentElement.remove()">✖</button>
+            </div>
+        </div>`);
+}
+
+function switchActiveRecipeDisplay(productIdCode) {
+    document.getElementById('blankViewerStateCard').style.display = 'none';
+    const sections = document.querySelectorAll('.recipe-detail-summary-block');
+    sections.forEach(block => block.style.display = 'none');
+    
+    const buttons = document.querySelectorAll('.item-nav-action-block');
+    buttons.forEach(btn => btn.classList.remove('active', 'bg-primary'));
+    
+    document.getElementById('detail-card-' + productIdCode).style.display = 'block';
+    document.getElementById('btn-nav-' + productIdCode).classList.add('active', 'bg-primary');
+}
+
+function runSplitDashboardFilters() {
+    const query = document.getElementById('recipeSearchInput').value.toLowerCase().trim();
+    const chosenCategory = document.getElementById('recipeCategorySelect').value;
+    const navButtons = document.querySelectorAll('.item-nav-action-block');
+
+    navButtons.forEach(btn => {
+        const pName = btn.getAttribute('data-product-name');
+        const pId = btn.getAttribute('data-product-id');
+        const pCat = btn.getAttribute('data-product-category');
+
+        const matchesSearch = pName.includes(query) || pId.includes(query);
+        const matchesCategory = (chosenCategory === 'All' || pCat === chosenCategory);
+
+        if (matchesSearch && matchesCategory) {
+            btn.style.setProperty('display', 'block', 'important');
+        } else {
+            btn.style.setProperty('display', 'none', 'important');
+        }
+    });
+}
+
+function clearRecipeDashboardFilters() {
+    document.getElementById('recipeSearchInput').value = '';
+    document.getElementById('recipeCategorySelect').value = 'All';
+    runSplitDashboardFilters();
+}
+
+document.addEventListener("DOMContentLoaded", function() {
+    appendDynamicIngredientInputRow('creationRecipeRowsDiv');
+    
+    const selectors = document.querySelectorAll('.ingredient-selector-node');
+    selectors.forEach(sel => {
+        if(sel.value !== "") synchronizeRowMeasurementUnitOptions(sel);
+    });
+    
+    const firstButton = document.querySelector('.item-nav-action-block');
+    if (firstButton) {
+        firstButton.click();
+    }
+});
 </script>
 {% endblock %}
