@@ -10,7 +10,8 @@ USER_DB_PATH = "data/users.db"
 @auth_bp.route('/')
 def index():
     if 'logged_in_user' in session: 
-        return redirect(url_for('auth.client_portal_redirect', username=session['logged_in_user']))
+        # FIXED: Enforced matching direct literal path routing to eliminate the url_for BuildError
+        return redirect(f"/portal/{session['logged_in_user']}")
     return redirect(url_for('auth.login'))
 
 @auth_bp.route('/login', methods=['GET', 'POST'])

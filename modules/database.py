@@ -356,7 +356,6 @@ class InventoryDB:
         for _, item in recipe_items.iterrows():
             if 'Cost_Per_Unit' in item and 'Quantity_Required' in item:
                 try:
-                    # Enforce strict float translation to bypass Pandas series sequence errors
                     cost = float(item['Cost_Per_Unit']) * float(item['Quantity_Required'])
                     total_cost += cost
                 except (ValueError, TypeError):
@@ -384,13 +383,11 @@ class InventoryDB:
             
             # Calculate profit margin if Selling_Price exists
             if 'Selling_Price' in products_df.columns:
-                # Forces explicit float translation on the dataframes to destroy text vs number errors
                 products_df['Selling_Price'] = pd.to_numeric(products_df['Selling_Price'], errors='coerce').fillna(0.0)
                 products_df['Cost_Price'] = pd.to_numeric(products_df['Cost_Price'], errors='coerce').fillna(0.0)
                 
                 products_df['Profit_Margin'] = products_df['Selling_Price'] - products_df['Cost_Price']
                 
-                # Zero out defaults to prevent calculations from dropping on zero-division limits
                 products_df['Margin_Percentage'] = 0.0
                 valid_sp = products_df['Selling_Price'] > 0
                 products_df.loc[valid_sp, 'Margin_Percentage'] = (products_df.loc[valid_sp, 'Profit_Margin'] / products_df.loc[valid_sp, 'Selling_Price'] * 100).round(2)
@@ -426,8 +423,10 @@ class InventoryDB:
             
             for _, recipe_item in recipe_items.iterrows():
                 ingredient_id = recipe_item['Ingredient_ID']
-                quantity_needed = recipe_item['Quantity_Required']
-                total_needed = quantity_needed * quantity_sold
+                
+                # FIXED: Force recipe variables into numeric decimals to break string sequence errors
+                quantity_needed = float(recipe_item['Quantity_Required'] or 0.0)
+                total_needed = quantity_needed * float(quantity_sold)
                 
                 # Find the ingredient in inventory
                 ingredient_idx = inventory_df[inventory_df['Ingredient_ID'] == ingredient_id].index
@@ -437,7 +436,7 @@ class InventoryDB:
                     continue
                 
                 idx = ingredient_idx[0]
-                current_stock = inventory_df.at[idx, 'Current_Stock']
+                current_stock = float(inventory_df.at[idx, 'Current_Stock'] or 0.0)
                 
                 if current_stock < total_needed:
                     insufficient_stock.append(

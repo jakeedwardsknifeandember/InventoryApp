@@ -52,6 +52,7 @@ def web_sales_tab(username):
                 p_name = prod_row['Product_Name'].values[0]
                 unit_price = float(prod_row['Selling_Price'].values[0])
                 
+                # Triggers the inventory reduction script
                 stock_ok, stock_msg = client_db.update_inventory_from_sale(p_id, qty)
                 if stock_ok:
                     client_db.add_sale(p_id, qty, unit_price)
@@ -86,7 +87,7 @@ def web_sales_tab(username):
 
     # ===== GET METHOD: DISPLAY DATA PROCESSING =====
     sales_df = client_db.read_tab('Sales')
-    master_products_df = client_db.get_all_products() # PRISTINE LOOKUP MASTER LIST
+    master_products_df = client_db.get_all_products()
     
     search = request.args.get('search', '').lower().strip()
     category = request.args.get('category', 'All')
@@ -96,7 +97,6 @@ def web_sales_tab(username):
     categories = []
     active_products_list = []
     
-    # 1. Isolate the filters to only touch the left worksheet dataframe copy
     filtered_products_df = master_products_df.copy() if not master_products_df.empty else pd.DataFrame()
     
     if not master_products_df.empty:
@@ -117,12 +117,9 @@ def web_sales_tab(username):
 
         active_products_list = filtered_products_df.to_dict(orient='records')
 
-    # 2. BATCH GROUPING ENGINE: Uses the unfiltered master_products_df for reliable name rendering
     grouped_history_list = []
     if not sales_df.empty:
         sales_df = sales_df.sort_values('Sale_ID', ascending=False)
-        
-        # FIXED: Enforce strict sorted, reverse chronological sorting order on unique dates array
         unique_dates = sorted(list(sales_df['Sale_Date'].dropna().unique()), reverse=True)
         
         for date_val in unique_dates:
@@ -135,7 +132,6 @@ def web_sales_tab(username):
                 p_id = row['Product_ID']
                 p_name = p_id
                 
-                # FIXED: Always read the unfiltered baseline dataset to prevent leakage display errors
                 if not master_products_df.empty:
                     match = master_products_df[master_products_df['Product_ID'] == p_id]
                     if not match.empty: 
@@ -176,8 +172,8 @@ def web_sales_tab(username):
         sales_history=grouped_history_list,
         msg=feedback_msg,
         alert_type=alert_type,
-        current_search=request.args.get('search', ''),
-        current_category=request.args.get('category', 'All'),
-        current_sort=request.args.get('sort_by', 'name'),
-        current_order=request.args.get('order', 'asc')
+        current_search=search,
+        current_category=category,
+        current_sort=sort_by,
+        current_order=order
     )
