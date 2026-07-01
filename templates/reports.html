@@ -1,53 +1,396 @@
 {% extends 'base.html' %}
 {% block content %}
-<h3 class="mb-4" style="font-weight: bold;">Business Reports</h3>
 
-<div class="row g-4 mb-5">
-    <div class="col-md-4">
-        <div class="content-card text-center" style="background-color: #2fa572; border: none;">
-            <div style="font-size: 16px; font-weight: bold; margin-bottom: 5px;">Total Revenue</div>
-            <h2 class="m-0">₱{{ "%.2f"|format(total_revenue) }}</h2>
+<!-- LOAD VISUAL PLOTTING LIBRARIES -->
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+<style>
+    .reports-workspace .text-muted { color: #94a3b8 !important; }
+    .reports-workspace table tbody td { color: #f8fafc !important; }
+    .reports-workspace table thead th { color: #cbd5e1 !important; background: #151518; }
+    .nav-tabs .nav-link { color: #94a3b8; border: none; font-weight: 600; padding: 12px 20px; }
+    .nav-tabs .nav-link.active { color: #3b82f6 !important; background: #1e1e24 !important; border-bottom: 3px solid #3b82f6 !important; border-radius: 6px 6px 0 0; }
+    .financial-table td { padding: 14px; border-bottom: 1px solid #2d2d34; }
+    .financial-title { font-weight: 700; color: #cbd5e1; }
+    
+    /* 🔥 HIGH-CONTRAST MODAL TEXT VISIBILITY FIXED STRIP (Image Fix) */
+    #logIncidentModal label {
+        color: #e2e8f0 !important; /* Luminous clean off-white labels */
+        font-weight: 700 !important;
+        font-size: 11.5px !important;
+        letter-spacing: 0.5px;
+        margin-bottom: 6px;
+        display: inline-block;
+    }
+    #logIncidentModal .form-control, #logIncidentModal .form-select {
+        color: #ffffff !important;
+        background-color: #27272c !important;
+        border: 1px solid #3f3f46 !important;
+    }
+    #logIncidentModal .form-control::placeholder {
+        color: #71717a !important;
+    }
+</style>
+
+<div class="reports-workspace">
+    
+    <!-- 🔔 MESSAGE NOTIFICATIONS BANNER -->
+    {% if msg %}
+    <div class="alert alert-{{ alert_type }} alert-dismissible fade show border-0 mb-4 text-white" role="alert" style="background-color: {% if alert_type == 'danger' %}#dc3545{% else %}#198754{% endif %}; border-radius: 8px;">
+        {{ msg }}
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="alert"></button>
+    </div>
+    {% endif %}
+
+    <!-- 👑 HEADER FILTERS SELECTION STRIP -->
+    <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-center mb-4 gap-3">
+        <div>
+            <h3 class="m-0" style="font-weight: 800; text-transform: uppercase; color: #ffffff; letter-spacing: -0.5px;">Business Performance Reports</h3>
+            <p class="text-muted m-0 small">Analyze financial statements, evaluate menu engineering parameters, and monitor operational compliance logs.</p>
+        </div>
+        
+        <form method="get" action="/portal/{{ username }}/reports" id="periodForm">
+            <select name="period" class="form-select text-white border-0 px-4 py-2" style="background: #1e1e24; font-weight: 600; border-radius: 8px;" onchange="document.getElementById('periodForm').submit()">
+                <option value="this_month" {% if current_period == 'this_month' %}selected{% endif %}>📅 This Current Month</option>
+                <option value="last_month" {% if current_period == 'last_month' %}selected{% endif %}>📅 Previous Month</option>
+                <option value="all_time" {% if current_period == 'all_time' %}selected{% endif %}>📅 All Historical Records</option>
+            </select>
+        </form>
+    </div>
+
+    <!-- 📊 EXECUTIVE METRICS KPI CARD DISPLAY PANEL -->
+    <div class="row g-3 mb-4">
+        <div class="col-6 col-md-3">
+            <div class="p-3" style="background: #1e1e24; border-bottom: 4px solid #10b981; border-radius: 8px;">
+                <div class="text-muted small mb-1" style="font-weight: 700; text-transform: uppercase; font-size:11px;">Gross Sales Revenue</div>
+                <h3 class="m-0 font-monospace" style="font-weight: 800; color: #10b981;">₱{{ "{:,.2f}".format(total_revenue) }}</h3>
+            </div>
+        </div>
+        <div class="col-6 col-md-3">
+            <div class="p-3" style="background: #1e1e24; border-bottom: 4px solid #ef4444; border-radius: 8px;">
+                <div class="text-muted small mb-1" style="font-weight: 700; text-transform: uppercase; font-size:11px;">Total Cash Expenses</div>
+                <h3 class="m-0 font-monospace" style="font-weight: 800; color: #ef4444;">₱{{ "{:,.2f}".format(total_expenses) }}</h3>
+            </div>
+        </div>
+        <div class="col-6 col-md-3">
+            <div class="p-3" style="background: #1e1e24; border-bottom: 4px solid #f59e0b; border-radius: 8px;">
+                <div class="text-muted small mb-1" style="font-weight: 700; text-transform: uppercase; font-size:11px;">Kitchen Waste Loss</div>
+                <h3 class="m-0 font-monospace" style="font-weight: 800; color: #f59e0b;">₱{{ "{:,.2f}".format(waste_cost) }}</h3>
+            </div>
+        </div>
+        <div class="col-6 col-md-3">
+            <div class="p-3" style="background: #1e1e24; border-bottom: 4px solid #e11d48; border-radius: 8px;">
+                <div class="text-muted small mb-1" style="font-weight: 700; text-transform: uppercase; font-size:11px;">Lost Revenue Opportunity</div>
+                <h3 class="m-0 font-monospace" style="font-weight: 800; color: #e11d48;">₱{{ "{:,.2f}".format(opportunity_cost) }}</h3>
+            </div>
         </div>
     </div>
-    <div class="col-md-4">
-        <div class="content-card text-center" style="background-color: #c24b4b; border: none;">
-            <div style="font-size: 16px; font-weight: bold; margin-bottom: 5px;">Total Expenses</div>
-            <h2 class="m-0">₱{{ "%.2f"|format(total_expenses) }}</h2>
+
+    <!-- 🌟 CORE COMMAND TABS SELECTOR PANEL -->
+    <ul class="nav nav-tabs border-bottom border-secondary mb-4" id="commandTabs" role="tablist">
+        <li class="nav-item">
+            <button class="nav-link active" id="financials-tab" data-bs-toggle="tab" data-bs-target="#financials-panel" type="button" role="tab">💼 Financial Statements</button>
+        </li>
+        <li class="nav-item">
+            <button class="nav-link" id="menu-tab" data-bs-toggle="tab" data-bs-target="#menu-panel" type="button" role="tab">🎯 Menu Engineering Matrix</button>
+        </li>
+        <li class="nav-item">
+            <button class="nav-link" id="incidents-tab" data-bs-toggle="tab" data-bs-target="#incidents-panel" type="button" role="tab">📋 HR & Operational Logs</button>
+        </li>
+    </ul>
+
+    <div class="tab-content" id="commandTabsContent">
+        
+        <!-- PANEL 1: STANDARD CORPORATE FINANCIAL STATEMENTS -->
+        <div class="tab-pane fade show active text-white" id="financials-panel" role="tabpanel">
+            <div class="row g-4">
+                <!-- Profit & Loss Summary Data Grid -->
+                <div class="col-12 col-lg-6">
+                    <div class="p-4" style="background: #1e1e24; border-radius: 8px; border: 1px solid #2d2d34;">
+                        <h5 class="mb-3" style="font-weight: 700; border-bottom: 1px solid #2d2d34; padding-bottom: 10px;">Income Statement (P&L Summary)</h5>
+                        <table class="w-100 financial-table">
+                            <tr>
+                                <td class="financial-title">Gross Sales Revenue</td>
+                                <td class="text-end font-monospace text-success" style="font-weight: 700;">₱{{ "{:,.2f}".format(total_revenue) }}</td>
+                            </tr>
+                            <tr>
+                                <td class="financial-title text-muted">(-) Cost of Sales (COGS)</td>
+                                <td class="text-end font-monospace text-muted">- ₱{{ "{:,.2f}".format(total_cogs) }}</td>
+                            </tr>
+                            <tr style="background: #1a1a20;">
+                                <td style="font-weight: 600; padding-left: 20px;">Gross Profit Margin</td>
+                                <td class="text-end font-monospace text-white" style="font-weight: 600;">₱{{ "{:,.2f}".format(gross_margin) }}</td>
+                            </tr>
+                            <tr>
+                                <td class="financial-title text-danger">(-) Operating Expenses (Overhead)</td>
+                                <td class="text-end font-monospace text-danger">- ₱{{ "{:,.2f}".format(total_expenses) }}</td>
+                            </tr>
+                            <tr>
+                                <td class="financial-title text-warning">(-) Cost of Spoilage / Waste</td>
+                                <td class="text-end font-monospace text-warning">- ₱{{ "{:,.2f}".format(waste_cost) }}</td>
+                            </tr>
+                            <tr style="background: #151518;">
+                                <td style="font-weight: 800; font-size:16px;">Net Operating Income</td>
+                                <td class="text-end font-monospace" style="font-weight: 800; font-size: 16px; color: {% if net_profit >= 0 %}#3b82f6{% else %}#ef4444{% endif %};">
+                                    ₱{{ "{:,.2f}".format(net_profit) }}
+                                </td>
+                            </tr>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- Balance Sheet Summary Data Grid -->
+                <div class="col-12 col-lg-6">
+                    <div class="p-4" style="background: #1e1e24; border-radius: 8px; border: 1px solid #2d2d34;">
+                        <h5 class="mb-3" style="font-weight: 700; border-bottom: 1px solid #2d2d34; padding-bottom: 10px;">Balance Sheet (Macro Equation Ledger)</h5>
+                        <table class="w-100 financial-table">
+                            <!-- Assets Section -->
+                            <tr>
+                                <td colspan="2" style="font-weight: 800; color: #3b82f6; background: #151518; padding: 6px 14px; font-size: 13px;">ASSETS</td>
+                            </tr>
+                            <tr>
+                                <td class="financial-title" style="padding-left: 25px;">Liquid Cash Reserves</td>
+                                <td class="text-end font-monospace text-info" style="font-weight: 700;">₱{{ "{:,.2f}".format(net_profit) }}</td>
+                            </tr>
+                            <tr>
+                                <td class="financial-title" style="padding-left: 25px;">Inventory Asset Value</td>
+                                <td class="text-end font-monospace text-info" style="font-weight: 700;">₱{{ "{:,.2f}".format(warehouse_asset) }}</td>
+                            </tr>
+                            <tr style="background: #1a1a20;">
+                                <td style="font-weight: 700; padding-left: 14px;">TOTAL ASSETS</td>
+                                <td class="text-end font-monospace text-info" style="font-weight: 700;">₱{{ "{:,.2f}".format(total_assets) }}</td>
+                            </tr>
+                            
+                            <!-- Liabilities Section -->
+                            <tr>
+                                <td colspan="2" style="font-weight: 800; color: #ef4444; background: #151518; padding: 6px 14px; font-size: 13px;">LIABILITIES</td>
+                            </tr>
+                            <tr>
+                                <td class="financial-title" style="padding-left: 25px;">Accounts Payable</td>
+                                <td class="text-end font-monospace text-muted">- ₱{{ "{:,.2f}".format(total_liabilities) }}</td>
+                            </tr>
+                            
+                            <!-- Equity Section -->
+                            <tr>
+                                <td colspan="2" style="font-weight: 800; color: #10b981; background: #151518; padding: 6px 14px; font-size: 13px;">OWNER'S EQUITY</td>
+                            </tr>
+                            <tr>
+                                <td class="financial-title" style="padding-left: 25px;">Retained Earnings</td>
+                                <td class="text-end font-monospace text-success" style="font-weight: 700;">₱{{ "{:,.2f}".format(owners_equity) }}</td>
+                            </tr>
+                            <tr style="background: #151518;">
+                                <td style="font-weight: 800; font-size:15px;">TOTAL LIABILITIES & EQUITY</td>
+                                <td class="text-end font-monospace text-success" style="font-weight: 800; font-size: 15px;">
+                                    ₱{{ "{:,.2f}".format(total_liabilities + owners_equity) }}
+                                </td>
+                            </tr>
+                        </table>
+                    </div>
+                </div>
+                
+                <!-- Recent Verified Sales Strip Records Table -->
+                <div class="col-12">
+                    <h5 class="mb-3 mt-2" style="font-weight: 700;">Recent Transactions Ledger</h5>
+                    <div class="content-card p-0 overflow-hidden" style="background: #1e1e24; border: 1px solid #2d2d34; border-radius: 8px;">
+                        <table class="table table-hover text-white m-0">
+                            <thead style="background: #151518;">
+                                <tr>
+                                    <th class="ps-4 py-3">DATE</th>
+                                    <th class="py-3">TIME</th>
+                                    <th class="py-3">PRODUCT DETAILS</th>
+                                    <th class="py-3">QUANTITY SOLD</th>
+                                    <th class="pe-4 py-3 text-end">TOTAL REVENUE GENERATED</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for s in recent_sales %}
+                                <tr>
+                                    <td class="align-middle ps-4 font-monospace text-info">{{ s.Sale_Date }}</td>
+                                    <td class="align-middle text-muted small font-monospace">{{ s.Sale_Time }}</td>
+                                    <td class="align-middle" style="font-weight:600;">{{ s.Product_Name }}</td>
+                                    <td class="align-middle font-monospace">{{ s.Quantity }} pcs</td>
+                                    <td class="align-middle pe-4 text-end text-success font-monospace" style="font-weight:700;">₱{{ "{:,.2f}".format(s.Total_Amount) }}</td>
+                                </tr>
+                                {% else %}
+                                <tr><td colspan="5" class="text-center py-4 text-muted">No sales metrics captured inside this chronological scope period window.</td></tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
         </div>
+
+        <!-- PANEL 2: MENU ENGINEERING MATRIX WORKSPACE -->
+        <div class="tab-pane fade" id="menu-panel" role="tabpanel">
+            <div class="row g-4">
+                <div class="col-12 col-lg-8">
+                    <div class="p-4" style="background: #1e1e24; border: 1px solid #2d2d34; border-radius: 8px;">
+                        <h5 class="mb-1" style="font-weight: 700; color: #ffffff;">Menu Engineering Scatter Matrix</h5>
+                        <p class="text-muted small mb-4">Evaluates product popularity volumes against item profitability indexes to maximize menu design.</p>
+                        <div style="position: relative; height: 320px; width: 100%;"><canvas id="menuMatrixChart"></canvas></div>
+                    </div>
+                </div>
+                <div class="col-12 col-lg-4">
+                    <div class="p-4 d-flex flex-column h-100" style="background: #1e1e24; border: 1px solid #2d2d34; border-radius: 8px;">
+                        <h5 class="mb-1" style="font-weight: 700; color: #ffffff;">Strategic Optimization Advice</h5>
+                        <p class="text-muted small mb-3">Automated operational adjustments compiled dynamically from product quadrant results.</p>
+                        <div class="flex-grow-1 overflow-auto">
+                            {% for item in advice %}
+                            <div class="p-3 mb-2 small text-white" style="background: #18181c; border-left:4px solid #f59e0b; border-radius:4px;">{{ item|safe }}</div>
+                            {% else %}
+                            <div class="text-center text-muted py-5 small">All logged product items are operating inside baseline variance scopes.</div>
+                            {% endfor %}
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- PANEL 3: HR COMPLIANCE AND WORKSPACE EVENTS REGISTER -->
+        <div class="tab-pane fade" id="incidents-panel" role="tabpanel">
+            <div class="d-flex justify-content-between align-items-center mb-3">
+                <h5 class="m-0 text-white" style="font-weight: 700;">Operational Event Register & Customer Complaint Logs</h5>
+                <button class="btn btn-sm btn-primary px-3 py-2" data-bs-toggle="modal" data-bs-target="#logIncidentModal" style="font-weight:600; border-radius:6px;">➕ Record Operational Event</button>
+            </div>
+            
+            <div class="content-card p-0 overflow-hidden" style="background: #1e1e24; border: 1px solid #2d2d34; border-radius: 8px;">
+                <table class="table table-hover text-white m-0">
+                    <thead style="background: #151518;">
+                        <tr>
+                            <th class="ps-4 py-3">INCIDENT ID</th>
+                            <th class="py-3">DATE</th>
+                            <th class="py-3">CLASSIFICATION TYPE</th>
+                            <th class="py-3">PERSONNEL INVOLVED</th>
+                            <th class="py-3" style="width: 40%;">INCIDENT SUMMARY SUMMARY</th>
+                            <th class="pe-4 py-3 text-end">ACTION STATUS</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for inc in incidents %}
+                        <tr style="border-bottom: 1px solid #2d2d34;">
+                            <td class="align-middle ps-4 font-monospace text-muted">{{ inc.Incident_ID }}</td>
+                            <td class="align-middle font-monospace text-info">{{ inc.Date }}</td>
+                            <td class="align-middle">
+                                <span class="badge px-2 py-1" style="background: {% if inc.Type == 'Employee Violation' %}#ef4444{% elif inc.Type == 'Customer Complaint' %}#f59e0b{% else %}#4b5563{% endif %}; font-size:11px;">
+                                    {{ inc.Type }}
+                                </span>
+                            </td>
+                            <td class="align-middle" style="font-weight: 600;">{{ inc.Staff_Involved }}</td>
+                            <td class="align-middle text-wrap text-muted small" style="line-height:1.4;">{{ inc.Description }}</td>
+                            <td class="align-middle pe-4 text-end">
+                                <form method="post" class="d-inline">
+                                    <input type="hidden" name="action_type" value="update_incident_status">
+                                    <input type="hidden" name="incident_id" value="{{ inc.Incident_ID }}">
+                                    <select name="new_status" class="form-select-sm border-0 text-white font-weight-bold" style="background: {% if inc.Status == 'Resolved' %}#10b981{% else %}#dc3545{% endif %}; border-radius:4px; cursor:pointer;" onchange="this.form.submit()">
+                                        <option value="Pending" {% if inc.Status == 'Pending' %}selected{% endif %}>Pending</option>
+                                        <option value="Resolved" {% if inc.Status == 'Resolved' %}selected{% endif %}>Resolved</option>
+                                    </select>
+                                </form>
+                            </td>
+                        </tr>
+                        {% else %}
+                        <tr><td colspan="6" class="text-center py-5 text-muted">No operational complaints or violations recorded in this database register schema.</td></tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
     </div>
-    <div class="col-md-4">
-        <div class="content-card text-center" style="background-color: {{ '#3b8ed0' if net_profit >= 0 else '#727d82' }}; border: none;">
-            <div style="font-size: 16px; font-weight: bold; margin-bottom: 5px;">Net Profit</div>
-            <h2 class="m-0">₱{{ "%.2f"|format(net_profit) }}</h2>
+</div>
+
+<!-- 📦 POPUP DIALOG FOR RECORDING NEW OPERATIONAL ACTIONS (Styles Fixed) -->
+<div class="modal fade" id="logIncidentModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content text-white border-0 shadow-lg" style="background: #1e1e24; border-radius: 12px;">
+            <form method="post">
+                <input type="hidden" name="action_type" value="add_incident">
+                
+                <div class="modal-header" style="border-bottom: 1px solid #2d2d34; background: #151518; border-top-left-radius: 12px; border-top-right-radius: 12px;">
+                    <h5 class="modal-title" style="font-weight: 700;">Record Operational Event Entry</h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                </div>
+                
+                <div class="modal-body p-4">
+                    <div class="mb-3">
+                        <label class="form-label">EVENT RECORD DATE:</label>
+                        <input type="date" name="incident_date" class="form-control" value="{{ now.strftime('%Y-%m-%d') }}" required>
+                    </div>
+                    
+                    <div class="row g-3 mb-3">
+                        <div class="col-6">
+                            <label class="form-label">CLASSIFICATION CATEGORY:</label>
+                            <select name="incident_type" class="form-select" required>
+                                <option value="Customer Complaint">🗣️ Customer Complaint</option>
+                                <option value="Employee Violation">👮 Employee Violation</option>
+                                <option value="Equipment Failure">🛠️ Equipment Breakdown</option>
+                                <option value="Product Quality Issue">🍰 Product Quality Issue</option>
+                            </select>
+                        </div>
+                        <div class="col-6">
+                            <label class="form-label">PERSONNEL TAGGINGS:</label>
+                            <input type="text" name="staff_involved" class="form-control" placeholder="e.g., Cashier Jane, Kitchen Crew" required>
+                        </div>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label">INCIDENT OBSERVED / DETAILS SUMMARY:</label>
+                        <textarea name="description" class="form-control p-3" rows="3" placeholder="Provide accurate, comprehensive event detail observations..." required></textarea>
+                    </div>
+
+                    <div>
+                        <label class="form-label">INITIAL INITIAL RECONCILIATION STATUS:</label>
+                        <select name="status" class="form-select">
+                            <option value="Pending" selected>🔴 Pending Management Review</option>
+                            <option value="Resolved">🟢 Resolved & Settled</option>
+                        </select>
+                    </div>
+                </div>
+                
+                <div class="modal-footer p-3" style="border-top: 1px solid #2d2d34; background: #151518; border-bottom-left-radius: 12px; border-bottom-right-radius: 12px;">
+                    <button type="submit" class="btn btn-success w-100 py-2.5" style="font-weight: 700; border-radius: 6px;">Commit Incident Report Entry to Ledger</button>
+                </div>
+            </form>
         </div>
     </div>
 </div>
 
-<h4 class="mb-3">Recent Sales Activity</h4>
-<div class="content-card">
-    <table class="table table-hover text-white">
-        <thead>
-            <tr>
-                <th>Date</th>
-                <th>Time</th>
-                <th>Product ID</th>
-                <th>Quantity Sold</th>
-                <th>Total Revenue</th>
-            </tr>
-        </thead>
-        <tbody>
-            {% for s in recent_sales %}
-            <tr>
-                <td>{{ s.Sale_Date }}</td>
-                <td>{{ s.Sale_Time }}</td>
-                <td>{{ s.Product_ID }}</td>
-                <td>{{ s.Quantity }}</td>
-                <td class="text-success">₱{{ "%.2f"|format(s.Total_Amount) }}</td>
-            </tr>
-            {% else %}
-            <tr><td colspan="5" class="text-center text-muted">No recent sales data available.</td></tr>
-            {% endfor %}
-        </tbody>
-    </table>
-</div>
+<!-- 📊 CHARTJS INTERACTIVE ROUTINES GRAPH CONFIGURATION -->
+<script>
+    document.addEventListener("DOMContentLoaded", function () {
+        const rawPointsData = {{ menu_data_json|safe }};
+        const dataSets = [
+            { label: '⭐️ Stars', data: rawPointsData.filter(p => p.quadrant === 'Stars'), backgroundColor: '#10b981', radius: 9, hoverRadius: 12 },
+            { label: '🐎 Plowhorses', data: rawPointsData.filter(p => p.quadrant === 'Plowhorses'), backgroundColor: '#3b82f6', radius: 9, hoverRadius: 12 },
+            { label: '🧩 Puzzles', data: rawPointsData.filter(p => p.quadrant === 'Puzzles'), backgroundColor: '#f59e0b', radius: 9, hoverRadius: 12 },
+            { label: '🐕 Dogs', data: rawPointsData.filter(p => p.quadrant === 'Dogs'), backgroundColor: '#ef4444', radius: 9, hoverRadius: 12 }
+        ];
+
+        const ctx = document.getElementById('menuMatrixChart').getContext('2d');
+        new Chart(ctx, {
+            type: 'scatter',
+            data: { datasets: dataSets },
+            options: {
+                responsive: true, maintainAspectRatio: false,
+                scales: {
+                    x: { title: { display: true, text: 'Volume Units Sold (Popularity)', color: '#94a3b8', font: { weight: 'bold' } }, grid: { color: '#2d2d34' }, ticks: { color: '#94a3b8' } },
+                    y: { title: { display: true, text: 'Unit Profit Margin (₱ Profitability)', color: '#94a3b8', font: { weight: 'bold' } }, grid: { color: '#2d2d34' }, ticks: { color: '#94a3b8' } }
+                },
+                plugins: {
+                    legend: { labels: { color: '#e2e8f0' }, position: 'top' },
+                    tooltip: {
+                        callbacks: {
+                            label: function (context) {
+                                const item = context.raw;
+                                return `Item: ${item.label} | Sold: ${item.x} pcs | Margin: ₱${item.y.toFixed(2)} (Price: ₱${item.selling_price.toFixed(2)})`;
+                            }
+                        }
+                    }
+                }
+            }
+        });
+    });
+</script>
+
 {% endblock %}
