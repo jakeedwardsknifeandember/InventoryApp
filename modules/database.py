@@ -1,4 +1,4 @@
-# modules/database.py - FULL, RESTORED WEB SQLITE VERSION
+# modules/database.py - FULL, RESTORED WEB SQLITE VERSION WITH SUB-RECIPE INSIGHTS
 import pandas as pd
 import sqlite3
 import os
@@ -16,7 +16,7 @@ class InventoryDB:
         return sqlite3.connect(self.db_file)
 
     def ensure_tables_exist(self):
-        """Make sure all necessary tables exist in SQLite"""
+        """Make sure all necessary tables exist in SQLite and run automated column migrations"""
         try:
             conn = self.get_connection()
             cursor = conn.cursor()
@@ -32,10 +32,15 @@ class InventoryDB:
                 'Ingredients': pd.DataFrame(columns=[
                     'Ingredient_ID', 'Ingredient_Name', 'Unit', 
                     'Category', 'Current_Stock', 'Min_Stock', 'Cost_Per_Unit',
-                    'Supplier', 'Description', 'Active', 'Last_Updated'
+                    'Supplier', 'Description', 'Active', 'Last_Updated',
+                    'Ingredient_Type'  # 'RAW' for stock goods, 'PREPPED' for kitchen line items
                 ]),
                 'Recipes': pd.DataFrame(columns=[
                     'Recipe_ID', 'Product_ID', 'Ingredient_ID', 'Quantity_Required', 'Unit'
+                ]),
+                'Prep_Recipes': pd.DataFrame(columns=[
+                    'Prep_Recipe_ID', 'Prepped_Ingredient_ID', 'Raw_Ingredient_ID', 'Quantity_Required', 'Unit',
+                    'Batch_Yield'  # Divisor tracking column factor
                 ]),
                 'Sales': pd.DataFrame(columns=[
                     'Sale_ID', 'Product_ID', 'Quantity', 
@@ -44,6 +49,9 @@ class InventoryDB:
                 'Inventory_Log': pd.DataFrame(columns=[
                     'Log_ID', 'Ingredient_ID', 'Change_Type', 
                     'Quantity', 'Date', 'Notes'
+                ]),
+                'Inventory_Audit_Log': pd.DataFrame(columns=[
+                    'Audit_ID', 'Date', 'Ingredient_Name', 'Theoretical', 'Physical', 'Variance', 'Notes'
                 ]),
                 'Expenses': pd.DataFrame(columns=[
                     'Expense_ID', 'Expense_Date', 'Expense_Type', 
@@ -55,6 +63,23 @@ class InventoryDB:
                 if tab_name not in existing_tables:
                     df.to_sql(tab_name, conn, index=False, if_exists='replace')
                     print(f"➕ Added missing table: {tab_name}")
+            
+            # ⚙️ SELF-HEALING MIGRATION 1: Ensure 'Ingredient_Type' exists inside existing databases safely
+            cursor.execute("PRAGMA table_info(Ingredients);")
+            columns = [row[1] for row in cursor.fetchall()]
+            if 'Ingredient_Type' not in columns:
+                cursor.execute("ALTER TABLE Ingredients ADD COLUMN Ingredient_Type TEXT DEFAULT 'RAW';")
+                conn.commit()
+                print("⚙️ Schema Migration: Added 'Ingredient_Type' field safely to existing data rows.")
+
+            # ⚙️ SELF-HEALING MIGRATION 2: Ensure 'Batch_Yield' column exists inside Prep_Recipes safely
+            cursor.execute("PRAGMA table_info(Prep_Recipes);")
+            prep_columns = [row[1] for row in cursor.fetchall()]
+            if 'Batch_Yield' not in prep_columns:
+                cursor.execute("ALTER TABLE Prep_Recipes ADD COLUMN Batch_Yield REAL DEFAULT 1.0;")
+                conn.commit()
+                print("⚙️ Schema Migration: Added 'Batch_Yield' divisor column safely to Prep_Recipes.")
+
             conn.close()
         except Exception as e:
             print(f"⚠️ Warning creating Database tables: {e}")
@@ -364,21 +389,56 @@ class InventoryDB:
         return total_cost
     
     def update_all_product_costs(self):
-        """Update costs for all products based on current ingredient prices"""
+        """Update costs for all products, computing sub-recipe ingredient layers first"""
         try:
             products_df = self.read_tab('Products')
-            
+            ingredients_df = self.read_tab('Ingredients')
+            prep_recipes_df = self.read_tab('Prep_Recipes')
+
             if products_df.empty:
                 return products_df
             
-            # Calculate cost for each product
+            # Step 1: Calculate the unit costs of PREPPED components from their raw constituents
+            if not prep_recipes_df.empty and not ingredients_df.empty:
+                ingredients_df['Ingredient_ID'] = ingredients_df['Ingredient_ID'].astype(str)
+                
+                for idx, ing_row in ingredients_df[ingredients_df['Ingredient_Type'] == 'PREPPED'].iterrows():
+                    ing_id = ing_row['Ingredient_ID']
+                    formulas = prep_recipes_df[prep_recipes_df['Prepped_Ingredient_ID'] == ing_id]
+                    
+                    if not formulas.empty:
+                        computed_prep_cost = 0.0
+                        # 📈 DYNAMIC COST AMORTIZATION OVER BATCH YIELD FACTOR
+                        batch_yield = 1.0
+                        if 'Batch_Yield' in formulas.columns:
+                            try:
+                                yield_val = float(formulas['Batch_Yield'].iloc[0])
+                                if yield_val > 0:
+                                    batch_yield = yield_val
+                            except:
+                                pass
+
+                        for _, form_row in formulas.iterrows():
+                            raw_id = str(form_row['Raw_Ingredient_ID'])
+                            req_qty = float(form_row['Quantity_Required'] or 0.0)
+                            
+                            match = ingredients_df[ingredients_df['Ingredient_ID'] == raw_id]
+                            if not match.empty:
+                                raw_unit_cost = float(match['Cost_Per_Unit'].values[0] or 0.0)
+                                computed_prep_cost += (req_qty * raw_unit_cost)
+                        
+                        # True Amortized Cost = Total Batch Cost Summary / Total Pieces or Servings Yielded
+                        ingredients_df.at[idx, 'Cost_Per_Unit'] = computed_prep_cost / batch_yield
+                
+                self.save_tab('Ingredients', ingredients_df)
+            
+            # Step 2: Calculate final retail product costs
             costs = []
             for _, product in products_df.iterrows():
                 product_id = product['Product_ID']
                 cost = self.calculate_product_cost(product_id)
                 costs.append(cost)
             
-            # Add/update cost columns
             products_df['Cost_Price'] = costs
             
             # Calculate profit margin if Selling_Price exists
@@ -394,7 +454,7 @@ class InventoryDB:
             
             # Save updated products
             self.save_tab('Products', products_df)
-            print(f"✅ Updated costs for {len(products_df)} products")
+            print(f"✅ Recalculated costs for {len(products_df)} menu items across multi-tier production lines.")
             return products_df
         except Exception as e:
             print(f"❌ Error updating product costs: {e}")
@@ -480,6 +540,40 @@ class InventoryDB:
         except Exception as e:
             return False, f"Error updating inventory: {str(e)}"
     
+    def delete_ingredient(self, ingredient_id):
+        """Delete an ingredient safely if unlinked to any product formula"""
+        try:
+            ingredients_df = self.read_tab('Ingredients')
+            
+            # Find the ingredient
+            ingredient_idx = ingredients_df[ingredients_df['Ingredient_ID'] == ingredient_id].index
+            
+            if len(ingredient_idx) == 0:
+                return False, f"Ingredient {ingredient_id} not found"
+            
+            idx = ingredient_idx[0]
+            
+            # Check if ingredient is used in any recipes or sub-prep blueprints
+            recipes_df = self.read_tab('Recipes')
+            prep_recipes_df = self.read_tab('Prep_Recipes')
+            
+            if not recipes_df.empty and not recipes_df[recipes_df['Ingredient_ID'] == ingredient_id].empty:
+                return False, f"Cannot delete! This ingredient is linked inside active product formulas."
+            if not prep_recipes_df.empty and (not prep_recipes_df[prep_recipes_df['Raw_Ingredient_ID'] == ingredient_id].empty or not prep_recipes_df[prep_recipes_df['Prepped_Ingredient_ID'] == ingredient_id].empty):
+                return False, "Cannot delete! This ingredient is linked inside active sub-recipe portion templates."
+            
+            # Delete the ingredient row completely
+            ingredients_df = ingredients_df.drop(idx).reset_index(drop=True)
+            
+            # Save
+            self.save_tab('Ingredients', ingredients_df)
+            print(f"✅ Deleted ingredient: {ingredient_id}")
+            return True, f"Ingredient {ingredient_id} deleted successfully"
+            
+        except Exception as e:
+            print(f"❌ Error deleting ingredient: {e}")
+            return False, f"Error deleting ingredient: {str(e)}"
+
     def log_inventory_change(self, product_id, quantity_sold, deductions):
         """Log inventory changes to Inventory_Log tab"""
         try:
@@ -730,6 +824,9 @@ class InventoryDB:
         try:
             ingredients_df = self.read_tab('Ingredients')
             
+            if 'Ingredient_Type' not in ingredient_data:
+                ingredient_data['Ingredient_Type'] = 'RAW'
+            
             # Safety Rule 1: Prevent absolute duplicate ID generation
             if ingredient_data['Ingredient_ID'] in ingredients_df['Ingredient_ID'].values:
                 return False, f"Ingredient ID {ingredient_data['Ingredient_ID']} already exists"
@@ -790,39 +887,6 @@ class InventoryDB:
         except Exception as e:
             print(f"❌ Error updating ingredient: {e}")
             return False, f"Error updating ingredient: {str(e)}"
-    
-    def delete_ingredient(self, ingredient_id):
-        """Delete an ingredient safely if unlinked to any product formula"""
-        try:
-            ingredients_df = self.read_tab('Ingredients')
-            
-            # Find the ingredient
-            ingredient_idx = ingredients_df[ingredients_df['Ingredient_ID'] == ingredient_id].index
-            
-            if len(ingredient_idx) == 0:
-                return False, f"Ingredient {ingredient_id} not found"
-            
-            idx = ingredient_idx[0]
-            
-            # Check if ingredient is used in any recipes
-            recipes_df = self.read_tab('Recipes')
-            if not recipes_df.empty:
-                used_in = recipes_df[recipes_df['Ingredient_ID'] == ingredient_id]
-                if not used_in.empty:
-                    product_ids = used_in['Product_ID'].unique()
-                    return False, f"Cannot delete! This ingredient is linked inside active product formulas: {', '.join(product_ids)}"
-            
-            # Delete the ingredient row completely
-            ingredients_df = ingredients_df.drop(idx).reset_index(drop=True)
-            
-            # Save
-            self.save_tab('Ingredients', ingredients_df)
-            print(f"✅ Deleted ingredient: {ingredient_id}")
-            return True, f"Ingredient {ingredient_id} deleted successfully"
-            
-        except Exception as e:
-            print(f"❌ Error deleting ingredient: {e}")
-            return False, f"Error deleting ingredient: {str(e)}"
     
     def generate_product_id(self):
         """Generate a new unique product ID"""

@@ -27,7 +27,8 @@ def web_ingredients_tab(username):
                 'Current_Stock': float(request.form.get('stock', 0) or 0),
                 'Min_Stock': float(request.form.get('min_stock', 0) or 0),
                 'Cost_Per_Unit': float(request.form.get('cost', 0) or 0),
-                'Active': 'Yes'
+                'Active': 'Yes',
+                'Ingredient_Type': request.form.get('ingredient_type', 'RAW')  # Captures item type classification
             })
             
         # 2. Action to quick-add stock quantity
@@ -48,7 +49,8 @@ def web_ingredients_tab(username):
                     'Category': request.form.get('category', 'General'),
                     'Unit': request.form.get('unit'),
                     'Min_Stock': float(request.form.get('min_stock', 0) or 0),
-                    'Cost_Per_Unit': float(request.form.get('cost', 0) or 0)
+                    'Cost_Per_Unit': float(request.form.get('cost', 0) or 0),
+                    'Ingredient_Type': request.form.get('ingredient_type', 'RAW')  # Preserves or changes type
                 })
                 
         # 4. Action to permanently erase an ingredient row
@@ -62,7 +64,7 @@ def web_ingredients_tab(username):
         if hasattr(db, 'update_all_product_costs'):
             db.update_all_product_costs()
 
-        return redirect(f"/portal/{username}/ingredients")
+        return redirect(f"/portal/{username}/ingredients?type=" + request.form.get('ingredient_type', 'RAW'))
 
     # ===== GET DATA & APPLY GRID FILTERS =====
     df = db.get_inventory_status()
@@ -71,11 +73,19 @@ def web_ingredients_tab(username):
     ingredients_list = []
     total_count = 0
 
+    # Read selected inner sub-tab requested (Defaults to Bulk Raw Materials)
+    current_type = request.args.get('type', 'RAW').upper().strip()
+    if current_type not in ['RAW', 'PREPPED']:
+        current_type = 'RAW'
+
     if not df.empty:
         df['Min_Stock'] = pd.to_numeric(df['Min_Stock'], errors='coerce').fillna(0.0)
         df['Cost_Per_Unit'] = pd.to_numeric(df['Cost_Per_Unit'], errors='coerce').fillna(0.0)
         df['Current_Stock'] = pd.to_numeric(df['Current_Stock'], errors='coerce').fillna(0.0)
         
+        if 'Ingredient_Type' not in df.columns:
+            df['Ingredient_Type'] = 'RAW'
+            
         # Build master category list choices dynamically from database values
         if 'Category' in df.columns:
             categories = sorted([c for c in df['Category'].dropna().unique() if c])
@@ -87,20 +97,23 @@ def web_ingredients_tab(username):
         sort_by = request.args.get('sort_by', 'name')
         order = request.args.get('order', 'asc')
 
-        # Filter 1: Apply Search Rule
+        # Filter 1: Isolate active selection sub-tab dataset 
+        df = df[df['Ingredient_Type'] == current_type]
+
+        # Filter 2: Apply Search Rule
         if search:
             df = df[df['Ingredient_Name'].str.lower().str.contains(search) | 
                     df['Ingredient_ID'].str.lower().str.contains(search)]
             
-        # Filter 2: Apply Status Rule (Normal / Low Stock / Critical)
+        # Filter 3: Apply Status Rule (Normal / Low Stock / Critical)
         if status != 'All':
             df = df[df['Status'] == status]
 
-        # Filter 3: Apply Category Selection Rule
+        # Filter 4: Apply Category Selection Rule
         if category != 'All':
             df = df[df['Category'] == category]
 
-        # Filter 4: Sorting Order Rules
+        # Filter 5: Sorting Order Rules
         ascending = (order == 'asc')
         sort_map = {
             'name': 'Ingredient_Name', 
@@ -121,6 +134,7 @@ def web_ingredients_tab(username):
         ingredients=ingredients_list, 
         categories=categories,
         total_count=total_count,
+        current_type=current_type,
         error_msg=request.args.get('error', ''),
         current_search=request.args.get('search', ''),
         current_status=request.args.get('status', 'All'),

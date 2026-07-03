@@ -1,5 +1,32 @@
 {% extends 'base.html' %}
 {% block content %}
+<style>
+    /* 🔥 HIGH-CONTRAST TEXT VISIBILITY DIAL-IN FOR THE DARK INTERFACE */
+    .modal-content label {
+        color: #e2e8f0 !important;
+        font-weight: 700 !important;
+        font-size: 12.5px !important;
+        margin-bottom: 6px;
+        display: inline-block;
+        letter-spacing: 0.3px;
+    }
+    .modal-content .form-control, .modal-content .form-select {
+        color: #ffffff !important;
+        background-color: #27272c !important;
+        border: 1px solid #3f3f46 !important;
+    }
+    .modal-content .form-control:focus, .modal-content .form-select:focus {
+        background-color: #2e2e35 !important;
+        border-color: #3b82f6 !important;
+        box-shadow: none;
+    }
+    
+    /* 📋 EXECUTIVE PLATFORM SUB-TAB DESIGNS */
+    .nav-tabs .nav-link { color: #94a3b8; border: none; font-weight: 600; padding: 12px 20px; transition: all 0.2s ease; }
+    .nav-tabs .nav-link:hover { color: #cbd5e1; background: #222226; border-radius: 6px 6px 0 0; }
+    .nav-tabs .nav-link.active { color: #3b82f6 !important; background: #2b2b2b !important; border-bottom: 3px solid #3b82f6 !important; border-radius: 6px 6px 0 0; }
+</style>
+
 <div class="d-flex justify-content-between align-items-center mb-3">
     <h3 class="m-0 text-white" style="font-weight: bold;">Ingredients Management</h3>
     <button class="btn btn-primary fw-bold" data-bs-toggle="modal" data-bs-target="#addModal">+ Add New Ingredient</button>
@@ -11,8 +38,20 @@
 </div>
 {% endif %}
 
+<!-- 🌟 HIGH-LEVEL NAVIGATION INNER PILLS STRIP -->
+<ul class="nav nav-tabs border-bottom border-secondary mb-3">
+    <li class="nav-item">
+        <a class="nav-link {% if current_type == 'RAW' %}active{% endif %}" href="?type=RAW&search={{ current_search }}&status={{ current_status }}&category={{ current_category }}&sort_by={{ current_sort }}&order={{ current_order }}">📦 Wholesale Raw Materials</a>
+    </li>
+    <li class="nav-item">
+        <a class="nav-link {% if current_type == 'PREPPED' %}active{% endif %}" href="?type=PREPPED&search={{ current_search }}&status={{ current_status }}&category={{ current_category }}&sort_by={{ current_sort }}&order={{ current_order }}">🎯 Kitchen Prepped / Portioned Components</a>
+    </li>
+</ul>
+
 <div class="content-card mb-3 p-3" style="background-color: #2b2b2b;">
     <form method="GET" class="row gx-2 gy-3 align-items-center">
+        <input type="hidden" name="type" value="{{ current_type }}">
+        
         <div class="col-md-4 d-flex align-items-center">
             <label class="text-light me-2 mb-0">Search:</label>
             <input type="text" name="search" value="{{ current_search }}" class="form-control bg-dark text-white border-secondary" placeholder="ID or Name..." autocomplete="off">
@@ -56,13 +95,13 @@
         </div>
 
         <div class="col-md-auto ms-auto d-flex align-items-end">
-            <a href="/portal/{{ username }}/ingredients" class="btn btn-secondary fw-bold px-4">🗑️ Clear Filters</a>
+            <a href="/portal/{{ username }}/ingredients?type={{ current_type }}" class="btn btn-secondary fw-bold px-4">🗑️ Clear Filters</a>
         </div>
     </form>
 </div>
 
 <div class="bg-light text-dark rounded px-3 py-2 mb-3 text-end" style="font-size: 14px; font-weight: bold;">
-    📊 Total Ingredients Logged: {{ total_count }} rows
+    📊 Total Items in This View: {{ total_count }} rows
 </div>
 
 <div class="content-card">
@@ -84,7 +123,7 @@
             {% for i in ingredients %}
             <tr>
                 <td class="text-light">{{ i.Ingredient_ID }}</td>
-                <td class="text-light">{{ i.Ingredient_Name }}</td>
+                <td class="text-light" style="font-weight: 600;">{{ i.Ingredient_Name }}</td>
                 <td class="text-light">{{ i.Category }}</td>
                 <td class="text-light">{{ i.Unit }}</td>
                 <td class="text-success fw-bold">{{ "%.2f"|format(i.Current_Stock) }}</td>
@@ -119,10 +158,16 @@
             <form method="post">
                 <input type="hidden" name="action_type" value="add_ingredient">
                 <div class="modal-header border-secondary">
-                    <h5 class="modal-title">Register New Ingredient</h5>
+                    <h5 class="modal-title">Register New Ingredient File</h5>
                     <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
                 </div>
                 <div class="modal-body">
+                    <label class="form-label">Ingredient Classification Type:</label>
+                    <select name="ingredient_type" class="form-select bg-secondary text-white border-0 mb-3" required>
+                        <option value="RAW" {% if current_type == 'RAW' %}selected{% endif %}>Raw Wholesale Material (Purchased Bulk Goods)</option>
+                        <option value="PREPPED" {% if current_type == 'PREPPED' %}selected{% endif %}>Kitchen Line Prepped Component (Portioned Pre-assembly)</option>
+                    </select>
+
                     <label class="form-label">Ingredient Name:</label>
                     <input type="text" id="addIngredientNameInput" name="name" class="form-control bg-secondary text-white border-0 mb-1" oninput="checkDuplicateNameAdd(this)" required autocomplete="off">
                     <div id="addNameErrorMsg" class="mb-3" style="display: none; color: #ff4d4d; font-size: 13px; font-weight: bold;">⚠️ This name is already in the database.</div>
@@ -150,6 +195,8 @@
                         <option value="kg">Kilograms (kg)</option>
                         <option value="mL">Milliliters (mL)</option>
                         <option value="L">Liters (L)</option>
+                        <option value="portion">Portion (portion)</option>
+                        <option value="serving">Serving (serving)</option>
                         <option value="pcs" selected>Pieces (pcs)</option>
                         <option value="pack">Pack (pack)</option>
                         <option value="box">Box (box)</option>
@@ -186,6 +233,7 @@
             <form method="post">
                 <input type="hidden" name="action_type" value="add_stock">
                 <input type="hidden" name="ingredient_id" value="{{ i.Ingredient_ID }}">
+                <input type="hidden" name="ingredient_type" value="{{ i.Ingredient_Type }}">
                 <div class="modal-header border-secondary">
                     <h6 class="modal-title">Quick Add Stock: {{ i.Ingredient_Name }}</h6>
                     <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
@@ -213,6 +261,12 @@
                     <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
                 </div>
                 <div class="modal-body">
+                    <label class="form-label">Ingredient Classification Type:</label>
+                    <select name="ingredient_type" class="form-select bg-secondary text-white border-0 mb-3" required>
+                        <option value="RAW" {% if i.Ingredient_Type == 'RAW' %}selected{% endif %}>Raw Wholesale Material (Purchased Bulk Goods)</option>
+                        <option value="PREPPED" {% if i.Ingredient_Type == 'PREPPED' %}selected{% endif %}>Kitchen Line Prepped Component (Portioned Pre-assembly)</option>
+                    </select>
+
                     <label class="form-label">Ingredient Name:</label>
                     <input type="text" id="editIngredientNameInput{{ i.Ingredient_ID }}" name="name" class="form-control bg-secondary text-white border-0 mb-1" value="{{ i.Ingredient_Name }}" oninput="checkDuplicateNameEdit(this, '{{ i.Ingredient_ID }}')" required>
                     <div id="editNameErrorMsg{{ i.Ingredient_ID }}" class="mb-3" style="display: none; color: #ff4d4d; font-size: 13px; font-weight: bold;">⚠️ This name is already taken by another ingredient.</div>
@@ -242,6 +296,8 @@
                         <option value="kg" {% if i.Unit == 'kg' %}selected{% endif %}>Kilograms (kg)</option>
                         <option value="mL" {% if i.Unit == 'mL' %}selected{% endif %}>Milliliters (mL)</option>
                         <option value="L" {% if i.Unit == 'L' %}selected{% endif %}>Liters (L)</option>
+                        <option value="portion" {% if i.Unit == 'portion' %}selected{% endif %}>Portion (portion)</option>
+                        <option value="serving" {% if i.Unit == 'serving' %}selected{% endif %}>Serving (serving)</option>
                         <option value="pcs" {% if i.Unit == 'pcs' %}selected{% endif %}>Pieces (pcs)</option>
                         <option value="pack" {% if i.Unit == 'pack' %}selected{% endif %}>Pack (pack)</option>
                         <option value="box" {% if i.Unit == 'box' %}selected{% endif %}>Box (box)</option>
@@ -270,20 +326,17 @@
 {% endfor %}
 
 <script>
-// Create a fast local index map of existing database names for real-time validation checks
 const globalMasterIngredientNames = [
     {% for i in ingredients %}
         "{{ i.Ingredient_Name|lower|escape }}"{% if not loop.last %},{% endif %}
     {% endfor %}
 ];
 
-// Live check function for the creation window
 function checkDuplicateNameAdd(inputElement) {
     const typedName = inputElement.value.trim().toLowerCase();
     const alertLabel = document.getElementById('addNameErrorMsg');
     const submitBtn = document.getElementById('addIngredientSubmitBtn');
     
-    // Toggle warnings and button locking states
     if (globalMasterIngredientNames.includes(typedName)) {
         alertLabel.style.display = 'block';
         submitBtn.disabled = true;
@@ -293,13 +346,11 @@ function checkDuplicateNameAdd(inputElement) {
     }
 }
 
-// Live check function for modification windows
 function checkDuplicateNameEdit(inputElement, currentEditingId) {
     const typedName = inputElement.value.trim().toLowerCase();
     const alertLabel = document.getElementById('editNameErrorMsg' + currentEditingId);
     const submitBtn = document.getElementById('editIngredientSubmitBtn' + currentEditingId);
     
-    // Search loops to check everything except the current row's ID row configuration
     let isCollisionFound = false;
     
     {% for i in ingredients %}

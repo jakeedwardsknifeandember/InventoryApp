@@ -1,11 +1,48 @@
 {% extends 'base.html' %}
 
 {% block content %}
+<style>
+    /* 🔥 EXECUTIVE DARK-MODE MODAL FORMS CONTRAST RE-ENGINEERING */
+    .modal-content label {
+        color: #e2e8f0 !important;
+        font-weight: 700 !important;
+        font-size: 12px !important;
+        margin-bottom: 6px;
+        display: inline-block;
+        letter-spacing: 0.3px;
+    }
+    .modal-content .form-control, .modal-content .form-select {
+        color: #ffffff !important;
+        background-color: #27272c !important;
+        border: 1px solid #3f3f46 !important;
+    }
+    .modal-content .form-control::placeholder {
+        color: #71717a !important;
+    }
+    
+    /* 📋 NAVIGATION PILLS AND BUTTON OVERRIDES */
+    .nav-tabs .nav-link { color: #94a3b8; border: none; font-weight: 600; padding: 12px 20px; transition: all 0.2s ease; }
+    .nav-tabs .nav-link:hover { color: #cbd5e1; background: #222226; border-radius: 6px 6px 0 0; }
+    .nav-tabs .nav-link.active { color: #3b82f6 !important; background: #2b2b2b !important; border-bottom: 3px solid #3b82f6 !important; border-radius: 6px 6px 0 0; }
+</style>
+
 <div class="container-fluid mt-3">
     <div class="d-flex justify-content-between align-items-center mb-3">
-        <h3 class="text-white m-0" style="font-weight: bold;">Product Recipes Studio</h3>
-        <button class="btn btn-success fw-bold" data-bs-toggle="modal" data-bs-target="#createRecipeModal">+ Create New Recipe</button>
+        <h3 class="text-white m-0" style="font-weight: bold;">Recipes Studio Matrix</h3>
+        <button class="btn btn-success fw-bold" data-bs-toggle="modal" data-bs-target="#createRecipeModal">
+            {% if current_tab == 'product' %}+ Create New Product Recipe{% else %}+ Create New Kitchen Prep Recipe{% endif %}
+        </button>
     </div>
+
+    <!-- 🌟 TOP-LEVEL FUNCTIONAL SUB-TABS STRIP NAVIGATION -->
+    <ul class="nav nav-tabs border-bottom border-secondary mb-3">
+        <li class="nav-item">
+            <a class="nav-link {% if current_tab == 'product' %}active{% endif %}" href="?tab=product">🍕 Product Recipes (Menu Items → Portions)</a>
+        </li>
+        <li class="nav-item">
+            <a class="nav-link {% if current_tab == 'prep' %}active{% endif %}" href="?tab=prep">🍳 Kitchen Prep Recipes (Portions → Raw Materials)</a>
+        </li>
+    </ul>
 
     <div class="bg-dark p-2 rounded mb-3 border border-secondary shadow-sm">
         <div class="row g-2 align-items-center">
@@ -27,10 +64,12 @@
     </div>
 
     <div class="row g-3">
-        
+        <!-- LEFT DIRECTORY SIDEBAR SECTION -->
         <div class="col-md-4">
             <div class="card border-secondary bg-dark text-white" style="max-height: 65vh; overflow-y: auto;">
-                <div class="card-header bg-secondary text-white fw-bold">Menu Item Folders</div>
+                <div class="card-header bg-secondary text-white fw-bold">
+                    {% if current_tab == 'product' %}Menu Item Folders{% else %}Kitchen Line Portions{% endif %}
+                </div>
                 <div class="list-group list-group-flush" id="leftProductListGroup">
                     {% for r in recipe_data %}
                     <button type="button" 
@@ -46,24 +85,27 @@
                                 <h6 class="m-0 fw-bold">{{ r['Product_Name'] }}</h6>
                                 <small class="text-muted">{{ r['Product_ID'] }} • {{ r['Category'] }}</small>
                             </div>
-                            <span class="badge bg-primary">₱{{ "%.2f"|format(r['Selling_Price']) }}</span>
+                            <span class="badge {% if current_tab == 'product' %}bg-primary{% else %}bg-info text-dark{% endif %}">
+                                {% if current_tab == 'product' %}₱{{ "%.2f"|format(r['Selling_Price']) }}{% else %}Prepped Stock Component{% endif %}
+                            </span>
                         </div>
                     </button>
                     {% else %}
-                    <div class="text-center text-muted py-4">No active products found in storage data sheet.</div>
+                    <div class="text-center text-muted py-4">No active directory nodes logged for this workspace selection view.</div>
                     {% endfor %}
                 </div>
             </div>
         </div>
 
+        <!-- RIGHT DATA VIEWER BLOCK SECTION -->
         <div class="col-md-8">
             <div class="card border-secondary bg-dark text-white h-100" style="min-height: 45vh;">
                 <div class="card-header bg-secondary text-white fw-bold">Recipe Specifications Summary Report</div>
                 <div class="card-body p-0" id="rightRecipeViewerCanvas">
                     
                     <div id="blankViewerStateCard" class="text-center py-5">
-                        <h4 class="text-muted mt-4">No Active Menu Folder Selected</h4>
-                        <p class="text-secondary">Click on any product item located in the left sidebar directory layout to open its structural ingredients formulation sheet logs.</p>
+                        <h4 class="text-muted mt-4">No Active Item Selected</h4>
+                        <p class="text-secondary">Select an entry from the left sidebar directory index to view its exact recipe composition matrix breakdown.</p>
                     </div>
 
                     {% for r in recipe_data %}
@@ -71,9 +113,10 @@
                         <div class="p-3 border-bottom border-secondary bg-secondary d-flex justify-content-between align-items-center">
                             <h5 class="m-0 fw-bold">📊 Formula Overview: {{ r['Product_Name'] }}</h5>
                             <div class="d-flex gap-2">
-                                <button class="btn btn-sm btn-primary fw-bold px-3" data-bs-toggle="modal" data-bs-target="#editModal{{ r['Product_ID'] }}">✏️ Edit Recipe</button>
+                                <button class="btn btn-sm btn-primary fw-bold px-3" data-bs-toggle="modal" data-bs-target="#editModal{{ r['Product_ID'] }}">✏️ Edit Formula</button>
                                 <form method="post" class="d-inline" onsubmit="return confirm('Completely purge this recipe compilation matrix?');">
                                     <input type="hidden" name="action_type" value="delete_recipe">
+                                    <input type="hidden" name="recipe_type" value="{{ current_tab }}">
                                     <input type="hidden" name="product_id" value="{{ r['Product_ID'] }}">
                                     <button type="submit" class="btn btn-sm btn-danger fw-bold px-3">🗑️ Delete</button>
                                 </form>
@@ -83,17 +126,17 @@
                         <table class="table table-dark table-hover mb-0 border-bottom border-secondary">
                             <thead>
                                 <tr class="text-secondary font-monospace" style="font-size: 13px;">
-                                    <th>INGREDIENT COMPONENT</th>
+                                    <th>INGREDIENT CONSTITUENT COMPONENT</th>
                                     <th>QTY METRIC</th>
                                     <th>UNIT</th>
-                                    <th>COST / UNIT</th>
-                                    <th class="text-end">LINE COST</th>
+                                    <th>COST / UNIT BASE</th>
+                                    <th class="text-end">LINE ITEM COST</th>
                                 </tr>
                             </thead>
                             <tbody>
                                 {% for item in r['Items'] %}
                                 <tr>
-                                    <td class="text-white fw-bold">{{ item['Name'] }}</td>
+                                    <td class="text-white fw-bold">{{ item['Name'] }} <small class="text-muted font-monospace">({{ item['ID'] }})</small></td>
                                     <td class="text-light">{{ item['Qty'] }}</td>
                                     <td><span class="badge bg-secondary">{{ item['Unit'] }}</span></td>
                                     <td class="text-light">₱{{ "%.2f"|format(item['Cost']) }} / {{ item['Base_Unit'] }}</td>
@@ -101,32 +144,48 @@
                                 </tr>
                                 {% else %}
                                 <tr>
-                                    <td colspan="5" class="text-center text-muted py-4">No structural ingredient costs mapped to this folder yet. Click edit recipe above to begin matching.</td>
+                                    <td colspan="5" class="text-center text-muted py-4">No structural specifications mapped to this ledger yet. Click edit recipe above to initialize parameters.</td>
                                 </tr>
                                 {% endfor %}
                             </tbody>
                         </table>
 
                         <div class="p-3 bg-dark rounded-bottom">
-                            <div class="row g-2 text-center">
+                            <div class="row g-2 text-center justify-content-center">
                                 <div class="col-4">
                                     <div class="p-3 rounded border border-secondary" style="background-color: #222222;">
-                                        <span class="d-block text-info fw-bold text-uppercase mb-1" style="font-size: 12px; letter-spacing: 0.5px;">Total Cost</span>
+                                        <span class="d-block text-info fw-bold text-uppercase mb-1" style="font-size: 11px; letter-spacing: 0.5px;">{% if current_tab == 'product' %}Computed Material Cost{% else %}Total Batch Formula Cost{% endif %}</span>
                                         <h3 class="m-0 text-warning fw-bold">₱{{ "%.2f"|format(r['Total_Cost']) }}</h3>
+                                    </div>
+                                </div>
+                                {% if current_tab == 'prep' %}
+                                <div class="col-4">
+                                    <div class="p-3 rounded border border-secondary" style="background-color: #222222;">
+                                        <span class="d-block text-info fw-bold text-uppercase mb-1" style="font-size: 11px; letter-spacing: 0.5px;">Batch Output Yield</span>
+                                        <h3 class="m-0 text-info fw-bold">{{ r['Batch_Yield'] }} Servings</h3>
                                     </div>
                                 </div>
                                 <div class="col-4">
                                     <div class="p-3 rounded border border-secondary" style="background-color: #222222;">
-                                        <span class="d-block text-info fw-bold text-uppercase mb-1" style="font-size: 12px; letter-spacing: 0.5px;">Net Profit</span>
+                                        <span class="d-block text-success fw-bold text-uppercase mb-1" style="font-size: 11px; letter-spacing: 0.5px;">Final Amortized Cost / Unit</span>
+                                        <h3 class="m-0 text-success fw-bold">₱{{ "%.2f"|format(r['Selling_Price']) }}</h3>
+                                    </div>
+                                </div>
+                                {% endif %}
+                                {% if current_tab == 'product' %}
+                                <div class="col-4">
+                                    <div class="p-3 rounded border border-secondary" style="background-color: #222222;">
+                                        <span class="d-block text-info fw-bold text-uppercase mb-1" style="font-size: 11px; letter-spacing: 0.5px;">Gross Profit</span>
                                         <h3 class="m-0 text-success fw-bold">₱{{ "%.2f"|format(r['Profit']) }}</h3>
                                     </div>
                                 </div>
                                 <div class="col-4">
                                     <div class="p-3 rounded border border-secondary" style="background-color: #222222;">
-                                        <span class="d-block text-info fw-bold text-uppercase mb-1" style="font-size: 12px; letter-spacing: 0.5px;">Margin %</span>
+                                        <span class="d-block text-info fw-bold text-uppercase mb-1" style="font-size: 11px; letter-spacing: 0.5px;">Margin %</span>
                                         <h3 class="m-0 text-info fw-bold">{{ "%.1f"|format(r['Margin']) }}%</h3>
                                     </div>
                                 </div>
+                                {% endif %}
                             </div>
                         </div>
                     </div>
@@ -135,40 +194,59 @@
                 </div>
             </div>
         </div>
-
     </div>
 </div>
 
+<!-- 📦 ENTRY DIALOG WINDOW: BUILD FORMULAS -->
 <div class="modal fade" id="createRecipeModal" tabindex="-1">
     <div class="modal-dialog modal-lg">
         <div class="modal-content bg-dark text-white border border-secondary">
             <form method="post">
                 <input type="hidden" name="action_type" value="save_recipe">
+                <input type="hidden" name="recipe_type" value="{{ current_tab }}">
                 <div class="modal-header border-secondary">
-                    <h5 class="modal-title fw-bold text-success">Build Brand New Product Recipe Formula</h5>
+                    <h5 class="modal-title fw-bold {% if current_tab == 'product' %}text-success{% else %}text-info{% endif %}">
+                        {% if current_tab == 'product' %}Build Brand New Product Recipe Formula{% else %}Build Kitchen Prep Production Blueprint{% endif %}
+                    </h5>
                     <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
                 </div>
                 <div class="modal-body">
-                    <label class="form-label fw-bold text-light">Select Target Base Product Item Profile:</label>
+                    <label class="form-label fw-bold text-light">
+                        {% if current_tab == 'product' %}Select Target Retail Menu Item Profile:{% else %}Select Target Kitchen Prepped Component Profile:{% endif %}
+                    </label>
                     <select name="product_id" class="form-select bg-secondary text-white border-0 mb-4" required>
-                        <option value="" disabled selected>Choose target product directory entry...</option>
-                        {% for prod in all_products %}
-                            <option value="{{ prod.Product_ID }}">{{ prod.Product_Name }} ({{ prod.Product_ID }})</option>
-                        {% endfor %}
+                        <option value="" disabled selected>Choose target workspace directory profile...</option>
+                        {% if current_tab == 'product' %}
+                            {% for prod in all_products %}
+                                <option value="{{ prod.Product_ID }}">{{ prod.Product_Name }} ({{ prod.Product_ID }})</option>
+                            {% endfor %}
+                        {% else %}
+                            {% for prep_ing in unallocated_prepped_items %}
+                                <option value="{{ prep_ing.Ingredient_ID }}">{{ prep_ing.Ingredient_Name }} ({{ prep_ing.Ingredient_ID }})</option>
+                            {% endfor %}
+                        {% endif %}
                     </select>
 
+                    <!-- 🍳 FIELD ADDITION: DYNAMIC PROPORTIONAL DIVISOR FACTOR FOR SUB-BATCHES -->
+                    {% if current_tab == 'prep' %}
+                    <div class="p-3 mb-4 rounded border border-info" style="background-color: #172554;">
+                        <label class="form-label fw-bold text-info" style="font-size:13px !important;">🎯 TOTAL BATCH OUTPUT YIELD VOLUME:</label>
+                        <input type="number" step="any" name="batch_yield" class="form-control text-white fw-bold mb-1" style="background:#1e1e24;" value="1.0" min="0.001" required>
+                        <small class="text-muted text-white-50 d-block" style="font-size:11px;">Type in how many single portions, servings, or mL this entire ingredient combination yields. The system automatically divides your total raw expense costs over this index to get your true per-unit cost.</small>
+                    </div>
+                    {% endif %}
+
                     <div class="row text-secondary fw-bold mb-2 font-monospace" style="font-size: 12px;">
-                        <div class="col-5">INGREDIENT COMPONENT</div>
+                        <div class="col-5">INGREDIENT STOCK MATERIAL COMPONENT</div>
                         <div class="col-3">QTY REQUIRED</div>
                         <div class="col-3">MEASUREMENT UNIT AUTO-SCALE</div>
                         <div class="col-1"></div>
                     </div>
                     
-                    <div id="creationRecipeRowsDiv">
-                        </div>
+                    <div id="creationRecipeRowsDiv"></div>
                 </div>
                 <div class="modal-footer border-secondary justify-content-between">
-                    <button type="button" class="btn btn-info fw-bold" onclick="appendDynamicIngredientInputRow('creationRecipeRowsDiv')">＋ Add Component Line</button>
+                    <button type="button" class="btn btn-info fw-bold" onclick="appendDynamicIngredientInputRow('creationRecipeRowsDiv')">＋ Add Ingredient Line</button>
                     <button type="submit" class="btn btn-success fw-bold px-4">✔ Confirm Formula Data Entry</button>
                 </div>
             </form>
@@ -176,20 +254,32 @@
     </div>
 </div>
 
+<!-- 📦 POPUP WORKSPACE MODAL: MANAGE AND UPDATE SPECIFICATION MATRIX ROWS -->
 {% for r in recipe_data %}
 <div class="modal fade" id="editModal{{ r['Product_ID'] }}" tabindex="-1">
     <div class="modal-dialog modal-lg">
         <div class="modal-content bg-dark text-white border border-secondary">
             <form method="post">
                 <input type="hidden" name="action_type" value="save_recipe">
+                <input type="hidden" name="recipe_type" value="{{ current_tab }}">
                 <input type="hidden" name="product_id" value="{{ r['Product_ID'] }}">
                 <div class="modal-header border-secondary">
                     <h5 class="modal-title fw-bold text-info">Modify Formula Specification Matrix: {{ r['Product_Name'] }}</h5>
                     <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
                 </div>
                 <div class="modal-body">
+                    
+                    <!-- 🍳 FIELD ADDITION: DYNAMIC PROPORTIONAL DIVISOR FACTOR FOR EDITING SUB-BATCHES -->
+                    {% if current_tab == 'prep' %}
+                    <div class="p-3 mb-4 rounded border border-info" style="background-color: #172554;">
+                        <label class="form-label fw-bold text-info" style="font-size:13px !important;">🎯 TOTAL BATCH OUTPUT YIELD VOLUME:</label>
+                        <input type="number" step="any" name="batch_yield" class="form-control text-white fw-bold mb-1" style="background:#1e1e24;" value="{{ r['Batch_Yield'] }}" min="0.001" required>
+                        <small class="text-muted text-white-50 d-block" style="font-size:11px;">Update how many portions, servings, or mL this recipe yields. Amortization formulas recalculate margins live upon submission.</small>
+                    </div>
+                    {% endif %}
+
                     <div class="row text-secondary fw-bold mb-2 font-monospace" style="font-size: 12px;">
-                        <div class="col-5">INGREDIENT COMPONENT</div>
+                        <div class="col-5">INGREDIENT CONSTITUENT COMPONENT</div>
                         <div class="col-3">QTY REQUIRED</div>
                         <div class="col-3">MEASUREMENT UNIT AUTO-SCALE</div>
                         <div class="col-1"></div>
@@ -220,8 +310,8 @@
                     </div>
                 </div>
                 <div class="modal-footer border-secondary justify-content-between">
-                    <button type="button" class="btn btn-info fw-bold" onclick="appendDynamicIngredientInputRow('recipeRows{{ r['Product_ID'] }}')">＋ Add Line</button>
-                    <button type="submit" class="btn btn-success fw-bold px-4">✔ Update Recipe Matrix</button>
+                    <button type="button" class="btn btn-info fw-bold" onclick="appendDynamicIngredientInputRow('recipeRows{{ r['Product_ID'] }}')">＋ Add Component Line</button>
+                    <button type="submit" class="btn btn-success fw-bold px-4">✔ Update Specification Changes</button>
                 </div>
             </form>
         </div>
@@ -256,7 +346,7 @@ function appendDynamicIngredientInputRow(containerElementId) {
         <div class="row mb-2 align-items-center tracking-ingredient-row-block">
             <div class="col-5">
                 <select name="ingredient_id[]" class="form-select bg-secondary text-white border-0 ingredient-selector-node" onchange="synchronizeRowMeasurementUnitOptions(this)" required>
-                    <option value="" disabled selected>Select stock ingredient...</option>
+                    <option value="" disabled selected>Select ingredient constituent...</option>
                     {% for i in ingredients %}
                     <option value="{{ i.Ingredient_ID }}" data-native-unit="{{ i.Unit }}">{{ i.Ingredient_Name }}</option>
                     {% endfor %}
@@ -284,8 +374,14 @@ function switchActiveRecipeDisplay(productIdCode) {
     const buttons = document.querySelectorAll('.item-nav-action-block');
     buttons.forEach(btn => btn.classList.remove('active', 'bg-primary'));
     
-    document.getElementById('detail-card-' + productIdCode).style.display = 'block';
-    document.getElementById('btn-nav-' + productIdCode).classList.add('active', 'bg-primary');
+    const targetBlock = document.getElementById('detail-card-' + productIdCode);
+    if (targetBlock) {
+        targetBlock.style.display = 'block';
+    }
+    const targetButton = document.getElementById('btn-nav-' + productIdCode);
+    if (targetButton) {
+        targetButton.classList.add('active', 'bg-primary');
+    }
 }
 
 function runSplitDashboardFilters() {
