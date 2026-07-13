@@ -1,41 +1,68 @@
-# routes/auth.py - Authentication Module (Login/Logout Routing)
-from flask import Blueprint, request, redirect, url_for, session, render_template
+# routes/auth.py - Dedicated Authentication & Access Blueprint Engine
+from flask import Blueprint, request, redirect, session, render_template
 import sqlite3
+import os
 
-# 🌟 This acts as our mini-app engine specifically for authentication
 auth_bp = Blueprint('auth', __name__)
 
 USER_DB_PATH = "data/users.db"
-
-@auth_bp.route('/')
-def index():
-    if 'logged_in_user' in session: 
-        # FIXED: Enforced matching direct literal path routing to eliminate the url_for BuildError
-        return redirect(f"/portal/{session['logged_in_user']}")
-    return redirect(url_for('auth.login'))
 
 @auth_bp.route('/login', methods=['GET', 'POST'])
 def login():
     error = None
     if request.method == 'POST':
-        input_user = request.form['username'].lower().strip()
-        input_pass = request.form['password']
+        login_type = request.form.get('login_type', 'owner')
+        tenant_company = request.form.get('username', '').lower().strip()
+        password = request.form.get('password', '')
         
-        conn = sqlite3.connect(USER_DB_PATH)
-        cursor = conn.cursor()
-        cursor.execute("SELECT password, subscription_status FROM users WHERE username = ?", (input_user,))
-        user_record = cursor.fetchone()
-        conn.close()
+        # 👑 SCENARIO A: AUTHENTICATE MASTER BUSINESS OWNER
+        if login_type == 'owner':
+            conn = sqlite3.connect(USER_DB_PATH)
+            cursor = conn.cursor()
+            cursor.execute("SELECT password FROM users WHERE username = ?", (tenant_company,))
+            record = cursor.fetchone()
+            conn.close()
+            
+            if record and record[0] == password:
+                session['logged_in_user'] = tenant_company
+                session['staff_user'] = tenant_company
+                session['staff_role'] = 'Platform Owner Admin'
+                return redirect(f'/portal/{tenant_company}')
+            else:
+                error = "Invalid master owner company credentials."
         
-        if user_record and input_pass == user_record[0] and user_record[1] == 'Active':
-            session['logged_in_user'] = input_user
-            # Redirect to the main client portal dashboard
-            return redirect(f"/portal/{input_user}")
-        error = "❌ Invalid credentials."
-        
+        # 👥 SCENARIO B: AUTHENTICATE TEAM MEMBER (MANAGER / CREW)
+        else:
+            staff_user = request.form.get('staff_username', '').lower().strip()
+            client_db_path = f"data/client_{tenant_company}.db"
+            
+            if not os.path.exists(client_db_path):
+                error = f"Store database code '{tenant_company}' does not exist."
+            else:
+                conn = sqlite3.connect(client_db_path)
+                cursor = conn.cursor()
+                
+                # Check to see if staff registry exists inside sqlite metadata
+                cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='Staff_Accounts'")
+                if not cursor.fetchone():
+                    conn.close()
+                    error = "No staff accounts provisioned for this store location."
+                else:
+                    cursor.execute("SELECT Password, Role FROM Staff_Accounts WHERE Username = ?", (staff_user,))
+                    record = cursor.fetchone()
+                    conn.close()
+                    
+                    if record and record[0] == password:
+                        session['logged_in_user'] = tenant_company  # Safe file resolution tracking
+                        session['staff_user'] = staff_user
+                        session['staff_role'] = record[1]          # Grant RBAC permissions key token
+                        return redirect(f'/portal/{tenant_company}')
+                    else:
+                        error = "Invalid staff user credentials or access passkey."
+                        
     return render_template('login.html', error=error)
 
 @auth_bp.route('/logout')
 def logout():
-    session.pop('logged_in_user', None)
-    return redirect(url_for('auth.login'))
+    session.clear()
+    return redirect('/login')

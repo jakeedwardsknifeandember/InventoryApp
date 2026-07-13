@@ -3,29 +3,87 @@
 <head>
     <title>SaaS Portal Login</title>
     <style>
-        body { font-family: Arial, sans-serif; background: #242424; color: #fff; text-align: center; padding-top: 150px; }
-        .card { background: #2b2b2b; display: inline-block; padding: 40px; border-radius: 8px; width: 300px; text-align: left; box-shadow: 0 4px 10px rgba(0,0,0,0.3); }
-        input { width: 100%; padding: 10px; margin: 10px 0; background: #242424; color: #fff; border: 1px solid #3a3a3a; border-radius: 4px; box-sizing: border-box; }
-        input[type="submit"] { background: #3b8ed0; font-weight: bold; cursor: pointer; border: none; color: white; }
+        body { font-family: 'Segoe UI', Arial, sans-serif; background: #242424; color: #fff; text-align: center; padding-top: 100px; margin: 0; }
+        .card { background: #2b2b2b; display: inline-block; padding: 35px; border-radius: 8px; width: 340px; text-align: left; box-shadow: 0 4px 15px rgba(0,0,0,0.4); border: 1px solid #3f3f46; }
+        
+        /* Premium Navigation Interface Mode Toggles */
+        .login-tabs { display: flex; border-bottom: 2px solid #3f3f46; margin-bottom: 25px; }
+        .login-tab { flex: 1; text-align: center; padding: 10px 0; font-weight: bold; font-size: 13px; color: #94a3b8; cursor: pointer; transition: all 0.2s ease; }
+        .login-tab:hover { color: #fff; background: #333; border-radius: 4px 4px 0 0; }
+        .login-tab.active { color: #3b8ed0; border-bottom: 3px solid #3b8ed0; margin-bottom: -2px; }
+        
+        label { font-size: 12px; font-weight: bold; color: #cbd5e1; letter-spacing: 0.3px; display: block; margin-top: 10px; }
+        input { width: 100%; padding: 11px; margin: 6px 0 16px 0; background: #1e1e1e; color: #fff; border: 1px solid #3f3f46; border-radius: 4px; box-sizing: border-box; font-size: 14px; }
+        input:focus { border-color: #3b8ed0; outline: none; background: #222; }
+        
+        input[type="submit"] { background: #3b8ed0; font-weight: bold; cursor: pointer; border: none; color: white; margin-top: 10px; font-size: 14px; transition: background 0.2s; }
         input[type="submit"]:hover { background: #2a7caf; }
+        
+        .alert-box { background: #c24b4b22; color: #ff6b6b; padding: 12px; border-radius: 6px; font-size: 13px; font-weight: bold; margin-bottom: 20px; border: 1px solid #c24b4b44; text-align: center; }
     </style>
 </head>
 <body>
     <div class="card">
-        <h2>Sign In</h2>
+        <h2 style="margin-top:0; margin-bottom:20px; text-align:center; font-weight:800; letter-spacing:0.5px;">Knife & Ember Matrix</h2>
+        
+        <!-- 🌟 DYNAMIC VISUAL SELECTION ACCOUNT INTERFACE TABS -->
+        <div class="login-tabs">
+            <div id="tabOwner" class="login-tab active" onclick="switchLoginMode('owner')">👑 Business Owner</div>
+            <div id="tabStaff" class="login-tab" onclick="switchLoginMode('staff')">👥 Kitchen Terminal</div>
+        </div>
+
         {% if error %}
-            <p style="color: #ff6b6b; font-size: 14px; font-weight: bold;">{{ error }}</p>
+            <div class="alert-box">{{ error }}</div>
         {% endif %}
         
         <form method="post">
-            <label>Username:</label>
-            <input type="text" name="username" required autocomplete="off">
+            <!-- Mode Controller Parameter Tracking Token -->
+            <input type="hidden" id="loginTypeHiddenInput" name="login_type" value="owner">
             
-            <label>Password:</label>
-            <input type="password" name="password" required>
+            <label id="companyLabelInput">Company Store Code / Tenant ID:</label>
+            <input type="text" name="username" required placeholder="e.g., bakery" autocomplete="off">
             
-            <input type="submit" value="Log In">
+            <!-- Dynamic Extension Injection Field: Shows up only for team members -->
+            <div id="staffUserRowContainer" style="display: none;">
+                <label>Staff User Account Account ID:</label>
+                <input type="text" id="staffUsernameField" name="staff_username" placeholder="e.g., barista_john" autocomplete="off">
+            </div>
+            
+            <label>Security Access Passkey / Password:</label>
+            <input type="password" name="password" required placeholder="••••••••">
+            
+            <input type="submit" id="submitLoginBtn" value="Sign In As Administrative Owner">
         </form>
     </div>
+
+    <script>
+    function switchLoginMode(targetMode) {
+        const tabOwner = document.getElementById('tabOwner');
+        const tabStaff = document.getElementById('tabStaff');
+        const hiddenInput = document.getElementById('loginTypeHiddenInput');
+        const companyLabel = document.getElementById('companyLabelInput');
+        const staffContainer = document.getElementById('staffUserRowContainer');
+        const staffField = document.getElementById('staffUsernameField');
+        const submitBtn = document.getElementById('submitLoginBtn');
+        
+        hiddenInput.value = targetMode;
+        
+        if (targetMode === 'owner') {
+            tabOwner.classList.add('active');
+            tabStaff.classList.remove('active');
+            companyLabel.innerText = "Company Store Code / Tenant ID:";
+            staffContainer.style.display = 'none';
+            staffField.removeAttribute('required');
+            submitBtn.value = "Sign In As Administrative Owner";
+        } else {
+            tabStaff.classList.add('active');
+            tabOwner.classList.remove('active');
+            companyLabel.innerText = "Target Company Store Code:";
+            staffContainer.style.display = 'block';
+            staffField.setAttribute('required', 'required');
+            submitBtn.value = "Sign In To Team Workstation";
+        }
+    }
+    </script>
 </body>
 </html>

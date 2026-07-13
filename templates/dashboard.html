@@ -1,27 +1,292 @@
-{% extends 'base.html' %}
+{% extends "base.html" %}
 {% block content %}
-<div class="text-center">
-    <h2 class="mb-4" style="font-weight: bold;">Dashboard</h2>
+
+<!-- 📊 Chart.js Industrial Visualization Canvas Library Engine Hook -->
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+<style>
+    /* Premium High-Contrast Colorway Variables & Typography Rules */
+    .dashboard-headline { font-size: 24px; font-weight: 800; color: #ffffff; letter-spacing: 0.3px; margin: 0; }
+    .dashboard-subtitle { font-size: 13px; color: #a1a1aa; margin: 2px 0 0 0; }
     
-    <div class="d-flex justify-content-center gap-4 flex-wrap mb-5">
-        <div class="content-card text-center" style="width: 240px; background-color: #3b8ed0; border: none;">
-            <div style="font-size: 14px;">Total Products</div>
-            <h2 style="margin: 0; font-weight: bold;">{{ total_products }}</h2>
+    .kpi-card { background: #1e1e2e; border: 1px solid #3f3f46; border-radius: 8px; padding: 20px; box-sizing: border-box; }
+    .kpi-title { font-size: 12px; font-weight: 700; color: #94a3b8; text-uppercase: uppercase; letter-spacing: 0.5px; margin-bottom: 6px; }
+    .kpi-value { font-size: 26px; font-weight: 800; color: #ffffff; line-height: 1.2; }
+    .kpi-subtext { font-size: 12px; font-weight: 600; color: #cbd5e1; margin-top: 8px; display: flex; align-items: center; gap: 6px; }
+
+    .badge-filter-btn { padding: 8px 16px; border-radius: 20px; font-size: 13px; font-weight: bold; border: 1px solid #3f3f46; background: #1e1e2e; color: #94a3b8; text-decoration: none; transition: all 0.2s; }
+    .badge-filter-btn:hover { background: #2d2d3f; color: #fff; }
+    .badge-filter-btn.active { background: #2fa572; color: #fff; border-color: #2fa572; }
+
+    /* Custom Split Layout Matrix Components matching Image 1 Blueprint specs */
+    .dashboard-split-row { display: grid; grid-template-columns: 1.6fr 1fr; gap: 20px; margin-bottom: 20px; align-items: start; }
+    @media(max-width: 992px) { .dashboard-split-row { grid-template-columns: 1fr; } }
+
+    .panel-card { background: #1e1e2e; border: 1px solid #3f3f46; border-radius: 8px; padding: 22px; box-sizing: border-box; }
+    .panel-header-title { font-size: 16px; font-weight: 700; color: #ffffff; margin: 0 0 15px 0; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #2d2d3f; padding-bottom: 10px; }
+    
+    /* Logbook Activity Feed Component Line Items Styles */
+    .log-stream-container { display: flex; flex-direction: column; gap: 12px; max-height: 420px; overflow-y: auto; padding-right: 4px; }
+    .log-entry-item { background: #161622; border-left: 4px solid #3f3f46; border-radius: 0 6px 6px 0; padding: 12px 14px; border-top: 1px solid #252535; border-right: 1px solid #252535; border-bottom: 1px solid #252535; }
+    .log-meta-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px; }
+    .log-timestamp { font-size: 11px; font-family: monospace; color: #94a3b8; font-weight: bold; }
+    .log-title-string { font-size: 13.5px; font-weight: 700; color: #ffffff; margin-bottom: 4px; }
+    .log-notes-body { font-size: 12px; color: #cbd5e1; background: #202030; padding: 6px 10px; border-radius: 4px; font-style: italic; margin-top: 6px; border: 1px solid #2d2d3f; }
+</style>
+
+<div class="container-fluid p-0">
+    
+    <!-- 👑 HEADER CONTROLS NAVIGATION BAR BANNER -->
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h1 class="dashboard-headline">Today's Store Operations Overview</h1>
+            <p class="dashboard-subtitle">Active Oversight Matrix Domain Console for profile: <b class="text-info font-monospace">{{ username|upper }}</b></p>
         </div>
-        <div class="content-card text-center" style="width: 240px; background-color: #2fa572; border: none;">
-            <div style="font-size: 14px;">Total Revenue</div>
-            <h2 style="margin: 0; font-weight: bold;">₱{{ "%.2f"|format(total_revenue) }}</h2>
+        <form method="get" action="/portal/{{ username }}" id="dateControlFilterForm">
+            <div class="d-flex align-items-center gap-2 bg-dark p-2 border border-secondary rounded">
+                <input type="hidden" name="period" id="periodTrackingHiddenInput" value="{{ current_period }}">
+                <a href="/portal/{{ username }}?period=today" class="badge-filter-btn {% if current_period == 'today' %}active{% endif %}" style="padding:4px 12px; font-size:12px;">Today</a>
+                <a href="/portal/{{ username }}?period=this_week" class="badge-filter-btn {% if current_period == 'this_week' %}active{% endif %}" style="padding:4px 12px; font-size:12px;">Week</a>
+                <a href="/portal/{{ username }}?period=this_month" class="badge-filter-btn {% if current_period == 'this_month' %}active{% endif %}" style="padding:4px 12px; font-size:12px;">Month</a>
+                
+                <input type="date" name="start_date" id="customStartDateInput" value="{{ start_date }}" class="form-control form-control-sm bg-secondary text-white border-0 font-monospace" style="width:115px; font-size:11px;" onchange="document.getElementById('periodTrackingHiddenInput').value='custom';">
+                <input type="date" name="end_date" id="customEndDateInput" value="{{ end_date }}" class="form-control form-control-sm bg-secondary text-white border-0 font-monospace" style="width:115px; font-size:11px;" onchange="document.getElementById('periodTrackingHiddenInput').value='custom';">
+                <button type="submit" class="btn btn-sm btn-success fw-bold text-white px-2 py-0.5" style="font-size:11px;">Apply</button>
+            </div>
+        </form>
+    </div>
+
+    <!-- 💡 JINJA RUNTIME MATH EXECUTION FOR PERFORMANCE COEFFICIENTS -->
+    {% set net_profit = total_revenue - total_expenses %}
+    {% if total_revenue > 0 %}
+        {% set profit_margin = (net_profit / total_revenue) * 100 %}
+    {% else %}
+        {% set profit_margin = 0.0 %}
+    {% endif %}
+
+    <!-- 👑 4-COLUMN TOP GRID: HIGH IMPACT METRIC CARD OVERVIEWS -->
+    <div class="row g-3 mb-4">
+        <!-- CARD 1: GROSS TRANSACTION VOLUME -->
+        <div class="col-md-3">
+            <div class="kpi-card" style="border-top: 4px solid #2fa572;">
+                <div class="kpi-title">Gross Revenue Sales</div>
+                <div class="kpi-value">₱{{ "{:,.2f}".format(total_revenue) }}</div>
+                <div class="kpi-subtext" style="color: #2fa572;">
+                    <span>📈</span> Total Orders Processed: {{ sales_count }}
+                </div>
+            </div>
         </div>
-        <div class="content-card text-center" style="width: 240px; background-color: #727d82; border: none;">
-            <div style="font-size: 14px;">Low Stock Items</div>
-            <h2 style="margin: 0; font-weight: bold;">{{ low_stock_count }}</h2>
+
+        <!-- CARD 2: TOTAL OUTLAYS EXPENSES -->
+        <div class="col-md-3">
+            <div class="kpi-card" style="border-top: 4px solid #c24b4b;">
+                <div class="kpi-title">Total Cash Outlays</div>
+                <div class="kpi-value">₱{{ "{:,.2f}".format(total_expenses) }}</div>
+                <div class="kpi-subtext" style="color: #ff6b6b;">
+                    <span>📉</span> Active Expense Channels logged
+                </div>
+            </div>
         </div>
-        <div class="content-card text-center" style="width: 240px; background-color: #727d82; border: none;">
-            <div style="font-size: 14px;">Total Expenses</div>
-            <h2 style="margin: 0; font-weight: bold;">₱{{ "%.2f"|format(total_expenses) }}</h2>
+
+        <!-- CARD 3: NET PERFORMANCE RATIO -->
+        <div class="col-md-3">
+            <div class="kpi-card" style="border-top: 4px solid #3b8ed0;">
+                <div class="kpi-title">Net Cash Position</div>
+                <div class="kpi-value {% if net_profit >= 0 %}text-info{% else %}text-danger{% endif %}">₱{{ "{:,.2f}".format(net_profit) }}</div>
+                <div class="kpi-subtext text-white">
+                    <span>📊</span> Net Margin Factor: <b class="text-warning font-monospace">{{ "{:.1f}%".format(profit_margin) }}</b>
+                </div>
+            </div>
+        </div>
+
+        <!-- CARD 4: MATERIAL DEFICIENCIES -->
+        <div class="col-md-3">
+            <div class="kpi-card" style="border-top: 4px solid #d97706;">
+                <div class="kpi-title">Material Stock Deficiencies</div>
+                <div class="kpi-value {% if low_stock_count > 0 %}text-warning{% else %}text-white-50{% endif %}">{{ low_stock_count }} Triggers</div>
+                <div class="kpi-subtext text-light" style="opacity:0.85;">
+                    <span>⚠️</span> Registered Menu Items: {{ total_products }}
+                </div>
+            </div>
         </div>
     </div>
 
-    <a href="/portal/{{ username }}/sales" class="btn btn-primary px-4 py-2" style="font-weight: bold;">💰 Open POS Sales Register</a>
+    <!-- 👑 MIDDLE SPLIT ROW: VOLUME DISTRIBUTION LINE GRAPH vs STRATEGIC MENU ENGINEERING PANEL -->
+    <div class="dashboard-split-row">
+        <!-- MIDDLE LEFT COLUMN: DYNAMIC AREA CHART GRAPH -->
+        <div class="panel-card">
+            <h5 class="panel-header-title">📈 Volumetric Sales Stream Distribution</h5>
+            <div style="position: relative; height: 260px; width:100%;">
+                <canvas id="loyverseInspiredVolumeChart"></canvas>
+            </div>
+        </div>
+
+        <!-- MIDDLE RIGHT COLUMN: CORE MENU ENGINEERING CLASSIFICATIONS PLATFORM -->
+        <div class="panel-card">
+            <h5 class="panel-header-title">⭐ Strategic Menu Engineering Matrix</h5>
+            <div class="d-flex flex-column gap-2" style="max-height: 260px; overflow-y: auto; padding-right:2px;">
+                {% for item in menu_matrix %}
+                <div class="p-2 rounded border border-secondary" style="background:#161622; display:flex; justify-content:space-between; align-items:center;">
+                    <div style="max-width:65%;">
+                        <div class="fw-bold text-white" style="font-size:13px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">{{ item.name }}</div>
+                        <div class="text-light small" style="opacity:0.6; font-size:11px;">{{ item.strategy }}</div>
+                    </div>
+                    <div class="text-end">
+                        <span class="badge bg-{{ item.badge }} font-monospace" style="font-size:10px; display:block; margin-bottom:3px;">{{ item.classification }}</span>
+                        <span class="text-white font-monospace small fw-bold">Vol: {{ item.volume }}</span>
+                    </div>
+                </div>
+                {% else %}
+                <div class="text-center text-muted small py-4">No active catalog items provisioned to map matrix classifications.</div>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+
+    <!-- 👑 BOTTOM SPLIT ROW: THE REAL-TIME OPERATIONS LOGBOOK vs FINANCIAL DEFICIT DOUGHNUT CHART -->
+    <div class="dashboard-split-row">
+        <!-- BOTTOM LEFT COLUMN: MANAGER SHIFT OPERATIONS LOGBOOK DEBRIEF AGGREGATION -->
+        <div class="panel-card">
+            <div class="panel-header-title">
+                <span>📋 Real-Time Shift Operations Logbook (Debrief Terminal)</span>
+                <span class="badge bg-secondary font-monospace" style="font-size:11px; color:#fff;">Daily Activity Stream</span>
+            </div>
+            
+            <div class="log-stream-container">
+                {% for log in logbook %}
+                <div class="log-entry-item" style="border-left-color: {% if log.badge == 'danger' %}#c24b4b{% elif log.badge == 'info' %}#3b8ed0{% else %}#2fa572{% endif %};">
+                    <div class="log-meta-row">
+                        <span class="badge bg-{{ log.badge }} font-monospace" style="font-size: 10px; font-weight:900; color:#white;">{{ log.type }}</span>
+                        <span class="log-timestamp">{{ log.timestamp }}</span>
+                    </div>
+                    <div class="log-title-string">{{ log.title }}</div>
+                    <div style="font-size: 12px; color: #e2e8f0; display:flex; justify-content:space-between; align-items:center;">
+                        <span>Impact Magnitude Metric: <b class="font-monospace text-warning">{{ log.quantity }}</b></span>
+                        <span>Operator Node Reference: <b class="text-info font-monospace">{{ log.user }}</b></span>
+                    </div>
+                    {% if log.notes %}
+                        <div class="log-notes-body">Shift Handover Commentary: "{{ log.notes }}"</div>
+                    {% endif %}
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+
+        <!-- BOTTOM RIGHT COLUMN: CATEGORICAL BURN FINANCIAL EXPENDITURE DOUGHNUT CHART GRAPH -->
+        <div class="panel-card d-flex flex-column justify-content-between">
+            <h5 class="panel-header-title">🍩 Categorical Capital Outlay Distribution</h5>
+            <div style="position: relative; height: 260px; width:100%; margin: auto 0;">
+                <canvas id="expensesCategoricalDoughnutChart"></canvas>
+            </div>
+            <div id="doughnutFallbackMessageBlock" class="text-center text-light small py-4 d-none" style="opacity:0.6;">
+                No financial cash outlays recorded inside this tracking filter range to distribute data node layers.
+            </div>
+        </div>
+    </div>
+
 </div>
+
+<!-- 📊 DUAL GRAPH INTEGRATION SCRIPTS INJECTION MATRIX -->
+<script>
+document.addEventListener("DOMContentLoaded", function() {
+    // ==========================================
+    // 📊 CHART A: INTRADAY SALES LINE WAVE DISTRIBUTIONS
+    // ==========================================
+    const lineCtx = document.getElementById('loyverseInspiredVolumeChart').getContext('2d');
+    const greenGradient = lineCtx.createLinearGradient(0, 0, 0, 220);
+    greenGradient.addColorStop(0, 'rgba(47, 165, 114, 0.35)');
+    greenGradient.addColorStop(1, 'rgba(47, 165, 114, 0.00)');
+
+    new Chart(lineCtx, {
+        type: 'line',
+        data: {
+            labels: {{ chart_labels|tojson }},
+            datasets: [{
+                data: {{ chart_data|tojson }},
+                borderColor: '#2fa572',
+                borderWidth: 3,
+                pointBackgroundColor: '#2fa572',
+                pointBorderColor: '#ffffff',
+                pointBorderWidth: 1.5,
+                pointRadius: 4,
+                fill: true,
+                backgroundColor: greenGradient,
+                tension: 0.3
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: { legend: { display: false } },
+            scales: {
+                x: {
+                    grid: { color: '#2d2d3f', drawBorder: false },
+                    ticks: { color: '#cbd5e1', font: { family: 'Segoe UI', size: 11, weight: 'bold' } }
+                },
+                y: {
+                    grid: { color: '#2d2d3f', drawBorder: false },
+                    ticks: {
+                        color: '#cbd5e1',
+                        font: { family: 'Segoe UI', size: 11, weight: 'bold' },
+                        callback: function(value) { return '₱' + value.toLocaleString(); }
+                    },
+                    suggestedMin: 0
+                }
+            }
+        }
+    });
+
+    // ==========================================
+    // 🍩 CHART B: EXPENDITURE BURN RATE DOUGHNUT CORE ENGINE
+    // ==========================================
+    const doughnutCtx = document.getElementById('expensesCategoricalDoughnutChart');
+    const chartCategories = {{ expense_categories|tojson }};
+    const chartValues = {{ expense_values|tojson }};
+
+    if (chartValues.length === 0 || chartValues.reduce((a, b) => a + b, 0) === 0) {
+        doughnutCtx.style.display = 'none';
+        document.getElementById('doughnutFallbackMessageBlock').classList.remove('d-none');
+    } else {
+        new Chart(doughnutCtx, {
+            type: 'doughnut',
+            data: {
+                labels: chartCategories,
+                datasets: [{
+                    data: chartValues,
+                    backgroundColor: [
+                        '#ef4444', '#3b8ed0', '#2fa572', '#eab308', 
+                        '#a855f7', '#ec4899', '#6366f1', '#14b8a6'
+                    ],
+                    borderWidth: 2,
+                    borderColor: '#1e1e2e',
+                    hoverOffset: 8
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: {
+                        position: 'right',
+                        labels: {
+                            color: '#cbd5e1',
+                            font: { family: 'Segoe UI', size: 11, weight: 'bold' },
+                            padding: 12
+                        }
+                    },
+                    tooltip: {
+                        callbacks: {
+                            label: function(context) {
+                                let val = context.raw || 0;
+                                return ' ' + context.label + ': ₱' + val.toLocaleString(undefined, {minimumFractionDigits: 2});
+                            }
+                        }
+                    }
+                }
+            }
+        });
+    }
+});
+</script>
+
 {% endblock %}

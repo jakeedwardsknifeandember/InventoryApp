@@ -77,8 +77,13 @@ def web_expenses_tab(username):
     cash_ratio = 50.0  
     gcash_ratio = 50.0
     
-    categories_list = ["Raw Ingredients", "Utilities", "Rent & Lease", "Staff Salaries", "Packaging", "Equipment Maintenance", "Misc"]
+    # 💥 SECURITY CRITICAL CHANGE: "Raw Ingredients" stripped to prevent double-entry vulnerability
+    categories_list = ["Utilities", "Rent & Lease", "Staff Salaries", "Packaging", "Equipment Maintenance", "Misc"]
     
+    search_query = request.args.get('search', '').lower().strip()
+    selected_category = request.args.get('category', 'All')
+    selected_period = request.args.get('period', 'this_month') 
+
     if not expenses_df.empty:
         expenses_df['Amount'] = pd.to_numeric(expenses_df['Amount'], errors='coerce').fillna(0.0)
         expenses_df['Expense_Date'] = pd.to_datetime(expenses_df['Expense_Date'], errors='coerce')
@@ -113,10 +118,6 @@ def web_expenses_tab(username):
         # ==========================================
         # 🔍 3. FRONTEND SEARCH & FILTER PROCESSING
         # ==========================================
-        search_query = request.args.get('search', '').lower().strip()
-        selected_category = request.args.get('category', 'All')
-        selected_period = request.args.get('period', 'this_month') 
-
         if selected_period == 'this_month':
             expenses_df = expenses_df[this_month_mask]
         elif selected_period == 'last_month':

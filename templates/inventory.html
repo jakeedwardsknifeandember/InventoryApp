@@ -1,498 +1,451 @@
-{% extends 'base.html' %}
+{% extends "base.html" %}
 {% block content %}
-<style>
-    /* 🔥 HIGH-CONTRAST TEXT VISIBILITY DIAL-IN FOR THE DARK INTERFACE */
-    .modal-content label {
-        color: #e2e8f0 !important;
-        font-weight: 700 !important;
-        font-size: 12px !important;
-        margin-bottom: 6px;
-        display: inline-block;
-        letter-spacing: 0.3px;
-    }
-    .modal-content .form-control, .modal-content .form-select {
-        color: #ffffff !important;
-        background-color: #27272c !important;
-        border: 1px solid #3f3f46 !important;
-    }
-    .modal-content .form-control::placeholder {
-        color: #71717a !important;
-    }
-    .modal-content .form-control:focus, .modal-content .form-select:focus {
-        background-color: #2e2e35 !important;
-        border-color: #3b82f6 !important;
-        box-shadow: none;
-        color: #ffffff !important;
-    }
-    
-    /* 📋 PLATFORM SUB-TAB STRIP STYLING */
-    .nav-tabs .nav-link { color: #94a3b8; border: none; font-weight: 600; padding: 12px 20px; transition: all 0.2s ease; }
-    .nav-tabs .nav-link:hover { color: #cbd5e1; background: #222226; border-radius: 6px 6px 0 0; }
-    .nav-tabs .nav-link.active { color: #3b82f6 !important; background: #2b2b2b !important; border-bottom: 3px solid #3b82f6 !important; border-radius: 6px 6px 0 0; }
-    
-    /* ⏱️ HISTORICAL TIMELINE ACCORDION ACCENTS & HIGH-VISIBILITY TEXT FIXES */
-    .timeline-card { background: #1e1e24; border: 1px solid #2d2d34; border-radius: 6px; margin-bottom: 8px; }
-    .timeline-header { padding: 12px 16px; cursor: pointer; display: flex; justify-content: space-between; align-items: center; }
-    .timeline-body { padding: 16px; background: #151518; border-top: 1px solid #2d2d34; display: none; }
 
-    /* 👁️ TARGETED FIX FOR UNREADABLE TEXT INSIDE SIDEBAR CONTAINERS (Image Fix) */
-    .card-body .text-muted, 
-    .timeline-header .text-muted {
-        color: #a1a1aa !important; /* Brightens faint Log IDs and default dates to visible medium gray */
-    }
-    .card-body .small.italic, 
-    .card-body .small,
-    .timeline-body .text-muted {
-        color: #e4e4e7 !important; /* Forces recipe details, supplier notes, and reasons to a sharp off-white */
-    }
+<style>
+    /* Industrial High-Contrast Inventory Custom Styles */
+    .inventory-title-block { font-size: 24px; font-weight: 800; color: #ffffff; }
+    .nav-tabs-custom { border-bottom: 2px solid #2d2d3f; margin-bottom: 20px; }
+    .nav-link-custom { color: #cbd5e1; font-weight: bold; border: none; padding: 10px 20px; text-decoration: none; display: inline-block; transition: all 0.2s; }
+    .nav-link-custom:hover { color: #ffffff; background: #222235; border-radius: 4px; }
+    .nav-link-custom.active { color: #3b8ed0; border-bottom: 3px solid #3b8ed0; background: transparent; }
+    
+    /* High contrast typography labels overrides */
+    .ledger-table th { color: #cbd5e1 !important; font-size: 12px; text-transform: uppercase; letter-spacing: 0.5px; font-weight: 700; border-bottom: 2px solid #3f3f46 !important; }
+    .ledger-table td { font-size: 13.5px; color: #ffffff; vertical-align: middle; border-bottom: 1px solid #2d2d3f; }
+    .status-badge { font-size: 11px; font-weight: bold; padding: 4px 8px; border-radius: 4px; }
+    
+    .stream-panel { background: #1e1e2e; border: 1px solid #3f3f46; border-radius: 8px; padding: 18px; }
+    .stream-header { font-size: 14px; font-weight: 700; color: #ffffff; margin-top: 15px; margin-bottom: 12px; border-bottom: 1px solid #3f3f46; padding-bottom: 8px; }
+    .stream-card-container { display: flex; flex-direction: column; gap: 10px; max-height: 250px; overflow-y: auto; margin-bottom: 15px; padding-right: 2px; }
+    .stream-entry { background: #161622; border-left: 3px solid #3f3f46; padding: 10px; border-radius: 0 4px 4px 0; font-size: 12px; border: 1px solid #252535; border-left-width: 3px; }
+    
+    .modal-custom-content { background-color: #1e1e2e; border: 1px solid #52525b; border-radius: 8px; color: #ffffff; }
+    .modal-custom-header { border-bottom: 1px solid #3f3f46; padding: 15px 20px; }
+    .modal-custom-footer { border-top: 1px solid #3f3f46; padding: 15px 20px; }
+    .form-label-custom { font-size: 12px; font-weight: 700; color: #f1f5f9; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 5px; }
+    .text-high-contrast-muted { color: #cbd5e1 !important; }
 </style>
 
-<div class="container-fluid mt-2">
+<div class="container-fluid p-0">
     
-    <!-- 🔔 OPERATIONAL STATUS MESSAGE NOTIFICATIONS -->
-    {% if msg %}
-    <div class="alert alert-{{ alert_type }} alert-dismissible fade show border-0 mb-3 text-white" role="alert" style="background-color: #198754; border-radius: 6px;">
-        {{ msg }}
-        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="alert"></button>
+    <!-- 👑 TOP CONTROL BAR BANNER -->
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h1 class="inventory-title-block">Inventory Ledger Control</h1>
+        <div class="d-flex gap-2">
+            <button class="btn btn-sm btn-success fw-bold d-flex align-items-center gap-1 px-3 py-2" data-bs-toggle="modal" data-bs-target="#receiveStockModal">
+                🚚 Receive Bulk Delivery
+            </button>
+            <button class="btn btn-sm btn-primary fw-bold d-flex align-items-center gap-1 px-3 py-2" data-bs-toggle="modal" data-bs-target="#reconcileStockModal">
+                ⚖️ Audit Raw Counts
+            </button>
+            <button class="btn btn-sm btn-danger fw-bold d-flex align-items-center gap-1 px-3 py-2" data-bs-toggle="modal" data-bs-target="#logWasteModal">
+                🗑️ Log Spoilage Waste
+            </button>
+        </div>
     </div>
+
+    <!-- 📢 RESPONSE CHANNELS TERMINAL -->
+    {% if msg %}
+        <div class="alert alert-{{ alert_type if alert_type else 'success' }} border-start border-4 mb-4 fw-bold shadow-sm">
+            {{ msg }}
+        </div>
     {% endif %}
     {% if request.args.get('error') %}
-    <div class="alert alert-danger border-0 text-white fw-bold mb-3 shadow-sm" style="background-color: #dc3545; border-radius: 6px;">
-        ⚠️ Operational Warning: {{ request.args.get('error') }}
-    </div>
+        <div class="alert alert-danger border-start border-4 mb-4 fw-bold shadow-sm">
+            ⚠️ {{ request.args.get('error') }}
+        </div>
     {% endif %}
 
-    <!-- 👑 HEADER CONTROLS VIEW STRIP -->
-    <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-center mb-3 gap-3">
-        <div>
-            <h3 class="m-0 text-white" style="font-weight: bold;">Inventory Ledger Control</h3>
-            <p class="text-muted m-0 small">Track ingredient asset movements, record sub-recipe assemblies, and execute count audits.</p>
-        </div>
-        
-        <div class="d-flex gap-2">
-            {% if current_type == 'RAW' %}
-                <button class="btn btn-success fw-bold" data-bs-toggle="modal" data-bs-target="#receiveStockModal">🚚 Receive Bulk Delivery</button>
-                <button class="btn btn-primary fw-bold" data-bs-toggle="modal" data-bs-target="#reconcileStockModal">⚖️ Audit Raw Counts</button>
-            {% else %}
-                <button class="btn btn-info text-dark fw-bold" data-bs-toggle="modal" data-bs-target="#logPrepModal">🍳 Log Kitchen Prep Run</button>
-                <button class="btn btn-primary fw-bold" data-bs-toggle="modal" data-bs-target="#reconcileStockModal">⚖️ Audit Portion Counts</button>
-            {% endif %}
-            <button class="btn btn-danger fw-bold" data-bs-toggle="modal" data-bs-target="#logWasteModal">🗑️ Log Spoilage Waste</button>
-        </div>
+    <!-- 👑 SUB-TAB STRUCTURAL ROUTING -->
+    <div class="nav-tabs-custom">
+        <a href="/portal/{{ username }}/inventory?type=RAW" class="nav-link-custom {% if current_type == 'RAW' %}active{% endif %}">
+            📦 Bulk Warehouse Operations
+        </a>
+        <a href="/portal/{{ username }}/inventory?type=PREPPED" class="nav-link-custom {% if current_type == 'PREPPED' %}active{% endif %}">
+            🍳 Kitchen Line Production
+        </a>
     </div>
 
-    <!-- 🌟 CORE TIME-LINE SUB-TABS STRIP NAVIGATION -->
-    <ul class="nav nav-tabs border-bottom border-secondary mb-3">
-        <li class="nav-item">
-            <a class="nav-link {% if current_type == 'RAW' %}active{% endif %}" href="?type=RAW">📦 Bulk Warehouse Operations</a>
-        </li>
-        <li class="nav-item">
-            <a class="nav-link {% if current_type == 'PREPPED' %}active{% endif %}" href="?type=PREPPED">🍳 Kitchen Line Production</a>
-        </li>
-    </ul>
-
-    <div class="row g-3">
-        <!-- LEFT SCREEN: DATA TABLE MATRIX SCRAPERS -->
-        <div class="col-12 col-xl-8">
-            <div class="content-card mb-3 p-3" style="background-color: #2b2b2b; border-radius: 6px;">
-                <form method="GET" class="row g-2 align-items-center">
+    <!-- 👑 LAYOUT SPLIT SPLIT WINDOW -->
+    <div class="row g-4">
+        
+        <!-- LEFT COLUMN: MAIN GRID WORKSPACE LEDGER -->
+        <div class="col-lg-8">
+            <div class="content-card p-3 mb-4">
+                <form method="get" action="/portal/{{ username }}/inventory" class="row g-2 mb-3">
                     <input type="hidden" name="type" value="{{ current_type }}">
                     <div class="col-md-5">
-                        <input type="text" name="search" value="{{ current_search }}" class="form-control bg-dark text-white border-secondary" placeholder="Search item ID or name string..." autocomplete="off">
+                        <input type="text" name="search" value="{{ current_search }}" placeholder="Search item description, ID register..." class="form-control form-control-sm bg-dark text-white border-secondary">
                     </div>
                     <div class="col-md-4">
-                        <select name="category" class="form-select bg-dark text-white border-secondary" onchange="this.form.submit()">
-                            <option value="All" {% if current_category == 'All' %}selected{% endif %}>All Food Categories</option>
-                            {% for c in categories %}
-                            <option value="{{ c }}" {% if current_category == c %}selected{% endif %}>{{ c }}</option>
+                        <select name="category" class="form-select form-select-sm bg-dark text-white border-secondary">
+                            <option value="All">All Food Categories</option>
+                            {% for cat in categories %}
+                                <option value="{{ cat }}" {% if current_category == cat %}selected{% endif %}>{{ cat }}</option>
                             {% endfor %}
                         </select>
                     </div>
-                    <div class="col-md-3">
-                        <a href="/portal/{{ username }}/inventory?type={{ current_type }}" class="btn btn-secondary w-100 fw-bold">Reset Filters</a>
+                    <div class="col-md-3 d-flex gap-1">
+                        <button type="submit" class="btn btn-sm btn-secondary w-100 fw-bold">Filter</button>
+                        <a href="/portal/{{ username }}/inventory?type={{ current_type }}" class="btn btn-sm btn-outline-secondary text-nowrap fw-bold">Reset</a>
                     </div>
                 </form>
-            </div>
 
-            <div class="content-card p-0 overflow-hidden">
-                <table class="table table-dark table-hover align-middle m-0">
-                    <thead style="background: #151518;">
-                        <tr>
-                            <th class="ps-3">ID</th>
-                            <th>ITEM NAME DESCRIPTION</th>
-                            <th>CATEGORY</th>
-                            <th>CURRENT VALUE BALANCES</th>
-                            <th>PAR MIN</th>
-                            <th class="pe-3 text-end">STATUS ALERTS</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {% for i in inventory_status %}
-                        <tr style="border-bottom: 1px solid #2d2d34;">
-                            <td class="ps-3 font-monospace text-muted small">{{ i.Ingredient_ID }}</td>
-                            <td class="text-white fw-bold">{{ i.Ingredient_Name }}</td>
-                            <td><span class="badge bg-secondary">{{ i.Category }}</span></td>
-                            <td class="text-success fw-bold font-monospace">{{ "%.2f"|format(i.Current_Stock) }} {{ i.Unit }}</td>
-                            <td class="text-light font-monospace">{{ "%.2f"|format(i.Min_Stock) }} {{ i.Unit }}</td>
-                            <td class="pe-3 text-end">
-                                <span class="badge {{ 'bg-success' if i.Status == 'Normal' else ('bg-warning text-dark' if i.Status == 'Low Stock' else 'bg-danger') }} px-3 py-1.5">
-                                    {{ i.Status }}
-                                </span>
-                            </td>
-                        </tr>
-                        {% else %}
-                        <tr><td colspan="6" class="text-center text-muted py-5">No tracking nodes found inside this ledger criteria window frame.</td></tr>
-                        {% endfor %}
-                    </tbody>
-                </table>
-            </div>
-        </div>
-
-        <!-- RIGHT SCREEN: CHRONOLOGICAL HISTORICAL LOGS ACCORDIONS -->
-        <div class="col-12 col-xl-4">
-            <div class="card border-secondary bg-dark text-white" style="max-height: 78vh; overflow-y: auto;">
-                <div class="card-header bg-secondary text-white fw-bold p-3">Chronological Activity Streams</div>
-                <div class="card-body p-3">
-                    
-                    <form method="GET" class="mb-3 d-flex gap-2">
-                        <input type="hidden" name="type" value="{{ current_type }}">
-                        <input type="date" name="filter_date" class="form-control bg-secondary text-white border-0" value="{{ current_filter_date }}" onchange="this.form.submit()">
-                        {% if current_filter_date %}
-                            <a href="/portal/{{ username }}/inventory?type={{ current_type }}" class="btn btn-sm btn-outline-light d-flex align-items-center">✖</a>
-                        {% endif %}
-                    </form>
-
-                    <!-- TRACK A: KITCHEN ASSEMBLY PREP Blueprints -->
-                    {% if current_type == 'PREPPED' %}
-                        <h6 class="text-info fw-bold mb-2 small text-uppercase" style="letter-spacing:0.5px;">🍳 Kitchen Assembly Batches</h6>
-                        {% for log in production_history %}
-                        <div class="timeline-card">
-                            <div class="timeline-header small font-monospace" onclick="toggleTimelineAccordionNode(this)">
-                                <span class="text-info font-weight-bold">📁 {{ log.Audit_ID }}</span>
-                                <span class="text-muted">{{ log.Date }} 👇</span>
-                            </div>
-                            <div class="timeline-body small">
-                                <div class="text-muted mb-2 border-bottom border-secondary pb-1">{{ log.Notes }}</div>
-                                {% for line in log.Lines %}
-                                    <div class="d-flex justify-content-between py-1 font-monospace">
-                                        <span class="text-light">{{ line.name }}</span>
-                                        <span class="Quantities-style {% if line.variance > 0 %}text-success{% else %}text-danger{% endif %}">
-                                            {% if line.variance > 0 %}+{% endif %}{{ "%.2f"|format(line.variance) }}
-                                        </span>
-                                    </div>
-                                {% endfor %}
-                            </div>
-                        </div>
-                        {% else %}
-                        <div class="text-muted text-center py-3 small mb-3 border border-secondary rounded">No batch assemblies captured today.</div>
-                        {% endfor %}
-                    {% endif %}
-
-                    <!-- TRACK B: WAREHOUSE RECEIPTS DELIVERIES -->
-                    <h6 class="text-success fw-bold mb-2 small text-uppercase mt-2" style="letter-spacing:0.5px;">🚚 Supply Receipts & Audits</h6>
-                    {% for log in delivery_history %}
-                    <div class="p-2 mb-2 rounded border border-secondary" style="background:#1a1a20; font-size: 12px; line-height:1.4;">
-                        <div class="d-flex justify-content-between font-monospace border-bottom border-secondary pb-1 mb-1 text-muted">
-                            <span>ID: {{ log.Audit_ID }}</span>
-                            <span class="text-info">{{ log.Date }}</span>
-                        </div>
-                        <div class="text-white fw-bold">{{ log.Ingredient_Name }} <span class="text-success font-monospace">(+{{ "%.2f"|format(log.Variance) }})</span></div>
-                        <div class="text-muted small italic mt-0.5">{{ log.Notes }}</div>
-                    </div>
-                    {% else %}
-                    <div class="text-muted text-center py-3 small mb-3 border border-secondary rounded">No external invoice shipments recorded.</div>
-                    {% endfor %}
-
-                    <!-- TRACK C: SPOILAGES WASTE CHANNELS -->
-                    <h6 class="text-danger fw-bold mb-2 small text-uppercase mt-3" style="letter-spacing:0.5px;">🗑️ Kitchen Spoilage Discards</h6>
-                    {% for log in waste_history %}
-                        {% if log.is_product %}
-                        <div class="timeline-card" style="border-left: 3px solid #ef4444;">
-                            <div class="timeline-header small font-monospace" onclick="toggleTimelineAccordionNode(this)">
-                                <span class="text-danger fw-bold">💥 {{ log.Title }}</span>
-                                <span class="text-muted">{{ log.Date }} 👇</span>
-                            </div>
-                            <div class="timeline-body small">
-                                <div class="text-muted mb-2 border-bottom border-secondary pb-1">{{ log.Notes }}</div>
-                                {% for comp in log.components %}
-                                    <div class="d-flex justify-content-between py-1 font-monospace">
-                                        <span class="text-muted">{{ comp.name }}</span>
-                                        <span class="text-danger">{{ "%.2f"|format(comp.variance) }}</span>
-                                    </div>
-                                {% endfor %}
-                            </div>
-                        </div>
-                        {% else %}
-                        <div class="p-2 mb-2 rounded border border-secondary" style="background:#1a1a20; font-size: 12px; border-left: 3px solid #f59e0b !important;">
-                            <div class="d-flex justify-content-between font-monospace border-bottom border-secondary pb-1 mb-1 text-muted">
-                                <span>ID: {{ log.Audit_ID }}</span>
-                                <span class="text-info">{{ log.Date }}</span>
-                            </div>
-                            <div class="text-white fw-bold">{{ log.Ingredient_Name }} <span class="text-danger font-monospace">({{ "%.2f"|format(log.Variance) }})</span></div>
-                            <div class="text-muted small mt-0.5">{{ log.Notes }}</div>
-                        </div>
-                        {% endif %}
-                    {% else %}
-                    <div class="text-muted text-center py-3 small border border-secondary rounded">No variance inventory adjustments applied.</div>
-                    {% endfor %}
-
-                </div>
-            </div>
-        </div>
-    </div>
-</div>
-
-<!-- ======================================================= -->
-<!-- MODAL WINDOW A: LOG MORNING KITCHEN ASSEMBLIES PREP RUNS -->
-<!-- ======================================================= -->
-<div class="modal fade" id="logPrepModal" tabindex="-1">
-    <div class="modal-dialog modal-dialog-centered">
-        <div class="modal-content bg-dark text-white border border-secondary">
-            <form method="POST">
-                <input type="hidden" name="action_type" value="log_production_prep">
-                <div class="modal-header border-secondary bg-secondary">
-                    <h5 class="modal-title fw-bold text-white">Log Kitchen Prep Production Run</h5>
-                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
-                </div>
-                <div class="modal-body p-4">
-                    <div class="mb-3">
-                        <label class="form-label">SELECT TARGET PORTION COMPONENT ITEM:</label>
-                        <select name="prep_ingredient_id" class="form-select" required>
-                            <option value="" disabled selected>Choose line assembly item...</option>
-                            {% for p in prepped_options %}
-                                <option value="{{ p.Ingredient_ID }}">{{ p.Ingredient_Name }} (Currently: {{ "%.2f"|format(p.Current_Stock) }} {{ p.Unit }})</option>
+                <div class="table-responsive">
+                    <table class="table ledger-table m-0">
+                        <thead>
+                            <tr>
+                                <th style="width: 100px;">ID</th>
+                                <th>Item Name Description</th>
+                                <th>Category</th>
+                                <th class="text-end">Current Value Balances</th>
+                                <th class="text-end">Par Min</th>
+                                <th class="text-end" style="width: 130px;">Status Alerts</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for item in inventory_status %}
+                            <tr>
+                                <td class="font-monospace text-info fw-bold">{{ item.Ingredient_ID }}</td>
+                                <td class="fw-bold text-white">{{ item.Ingredient_Name }}</td>
+                                <td><span class="badge bg-dark border border-secondary text-white fw-bold">{{ item.Category }}</span></td>
+                                <td class="text-end fw-bold font-monospace text-white">
+                                    {{ "{:,.2f}".format(item.Current_Stock) }} <span class="text-high-contrast-muted small">{{ item.Unit }}</span>
+                                </td>
+                                <td class="text-end font-monospace text-high-contrast-muted">{{ "{:,.2f}".format(item.Par_Level or 0.0) }}</td>
+                                <td class="text-end">
+                                    {% if item.Status == 'Low Stock' %}
+                                        <span class="status-badge bg-danger text-white shadow-sm">⚠️ LOW STOCK</span>
+                                    {% else %}
+                                        <span class="status-badge bg-success text-white shadow-sm">● HEALTHY</span>
+                                    {% endif %}
+                                </td>
+                            </tr>
+                            {% else %}
+                            <tr>
+                                <td colspan="6" class="text-center text-high-contrast-muted py-5">
+                                    No item records found matching criteria variables.
+                                </td>
+                            </tr>
                             {% endfor %}
-                        </select>
-                    </div>
-                    <div class="row g-2 mb-3">
-                        <div class="col-6">
-                            <label class="form-label">TOTAL VOLUME / UNITS PREPPED:</label>
-                            <input type="number" step="any" name="prep_quantity" class="form-control" placeholder="0.00" required>
-                        </div>
-                        <div class="col-6">
-                            <label class="form-label">COOK / OPERATIONS LOG OPERATOR:</label>
-                            <input type="text" name="prepped_by" class="form-control" placeholder="e.g., Head Chef John" required>
-                        </div>
-                    </div>
-                    <p class="text-muted small m-0 italic bg-secondary p-2 rounded border border-secondary text-white" style="font-size:11px; line-height:1.3;">
-                        💡 <strong>Automation Rule Engaged:</strong> Confirming this prep execution path loops out raw warehouse inventory stock parameters, converting metrics to portion items instantly based on recipe blueprints.
-                    </p>
+                        </tbody>
+                    </table>
                 </div>
-                <div class="modal-footer border-secondary">
-                    <button type="submit" class="btn btn-success w-100 fw-bold py-2.5">Commit Assembly Run & Deduct Raw Inventory</button>
-                </div>
-            </form>
+            </div>
         </div>
+
+        <!-- RIGHT COLUMN: CHRONOLOGICAL ACTIVITY FEED LOGBOOK -->
+        <div class="col-lg-4">
+            <div class="stream-panel">
+                <h5 class="fw-bold text-white mb-3" style="font-size: 15px;">Chronological Activity Streams</h5>
+                
+                <form method="get" action="/portal/{{ username }}/inventory" class="mb-3">
+                    <input type="hidden" name="type" value="{{ current_type }}">
+                    <input type="date" name="filter_date" value="{{ current_filter_date }}" class="form-control form-control-sm bg-dark text-white border-secondary font-monospace" onchange="this.form.submit()">
+                </form>
+
+                <div class="stream-header">🚚 Supply Receipts & Audits</div>
+                <div class="stream-card-container">
+                    {% for log in delivery_history %}
+                    <div class="stream-entry" style="border-left-color: #2fa572;">
+                        <div class="d-flex justify-content-between text-high-contrast-muted small mb-1 fw-bold">
+                            <span class="font-monospace text-info">{{ log.Audit_ID }}</span>
+                            <span>{{ log.Date }}</span>
+                        </div>
+                        <div class="text-white fw-bold">{{ log.Ingredient_Name }} (<span class="text-success">+{{ log.Variance }}</span>)</div>
+                        <div class="text-high-contrast-muted mt-1 font-italic" style="font-size: 11.5px;">{{ log.Notes }}</div>
+                    </div>
+                    {% else %}
+                    <div class="text-center text-high-contrast-muted small py-4 border border-secondary border-dashed rounded" style="background: rgba(0,0,0,0.1);">
+                        No external invoice shipments recorded.
+                    </div>
+                    {% endfor %}
+                </div>
+
+                <div class="stream-header">🍳 Kitchen Prep Batches Log</div>
+                <div class="stream-card-container">
+                    {% for batch in production_history %}
+                    <div class="stream-entry" style="border-left-color: #3b8ed0;">
+                        <div class="d-flex justify-content-between text-high-contrast-muted small mb-1 fw-bold">
+                            <span class="font-monospace text-warning">{{ batch.Audit_ID }}</span>
+                            <span>{{ batch.Date }}</span>
+                        </div>
+                        <ul class="m-0 p-0 ps-3 text-white small" style="font-size: 11.5px;">
+                            {% for line in batch.Lines %}
+                            <li>{{ line.name }}: <b class="{% if line.variance > 0 %}text-success{% else %}text-danger{% endif %}">{{ line.variance }}</b></li>
+                            {% endfor %}
+                        </ul>
+                        <div class="text-high-contrast-muted mt-1 font-italic" style="font-size:11.5px;">Comments: "{{ batch.Notes }}"</div>
+                    </div>
+                    {% else %}
+                    <div class="text-center text-high-contrast-muted small py-4 border border-secondary border-dashed rounded" style="background: rgba(0,0,0,0.1);">
+                        No line prep batch transformations recorded today.
+                    </div>
+                    {% endfor %}
+                </div>
+
+                <div class="stream-header">🗑️ Kitchen Spoilage Discards</div>
+                <div class="stream-card-container">
+                    {% for log in waste_history %}
+                    <div class="stream-entry" style="border-left-color: #c24b4b;">
+                        <div class="d-flex justify-content-between text-high-contrast-muted small mb-1 fw-bold">
+                            <span class="font-monospace text-danger">{{ log.Audit_ID }}</span>
+                            <span>{{ log.Date }}</span>
+                        </div>
+                        {% if log.is_product %}
+                            <div class="text-white fw-bold">{{ log.Title }}</div>
+                            <ul class="m-0 p-0 ps-3 text-high-contrast-muted" style="font-size:11px;">
+                                {% for comp in log.components %}
+                                <li>Deducted Base: {{ comp.name }} ({{ comp.variance }})</li>
+                                {% endfor %}
+                            </ul>
+                        {% else %}
+                            <div class="text-white fw-bold">{{ log.Ingredient_Name }} (<span class="text-danger">{{ log.Variance }}</span>)</div>
+                        {% endif %}
+                        <div class="text-high-contrast-muted mt-1 font-italic" style="font-size: 11.5px;">Reason: {{ log.Notes }}</div>
+                    </div>
+                    {% else %}
+                    <div class="text-center text-high-contrast-muted small py-4 border border-secondary border-dashed rounded" style="background: rgba(0,0,0,0.1);">
+                        No scrap line losses or kitchen spoilage recorded.
+                    </div>
+                    {% endfor %}
+                </div>
+
+            </div>
+        </div>
+        
     </div>
 </div>
 
-<!-- MODAL WINDOW B: EXTERNAL SUPPLY DELIVERIES INVOICE TRACKER -->
-<div class="modal fade" id="receiveStockModal" tabindex="-1">
-    <div class="modal-dialog modal-lg modal-dialog-centered">
-        <div class="modal-content bg-dark text-white border border-secondary">
-            <form method="POST">
+<!-- =================================================================================== -->
+<!-- 🚚 MODAL A: RECEIVE SUPPLIER SHIPMENTS INVOICE INTAKE CONTAINER (FIXED PIPELINE) -->
+<!-- =================================================================================== -->
+<div class="modal fade" id="receiveStockModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-xl modal-dialog-centered">
+        <div class="modal-content modal-custom-content shadow-lg">
+            <form method="post" action="/portal/{{ username }}/inventory?type={{ current_type }}">
                 <input type="hidden" name="action_type" value="receive_stock">
-                <div class="modal-header border-secondary bg-secondary">
-                    <h5 class="modal-title fw-bold text-white">Receive Supplier Shipments Invoice Intake</h5>
-                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                
+                <div class="modal-custom-header d-flex justify-content-between align-items-center">
+                    <h5 class="fw-bold m-0 text-white">Receive Supplier Shipments Invoice Intake</h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
                 </div>
+                
                 <div class="modal-body p-4">
                     <div class="row g-3 mb-3">
-                        <div class="col-6">
-                            <label class="form-label">WHOLESALE DISTRIBUTOR / SUPPLIER:</label>
-                            <input type="text" name="supplier" class="form-control" placeholder="e.g., Tyson Foods Inc." required>
+                        <div class="col-md-4">
+                            <label class="form-label-custom">Wholesale Distributor / Supplier:</label>
+                            <input type="text" name="supplier" required placeholder="e.g. San Miguel Wholesale" class="form-control bg-dark text-white border-secondary">
                         </div>
-                        <div class="col-6">
-                            <label class="form-label">RECEIVING STOCK MANAGER IDENTITY:</label>
-                            <input type="text" name="received_by" class="form-control" placeholder="e.g., Manager Jane" required>
+                        <div class="col-md-4">
+                            <label class="form-label-custom">Receiving Stock Manager Identity:</label>
+                            <input type="text" name="received_by" required placeholder="e.g. John Doe" class="form-control bg-dark text-white border-secondary">
                         </div>
-                    </div>
-                    <div class="mb-3">
-                        <label class="form-label">DELIVERY METADATA NOTES / TRACKING REF NO:</label>
-                        <input type="text" name="delivery_notes" class="form-control" placeholder="e.g., Invoice #1092 - Cold chain verified">
-                    </div>
-                    <div class="row font-monospace text-secondary fw-bold small mb-2">
-                        <div class="col-8">MATERIAL DESCRIPTION ID</div>
-                        <div class="col-4">QUANTITY RECEIVED</div>
-                    </div>
-                    <div id="dynamicReceivingRowsContainer">
-                        <div class="row g-2 mb-2 align-items-center">
-                            <div class="col-8">
-                                <select name="ingredient_id[]" class="form-select" required>
-                                    <option value="" disabled selected>Select wholesale inventory item...</option>
-                                    {% for i in inventory_status %}
-                                        <option value="{{ i.Ingredient_ID }}">{{ i.Ingredient_Name }} (in {{ i.Unit }})</option>
-                                    {% endfor %}
-                                </select>
-                            </div>
-                            <div class="col-3">
-                                <input type="number" step="any" name="quantity[]" class="form-control" placeholder="0.00" required>
-                            </div>
-                            <div class="col-1 text-center">
-                                <button type="button" class="btn btn-sm btn-danger fw-bold" onclick="this.parentElement.parentElement.remove()">✖</button>
-                            </div>
+                        <div class="col-md-4">
+                            <label class="form-label-custom" style="color:#3b8ed0;">Payment Method Channel:</label>
+                            <select name="payment_method" class="form-select bg-dark text-white border-secondary fw-bold">
+                                <option value="Invoice/Terms" selected>Invoice / Credit Terms</option>
+                                <option value="Cash">Cash on Delivery (COD)</option>
+                                <option value="Petty Cash">Store Petty Cash Drawer</option>
+                                <option value="GCash">GCash Business Node</option>
+                                <option value="Credit Card">Corporate Credit Card</option>
+                            </select>
                         </div>
                     </div>
-                    <button type="button" class="btn btn-sm btn-info fw-bold mt-2 text-white" onclick="appendDynamicActionInputRowBlock('dynamicReceivingRowsContainer')">＋ Add Delivery Item Row</button>
+
+                    <div class="mb-4">
+                        <label class="form-label-custom">Delivery Metadata Notes / Tracking Ref No:</label>
+                        <input type="text" name="delivery_notes" placeholder="e.g. Invoice #INV-2026-991A, Batch Ref #A4" class="form-control bg-dark text-white border-secondary">
+                    </div>
+
+                    <!-- Granular Row Array Configuration Block -->
+                    <div class="border-top border-secondary pt-3">
+                        <label class="form-label-custom mb-2 d-block text-info">Material Registration Rows Array</label>
+                        <div id="modalReceiveRowsContainer">
+                            <div class="row g-2 mb-2 delivery-entry-row align-items-center">
+                                <div class="col-md-5">
+                                    <label class="small text-high-contrast-muted d-md-none fw-bold">Material Item:</label>
+                                    <select name="ingredient_id[]" required class="form-select bg-dark text-white border-secondary">
+                                        <option value="" disabled selected>Select wholesale raw item material...</option>
+                                        {% for item in inventory_status %}
+                                            <option value="{{ item.Ingredient_ID }}">{{ item.Ingredient_Name }} (in {{ item.Unit }})</option>
+                                        {% endfor %}
+                                    </select>
+                                </div>
+                                <div class="col-md-3">
+                                    <label class="small text-high-contrast-muted d-md-none fw-bold">Quantity Received:</label>
+                                    <input type="number" name="quantity[]" step="0.001" min="0.001" placeholder="Quantity Received" required class="form-control bg-dark text-white border-secondary font-monospace">
+                                </div>
+                                <div class="col-md-3">
+                                    <label class="small text-high-contrast-muted d-md-none fw-bold">Purchase Price per Unit:</label>
+                                    <div class="input-group">
+                                        <span class="input-group-text bg-secondary border-secondary text-white small fw-bold">₱</span>
+                                        <input type="number" name="purchase_price[]" step="0.01" min="0.00" placeholder="Purchase Price / Unit" required class="form-control bg-dark text-white border-secondary font-monospace">
+                                    </div>
+                                </div>
+                                <div class="col-md-1 text-end">
+                                    <button type="button" class="btn btn-outline-danger border-secondary w-100" onclick="removeDeliveryRowItem(this)">✕</button>
+                                }</div>
+                            </div>
+                        </div>
+                        <button type="button" class="btn btn-sm btn-outline-info fw-bold mt-2" onclick="addNewDeliveryRowItem()">
+                            + Add Delivery Item Row
+                        </button>
+                    </div>
+
                 </div>
-                <div class="modal-footer border-secondary">
-                    <button type="submit" class="btn btn-success w-100 fw-bold py-2.5">Commit Shipments to Warehouse Storage Balance Sheets</button>
+                
+                <div class="modal-custom-footer text-end">
+                    <button type="button" class="btn btn-sm btn-secondary me-2 fw-bold" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-sm btn-success fw-bold px-4">Commit Shipments to Warehouse Storage Balance Sheets</button>
                 </div>
             </form>
         </div>
     </div>
 </div>
 
-<!-- MODAL WINDOW C: PHYSICAL STOCK COUNT RECONCILIATIONS -->
-<div class="modal fade" id="reconcileStockModal" tabindex="-1">
+<!-- =================================================================================== -->
+<!-- ⚖️ MODAL B: AUDIT COUNTS RECONCILIATION CONTAINER -->
+<!-- =================================================================================== -->
+<div class="modal fade" id="reconcileStockModal" tabindex="-1" aria-hidden="true">
     <div class="modal-dialog modal-lg modal-dialog-centered">
-        <div class="modal-content bg-dark text-white border border-secondary">
-            <form method="POST">
+        <div class="modal-content modal-custom-content">
+            <form method="post" action="/portal/{{ username }}/inventory?type={{ current_type }}">
                 <input type="hidden" name="action_type" value="reconcile_stock">
-                <div class="modal-header border-secondary bg-secondary">
-                    <h5 class="modal-title fw-bold text-white">Log Physical Stock Audit Count Reconciliations</h5>
-                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                
+                <div class="modal-custom-header">
+                    <h5 class="fw-bold m-0 text-white">Initiate Physical Floor Count Audit Reconciliation</h5>
                 </div>
+                
                 <div class="modal-body p-4">
-                    <div class="row g-3 mb-3">
-                        <div class="col-6">
-                            <label class="form-label">AUDITOR / VERIFYING OFFICER WORKER:</label>
-                            <input type="text" name="reconcile_by" class="form-control" placeholder="e.g., Shift Lead Bob" required>
+                    <div class="row g-3 mb-4">
+                        <div class="col-md-6">
+                            <label class="form-label-custom">Auditing Officer Identity:</label>
+                            <input type="text" name="reconcile_by" required placeholder="e.g. Lead Auditor" class="form-control bg-dark text-white border-secondary">
                         </div>
-                        <div class="col-6">
-                            <label class="form-label">VERIFICATION AUDIT SCOPE SCOPE:</label>
-                            <input type="text" name="reconcile_reason" class="form-control" placeholder="e.g., End of Week Spot Check" required>
-                        </div>
-                    </div>
-                    <div class="row font-monospace text-secondary fw-bold small mb-2">
-                        <div class="col-8">MATERIAL DESCRIPTION ID</div>
-                        <div class="col-4">ACTUAL COUNTS ON HAND (PHYSICAL)</div>
-                    </div>
-                    <div id="dynamicAuditRowsContainer">
-                        <div class="row g-2 mb-2 align-items-center">
-                            <div class="col-8">
-                                <select name="ingredient_id[]" class="form-select" required>
-                                    <option value="" disabled selected>Select inventory item target...</option>
-                                    {% for i in inventory_status %}
-                                        <option value="{{ i.Ingredient_ID }}">{{ i.Ingredient_Name }} (Theoretical: {{ "%.2f"|format(i.Current_Stock) }} {{ i.Unit }})</option>
-                                    {% endfor %}
-                                </select>
-                            </div>
-                            <div class="col-3">
-                                <input type="number" step="any" name="quantity[]" class="form-control" placeholder="Real count..." required>
-                            </div>
-                            <div class="col-1 text-center">
-                                <button type="button" class="btn btn-sm btn-danger fw-bold" onclick="this.parentElement.parentElement.remove()">✖</button>
-                            </div>
+                        <div class="col-md-6">
+                            <label class="form-label-custom">Audit Purpose / Verification Scope:</label>
+                            <input type="text" name="reconcile_reason" required placeholder="e.g. End-of-Month Fiscal Audit" class="form-control bg-dark text-white border-secondary">
                         </div>
                     </div>
-                    <button type="button" class="btn btn-sm btn-info fw-bold mt-2 text-white" onclick="appendDynamicActionInputRowBlock('dynamicAuditRowsContainer')">＋ Add Audit Verification Item Row</button>
+
+                    <div style="max-height: 280px; overflow-y: auto; padding-right:4px;">
+                        <label class="form-label-custom mb-2 text-warning">Input Physical Quantities Found on Shelf:</label>
+                        {% for item in inventory_status %}
+                        <div class="row g-2 align-items-center mb-2 p-2 rounded" style="background: rgba(255,255,255,0.01); border: 1px solid #2d2d3f;">
+                            <div class="col-md-7">
+                                <span class="fw-bold text-white small" style="font-size:13px;">{{ item.Ingredient_Name }}</span>
+                                <div class="text-high-contrast-muted font-monospace" style="font-size: 11px;">Book Balance: {{ "{:,.2f}".format(item.Current_Stock) }} {{ item.Unit }}</div>
+                            </div>
+                            <div class="col-md-5">
+                                <div class="input-group input-group-sm">
+                                    <input type="hidden" name="ingredient_id[]" value="{{ item.Ingredient_ID }}">
+                                    <input type="number" name="quantity[]" step="0.001" placeholder="Leave blank if uncounted" class="form-control bg-dark text-white border-secondary font-monospace text-end">
+                                    <span class="input-group-text bg-secondary border-secondary text-white small" style="font-size:11px; width:55px;">{{ item.Unit }}</span>
+                                </div>
+                            </div>
+                        </div>
+                        {% endfor %}
+                    </div>
                 </div>
-                <div class="modal-footer border-secondary">
-                    <button type="submit" class="btn btn-success w-100 fw-bold py-2.5">Permanently Reset System Theoretical Inventories to Physical Counts</button>
+                
+                <div class="modal-custom-footer text-end">
+                    <button type="button" class="btn btn-sm btn-secondary me-2 fw-bold" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-sm btn-primary fw-bold">Commit Adjustments & Overwrite Variances</button>
                 </div>
             </form>
         </div>
     </div>
 </div>
 
-<!-- MODAL WINDOW D: KITCHEN DISCARDS AND SPOILAGE INCIDENTS -->
-<div class="modal fade" id="logWasteModal" tabindex="-1">
+<!-- =================================================================================== -->
+<!-- 🗑️ MODAL C: SPOILAGE AND WASTE MANAGER CONTAINER -->
+<!-- =================================================================================== -->
+<div class="modal fade" id="logWasteModal" tabindex="-1" aria-hidden="true">
     <div class="modal-dialog modal-lg modal-dialog-centered">
-        <div class="modal-content bg-dark text-white border border-secondary">
-            <form method="POST">
+        <div class="modal-content modal-custom-content">
+            <form method="post" action="/portal/{{ username }}/inventory?type={{ current_type }}">
                 <input type="hidden" name="action_type" value="log_waste">
-                <div class="modal-header border-secondary bg-secondary">
-                    <h5 class="modal-title fw-bold text-white">Log Spoilage, Damage, and Kitchen Waste Incidents</h5>
-                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                
+                <div class="modal-custom-header">
+                    <h5 class="fw-bold m-0 text-white">Log Structural Material Spoilage or Operational Waste</h5>
                 </div>
+                
                 <div class="modal-body p-4">
-                    <div class="row g-2 mb-3">
-                        <div class="col-6">
-                            <label class="form-label">WASTE EXTRACTION SECTOR CLASSIFICATION:</label>
-                            <select name="waste_target_type" id="wasteTargetClassificationSelector" class="form-select" onchange="switchBifurcatedWasteFormContextViews()" required>
-                                <option value="ingredients" {% if current_type == 'RAW' %}selected{% endif %}>Raw Ingredients / Line Portions (At Cost Balance)</option>
-                                <option value="products" {% if current_type == 'PREPPED' %}selected{% endif %}>Finished Menu Items / Whole Dishes (At Sales Retail Value)</option>
+                    <div class="row g-3 mb-3">
+                        <div class="col-md-6">
+                            <label class="form-label-custom">Reporting Operator Identity:</label>
+                            <input type="text" name="wasted_by" required placeholder="e.g. Head Barista" class="form-control bg-dark text-white border-secondary">
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label-custom">Primary Core Waste Factor Reason:</label>
+                            <select name="waste_reason" required class="form-select bg-dark text-white border-secondary">
+                                <option value="" disabled selected>Select variance cause...</option>
+                                <option value="Expired Product Balance">Expired Storage Lifespan Date</option>
+                                <option value="Accidental Counter Drop Spill">Accidental Counter Drop Spill</option>
+                                <option value="Substandard Coldchain Storage Sours">Substandard Coldchain Storage Sours</option>
+                                <option value="Customer Return Cancellation">Customer Return Cancellation</option>
+                                <option value="Operator Training Practice">Operator Training Practice</option>
                             </select>
-                        </div>
-                        <div class="col-6">
-                            <label class="form-label">LOGGED BY STAFF WORKER NAME:</label>
-                            <input type="text" name="wasted_by" class="form-control" placeholder="e.g., Line Cook John" required>
-                        </div>
-                    </div>
-                    <div class="row g-2 mb-3">
-                        <div class="col-6">
-                            <label class="form-label">PRIMARY LOSS ROOT CAUSE REASON:</label>
-                            <select name="waste_reason" class="form-select" required>
-                                <option value="Expired Stock Room Assets">Expired Stock Room Assets</option>
-                                <option value="Kitchen Line Contamination">Kitchen Line Contamination / Overcooking</option>
-                                <option value="Customer Return Cancellation">Customer Return / Order Cancellation</option>
-                                <option value="Equipment Failure Melt Drop">Equipment Failure Spoilage</option>
-                            </select>
-                        </div>
-                        <div class="col-6">
-                            <label class="form-label">ADDITIONAL OBSERVATION REMARKS NOTES:</label>
-                            <input type="text" name="operational_note" class="form-control" placeholder="e.g., Oven calibration offset issue">
                         </div>
                     </div>
 
-                    <!-- SUB-SECTION A: EXTRACTIONS ROWS FOR INGREDIENTS/PORTIONS -->
-                    <div id="wasteIngredientContextBlockDiv">
-                        <div class="row font-monospace text-secondary fw-bold small mb-2">
-                            <div class="col-8">MATERIAL INGREDIENT/PORTION ID</div>
-                            <div class="col-4">VOLUME WASTE EXTRACTED</div>
-                        </div>
-                        <div id="dynamicWasteIngredientRowsContainer">
-                            <div class="row g-2 mb-2 align-items-center">
-                                <div class="col-8">
-                                    <select name="ingredient_id[]" class="form-select">
-                                        <option value="" disabled selected>Select asset target...</option>
-                                        {% for i in inventory_status %}
-                                            <option value="{{ i.Ingredient_ID }}">{{ i.Ingredient_Name }} (Currently: {{ "%.2f"|format(i.Current_Stock) }} {{ i.Unit }})</option>
-                                        {% endfor %}
-                                    </select>
-                                </div>
-                                <div class="col-3">
-                                    <input type="number" step="any" name="quantity[]" class="form-control" placeholder="0.00">
-                                </div>
-                                <div class="col-1 text-center">
-                                    <button type="button" class="btn btn-sm btn-danger fw-bold" onclick="this.parentElement.parentElement.remove()">✖</button>
-                                </div>
-                            </div>
-                        </div>
-                        <button type="button" class="btn btn-sm btn-info fw-bold mt-2 text-white" onclick="appendDynamicActionInputRowBlock('dynamicWasteIngredientRowsContainer')">＋ Add Loss Item Line</button>
+                    <div class="mb-3">
+                        <label class="form-label-custom">Additional Operational Shift Handover Notes:</label>
+                        <input type="text" name="operational_note" placeholder="Provide extra context details here..." class="form-control bg-dark text-white border-secondary">
                     </div>
 
-                    <!-- SUB-SECTION B: EXTRACTIONS ROWS FOR FULL DISHES -->
-                    <div id="wasteProductContextBlockDiv" style="display: none;">
-                        <div class="row font-monospace text-secondary fw-bold small mb-2">
-                            <div class="col-8">RETAIL CONSUMER CATALOGUE DIRECTORY DISH ID</div>
-                            <div class="col-4">TOTAL MENUS DROPPED / WASTED</div>
+                    <div class="mb-3 p-3 rounded border border-danger-subtle" style="background: rgba(194, 75, 75, 0.03);">
+                        <label class="form-label-custom d-block text-danger mb-2">Target Extraction Component Scope:</label>
+                        <div class="form-check form-check-inline me-4">
+                            <input class="form-check-input" type="radio" name="waste_target_type" id="radioTargetIng" value="ingredients" checked onchange="toggleWasteUIViews()">
+                            <label class="form-check-label text-white small fw-bold" for="radioTargetIng">Raw Wholesale Bulk Materials</label>
                         </div>
-                        <div id="dynamicWasteProductRowsContainer">
-                            <div class="row g-2 mb-2 align-items-center">
-                                <div class="col-8">
-                                    <select name="product_id[]" class="form-select">
-                                        <option value="" disabled selected>Select customer product directory target...</option>
-                                        {% for p in all_products %}
-                                            <option value="{{ p.Product_ID }}">{{ p.Product_Name }} ({{ p.Product_ID }})</option>
-                                        {% endfor %}
-                                    </select>
-                                </div>
-                                <div class="col-3">
-                                    <input type="number" step="any" name="product_quantity[]" class="form-control" placeholder="0.00">
-                                </div>
-                                <div class="col-1 text-center">
-                                    <button type="button" class="btn btn-sm btn-danger fw-bold" onclick="this.parentElement.parentElement.remove()">✖</button>
-                                </div>
+                        <div class="form-check form-check-inline">
+                            <input class="form-check-input" type="radio" name="waste_target_type" id="radioTargetProd" value="products" onchange="toggleWasteUIViews()">
+                            <label class="form-check-label text-white small fw-bold" for="radioTargetProd">Finalized Prepared Menu Item Recipes</label>
+                        </div>
+                    </div>
+
+                    <div id="wasteIngredientListBlock" class="border-top border-secondary pt-2">
+                        <label class="form-label-custom text-white-50">Bulk Materials Loss Roster:</label>
+                        <div class="row g-2 mb-2">
+                            <div class="col-md-8">
+                                <select name="ingredient_id[]" class="form-select bg-dark text-white border-secondary">
+                                    <option value="" disabled selected>Select spoiled bulk material...</option>
+                                    {% for item in inventory_status %}
+                                        <option value="{{ item.Ingredient_ID }}">{{ item.Ingredient_Name }}</option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                            <div class="col-md-4">
+                                <input type="number" name="quantity[]" step="0.001" placeholder="Quantity Lost" class="form-control bg-dark text-white border-secondary font-monospace">
                             </div>
                         </div>
-                        <button type="button" class="btn btn-sm btn-info fw-bold mt-2 text-white" onclick="appendDynamicProductLossInputRowBlock()">＋ Add Menu Loss Line</button>
+                    </div>
+
+                    <div id="wasteProductListBlock" class="border-top border-secondary pt-2 d-none">
+                        <label class="form-label-custom text-white-50">Menu Recipe Loss Roster:</label>
+                        <div class="row g-2 mb-2">
+                            <div class="col-md-8">
+                                <select name="product_id[]" class="form-select bg-dark text-white border-secondary">
+                                    <option value="" disabled selected>Select wasted menu item product...</option>
+                                    {% for prod in all_products %}
+                                        <option value="{{ prod.Product_ID }}">{{ prod.Product_Name }}</option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                            <div class="col-md-4">
+                                <input type="number" name="product_quantity[]" step="1" placeholder="Units Spat" class="form-control bg-dark text-white border-secondary font-monospace">
+                            </div>
+                        </div>
                     </div>
 
                 </div>
-                <div class="modal-footer border-secondary">
-                    <button type="submit" class="btn btn-success w-100 fw-bold py-2.5">Commit Extracted Waste Losses to Enterprise Audit Logs</button>
+                
+                <div class="modal-custom-footer text-end">
+                    <button type="button" class="btn btn-sm btn-secondary me-2 fw-bold" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-sm btn-danger fw-bold">Execute Scrap Deductions & Post to Logbook</button>
                 </div>
             </form>
         </div>
@@ -500,72 +453,44 @@
 </div>
 
 <script>
-function toggleTimelineAccordionNode(headerNodeElement) {
-    const parent = headerNodeElement.parentElement;
-    const body = parent.querySelector('.timeline-body');
-    if (body.style.display === 'block') {
-        body.style.display = 'none';
-    } else {
-        body.style.display = 'block';
-    }
-}
-
-function switchBifurcatedWasteFormContextViews() {
-    const selection = document.getElementById('wasteTargetClassificationSelector').value;
-    const ingBlock = document.getElementById('wasteIngredientContextBlockDiv');
-    const prodBlock = document.getElementById('wasteProductContextBlockDiv');
+function addNewDeliveryRowItem() {
+    const container = document.getElementById('modalReceiveRowsContainer');
+    const templateRow = container.querySelector('.delivery-entry-row');
     
-    if(selection === 'ingredients') {
-        ingBlock.style.display = 'block';
-        prodBlock.style.display = 'none';
-    } else {
-        ingBlock.style.display = 'none';
-        prodBlock.style.display = 'block';
+    if (templateRow) {
+        const newRow = templateRow.cloneNode(true);
+        newRow.querySelector('select').selectedIndex = 0;
+        newRow.querySelectorAll('input').forEach(input => input.value = ''); // Clears both qty and price fields cleanly
+        container.appendChild(newRow);
     }
 }
 
-function appendDynamicActionInputRowBlock(targetDivContainerId) {
-    document.getElementById(targetDivContainerId).insertAdjacentHTML('beforeend', `
-        <div class="row g-2 mb-2 align-items-center">
-            <div class="col-8">
-                <select name="ingredient_id[]" class="form-select" required>
-                    <option value="" disabled selected>Select inventory item target...</option>
-                    {% for i in inventory_status %}
-                        <option value="{{ i.Ingredient_ID }}">{{ i.Ingredient_Name }} (Currently: {{ "%.2f"|format(i.Current_Stock) }} {{ i.Unit }})</option>
-                    {% endfor %}
-                </select>
-            </div>
-            <div class="col-3">
-                <input type="number" step="any" name="quantity[]" class="form-control" placeholder="0.00" required>
-            </div>
-            <div class="col-1 text-center">
-                <button type="button" class="btn btn-sm btn-danger fw-bold" onclick="this.parentElement.parentElement.remove()">✖</button>
-            </div>
-        </div>`);
+function removeDeliveryRowItem(buttonNode) {
+    const container = document.getElementById('modalReceiveRowsContainer');
+    const totalRows = container.querySelectorAll('.delivery-entry-row').length;
+    
+    if (totalRows > 1) {
+        buttonNode.closest('.delivery-entry-row').remove();
+    } else {
+        alert("Compliance Gate: Supply delivery transactions require at least one material component row entry block.");
+    }
 }
 
-function appendDynamicProductLossInputRowBlock() {
-    document.getElementById('dynamicWasteProductRowsContainer').insertAdjacentHTML('beforeend', `
-        <div class="row g-2 mb-2 align-items-center">
-            <div class="col-8">
-                <select name="product_id[]" class="form-select" required>
-                    <option value="" disabled selected>Select customer product directory target...</option>
-                    {% for p in all_products %}
-                        <option value="{{ p.Product_ID }}">{{ p.Product_Name }} ({{ p.Product_ID }})</option>
-                    {% endfor %}
-                </select>
-            </div>
-            <div class="col-3">
-                <input type="number" step="any" name="product_quantity[]" class="form-control" placeholder="0.00" required>
-            </div>
-            <div class="col-1 text-center">
-                <button type="button" class="btn btn-sm btn-danger fw-bold" onclick="this.parentElement.parentElement.remove()">✖</button>
-            </div>
-        </div>`);
+function toggleWasteUIViews() {
+    const isIngredientsChecked = document.getElementById('radioTargetIng').checked;
+    const ingBlock = document.getElementById('wasteIngredientListBlock');
+    const prodBlock = document.getElementById('wasteProductListBlock');
+    
+    if (isIngredientsChecked) {
+        ingBlock.classList.remove('d-none');
+        prodBlock.classList.add('d-none');
+        prodBlock.querySelectorAll('select, input').forEach(el => el.removeAttribute('required'));
+    } else {
+        ingBlock.classList.add('d-none');
+        prodBlock.classList.remove('d-none');
+        prodBlock.querySelectorAll('select, input').forEach(el => el.setAttribute('required', 'required'));
+    }
 }
-
-document.addEventListener("DOMContentLoaded", function() {
-    switchBifurcatedWasteFormContextViews();
-});
 </script>
+
 {% endblock %}

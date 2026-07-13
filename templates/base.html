@@ -27,15 +27,31 @@
         <div class="sidebar-title">INVENTORY</div>
         <div class="sidebar-subtitle">My Bakery Shop</div>
         
+        <!-- 🟢 DASHBOARD: Viewable by ALL validated sessions -->
         <a href="/portal/{{ username }}" class="{{ 'active' if request.path == '/portal/' + username else '' }}">📊 Dashboard</a>
-        <a href="/portal/{{ username }}/products" class="{{ 'active' if 'products' in request.path else '' }}">📦 Products</a>
-        <a href="/portal/{{ username }}/ingredients" class="{{ 'active' if 'ingredients' in request.path else '' }}">🍎 Ingredients</a>
-        <a href="/portal/{{ username }}/recipes" class="{{ 'active' if 'recipes' in request.path else '' }}">🍕 Recipes (Linked)</a>
-        <a href="/portal/{{ username }}/sales" class="{{ 'active' if 'sales' in request.path else '' }}">💰 Sales</a>
+        
+        <!-- 🟡 EXECUTIVE PANELS: Restricted strictly to MANAGERS and PLATFORM ADMINS -->
+        {% if session.get('staff_role') in ['Platform Owner Admin', 'Store Manager'] %}
+            <a href="/portal/{{ username }}/products" class="{{ 'active' if 'products' in request.path else '' }}">📦 Products</a>
+            <a href="/portal/{{ username }}/ingredients" class="{{ 'active' if 'ingredients' in request.path else '' }}">🍎 Ingredients</a>
+            <a href="/portal/{{ username }}/recipes" class="{{ 'active' if 'recipes' in request.path else '' }}">🍕 Recipes (Linked)</a>
+            <a href="/portal/{{ username }}/sales" class="{{ 'active' if 'sales' in request.path else '' }}">💰 Sales</a>
+        {% endif %}
+        
+        <!-- 🟢 INVENTORY: Open to everyone so Baristas can still submit Prep Runs and Spoilage Waste forms -->
         <a href="/portal/{{ username }}/inventory" class="{{ 'active' if 'inventory' in request.path else '' }}">📦 Inventory</a>
-        <a href="/portal/{{ username }}/expenses" class="{{ 'active' if 'expenses' in request.path else '' }}">💸 Expenses</a>
-        <a href="/portal/{{ username }}/reports" class="{{ 'active' if 'reports' in request.path else '' }}">📊 Reports</a>
-        <a href="/portal/{{ username }}/settings" class="{{ 'active' if 'settings' in request.path else '' }}">⚙️ Settings</a>
+        
+        <!-- 🟡 FINANCIAL EXPENSES: Only Managers and Owners can track/log outlays -->
+        {% if session.get('staff_role') in ['Platform Owner Admin', 'Store Manager'] %}
+            <a href="/portal/{{ username }}/expenses" class="{{ 'active' if 'expenses' in request.path else '' }}">💸 Expenses</a>
+            <a href="/portal/{{ username }}/reports" class="{{ 'active' if 'reports' in request.path else '' }}">📊 Reports</a>
+        {% endif %}
+        
+        <!-- 🔴 SETTINGS: Exclusively locked away for the Master Platform Owner Admin profile only -->
+        {% if session.get('staff_role') == 'Platform Owner Admin' %}
+            <a href="/portal/{{ username }}/settings" class="{{ 'active' if 'settings' in request.path else '' }}">⚙️ Settings</a>
+        {% endif %}
+        
         <a href="/logout" class="exit-btn">🚪 Exit</a>
     </div>
 
