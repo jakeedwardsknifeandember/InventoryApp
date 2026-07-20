@@ -100,7 +100,7 @@ def web_reports_tab(username):
         feedback_msg = url_msg
         alert_type = request.args.get('alert_type', 'success')
 
-    # Read base tables directly matching your verified database layout names
+    # Read base tables directly matching verified database layout names
     sales_df = db.read_tab('Sales')
     expenses_df = db.read_tab('Expenses')
     products_df = db.read_tab('Products')
@@ -139,9 +139,11 @@ def web_reports_tab(username):
     # 💰 CORE REVENUE & COST OF GOODS SOLD (COGS) CALCULATIONS
     total_revenue = 0.0
     total_cogs = 0.0
+    total_sales_count = 0
     
     if not sales_df.empty:
         total_revenue = float(sales_df['Total_Amount'].sum())
+        total_sales_count = len(sales_df)
         if not products_df.empty:
             for _, sale_row in sales_df.iterrows():
                 p_id = sale_row['Product_ID']
@@ -151,7 +153,7 @@ def web_reports_tab(username):
                     unit_cost = float(pd.to_numeric(prod_match['Cost_Price'], errors='coerce').fillna(0.0).iloc[0])
                     total_cogs += (qty_sold * unit_cost)
 
-    # 🏢 OPERATING EXPENSES (OVERHEAD)
+    # 🏢 OPERATING EXPENSES (FIXED OVERHEAD)
     total_expenses = float(expenses_df['Amount'].sum()) if not expenses_df.empty else 0.0
 
     # 🔄 RECONCILIATION FOR KITCHEN WASTE LOSS VALUES
@@ -209,6 +211,67 @@ def web_reports_tab(username):
     total_assets = net_profit + warehouse_asset_value
     total_liabilities = 0.0  
     owners_equity = total_assets - total_liabilities
+
+    # ==========================================
+    # 📈 BREAK-EVEN ANALYSIS CALCULATOR ENGINE
+    # ==========================================
+    if total_revenue > 0:
+        gross_margin_pct = (gross_profit_margin / total_revenue) * 100.0
+    elif not products_df.empty:
+        # Fallback to average menu item margin %
+        p_temp = products_df.copy()
+        p_temp['Selling_Price'] = pd.to_numeric(p_temp['Selling_Price'], errors='coerce').fillna(0.0)
+        p_temp['Cost_Price'] = pd.to_numeric(p_temp['Cost_Price'], errors='coerce').fillna(0.0)
+        valid_p = p_temp[p_temp['Selling_Price'] > 0]
+        if not valid_p.empty:
+            gross_margin_pct = float(((valid_p['Selling_Price'] - valid_p['Cost_Price']) / valid_p['Selling_Price']).mean() * 100.0)
+        else:
+            gross_margin_pct = 65.0
+    else:
+        gross_margin_pct = 65.0
+
+    # Ensure valid positive percent threshold
+    if gross_margin_pct <= 0:
+        gross_margin_pct = 65.0
+
+    # Period Break-Even Target Calculation
+    if total_expenses > 0 and gross_margin_pct > 0:
+        break_even_target = total_expenses / (gross_margin_pct / 100.0)
+    else:
+        break_even_target = 0.0
+
+    daily_break_even = break_even_target / 30.0
+
+    # Average Order Value (AOV) & Ticket Calculations
+    if total_sales_count > 0 and total_revenue > 0:
+        aov = total_revenue / total_sales_count
+    else:
+        aov = 150.0  # Standard F&B ticket fallback benchmark
+
+    daily_tickets_needed = int(round(daily_break_even / aov)) if aov > 0 else 0
+
+    # Status Zone & Progress Calculations
+    if break_even_target > 0:
+        bep_progress_pct = min(100.0, (total_revenue / break_even_target) * 100.0)
+    else:
+        bep_progress_pct = 0.0
+
+    if total_revenue >= break_even_target and break_even_target > 0:
+        bep_status_text = "PROFIT ZONE 🟢"
+        bep_status_desc = f"Revenue exceeds fixed operating costs by ₱{total_revenue - break_even_target:,.2f}."
+        bep_status_color = "#10b981"
+        bep_badge_class = "bg-success"
+    elif total_revenue >= (break_even_target * 0.8) and break_even_target > 0:
+        bep_status_text = "CAUTION ZONE 🟡"
+        bep_status_desc = f"You need ₱{break_even_target - total_revenue:,.2f} more in gross sales to reach break-even."
+        bep_status_color = "#f59e0b"
+        bep_badge_class = "bg-warning text-dark"
+    else:
+        bep_status_text = "LOSS ZONE 🔴"
+        needed = break_even_target - total_revenue
+        bep_status_desc = f"Current revenue is ₱{needed:,.2f} short of covering operating overhead." if break_even_target > 0 else "Log operating expenses and products to calculate your break-even threshold."
+        bep_status_color = "#ef4444"
+        bep_badge_class = "bg-danger"
 
     # 🎯 MENU ENGINEERING MATRIX ALGORITHM DATA COMPILER
     menu_data_json = "[]"
@@ -300,5 +363,16 @@ def web_reports_tab(username):
         advice=action_notes[:4],
         msg=feedback_msg,
         alert_type=alert_type,
-        now=now
+        now=now,
+        # BREAK-EVEN ANALYTICS CONTEXT
+        gross_margin_pct=gross_margin_pct,
+        break_even_target=break_even_target,
+        daily_break_even=daily_break_even,
+        aov=aov,
+        daily_tickets_needed=daily_tickets_needed,
+        bep_progress_pct=bep_progress_pct,
+        bep_status_text=bep_status_text,
+        bep_status_desc=bep_status_desc,
+        bep_status_color=bep_status_color,
+        bep_badge_class=bep_badge_class
     )

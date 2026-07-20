@@ -13,9 +13,8 @@
     .financial-table td { padding: 14px; border-bottom: 1px solid #2d2d34; }
     .financial-title { font-weight: 700; color: #cbd5e1; }
     
-    /* 🔥 HIGH-CONTRAST MODAL TEXT VISIBILITY FIXED STRIP (Image Fix) */
     #logIncidentModal label {
-        color: #e2e8f0 !important; /* Luminous clean off-white labels */
+        color: #e2e8f0 !important;
         font-weight: 700 !important;
         font-size: 11.5px !important;
         letter-spacing: 0.5px;
@@ -29,6 +28,13 @@
     }
     #logIncidentModal .form-control::placeholder {
         color: #71717a !important;
+    }
+
+    .sandbox-input label {
+        color: #cbd5e1 !important;
+        font-weight: 600;
+        font-size: 12px;
+        margin-bottom: 4px;
     }
 </style>
 
@@ -45,8 +51,8 @@
     <!-- 👑 HEADER FILTERS SELECTION STRIP -->
     <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-center mb-4 gap-3">
         <div>
-            <h3 class="m-0" style="font-weight: 800; text-transform: uppercase; color: #ffffff; letter-spacing: -0.5px;">Business Performance Reports</h3>
-            <p class="text-muted m-0 small">Analyze financial statements, evaluate menu engineering parameters, and monitor operational compliance logs.</p>
+            <h3 class="m-0" style="font-weight: 800; text-transform: uppercase; color: #ffffff; letter-spacing: -0.5px;">Business Performance & Feasibility Hub</h3>
+            <p class="text-muted m-0 small">Analyze financial statements, evaluate menu parameters, test break-even targets, and simulate new store concepts.</p>
         </div>
         
         <form method="get" action="/portal/{{ username }}/reports" id="periodForm">
@@ -79,9 +85,9 @@
             </div>
         </div>
         <div class="col-6 col-md-3">
-            <div class="p-3" style="background: #1e1e24; border-bottom: 4px solid #e11d48; border-radius: 8px;">
-                <div class="text-muted small mb-1" style="font-weight: 700; text-transform: uppercase; font-size:11px;">Lost Revenue Opportunity</div>
-                <h3 class="m-0 font-monospace" style="font-weight: 800; color: #e11d48;">₱{{ "{:,.2f}".format(opportunity_cost) }}</h3>
+            <div class="p-3" style="background: #1e1e24; border-bottom: 4px solid #3b82f6; border-radius: 8px;">
+                <div class="text-muted small mb-1" style="font-weight: 700; text-transform: uppercase; font-size:11px;">Break-Even Target</div>
+                <h3 class="m-0 font-monospace" style="font-weight: 800; color: #3b82f6;">₱{{ "{:,.2f}".format(break_even_target) }}</h3>
             </div>
         </div>
     </div>
@@ -90,6 +96,12 @@
     <ul class="nav nav-tabs border-bottom border-secondary mb-4" id="commandTabs" role="tablist">
         <li class="nav-item">
             <button class="nav-link active" id="financials-tab" data-bs-toggle="tab" data-bs-target="#financials-panel" type="button" role="tab">💼 Financial Statements</button>
+        </li>
+        <li class="nav-item">
+            <button class="nav-link" id="breakeven-tab" data-bs-toggle="tab" data-bs-target="#breakeven-panel" type="button" role="tab">📈 Break-Even Analytics</button>
+        </li>
+        <li class="nav-item">
+            <button class="nav-link" id="sandbox-tab" data-bs-toggle="tab" data-bs-target="#sandbox-panel" type="button" role="tab">🚀 Concept Feasibility Sandbox</button>
         </li>
         <li class="nav-item">
             <button class="nav-link" id="menu-tab" data-bs-toggle="tab" data-bs-target="#menu-panel" type="button" role="tab">🎯 Menu Engineering Matrix</button>
@@ -104,7 +116,6 @@
         <!-- PANEL 1: STANDARD CORPORATE FINANCIAL STATEMENTS -->
         <div class="tab-pane fade show active text-white" id="financials-panel" role="tabpanel">
             <div class="row g-4">
-                <!-- Profit & Loss Summary Data Grid -->
                 <div class="col-12 col-lg-6">
                     <div class="p-4" style="background: #1e1e24; border-radius: 8px; border: 1px solid #2d2d34;">
                         <h5 class="mb-3" style="font-weight: 700; border-bottom: 1px solid #2d2d34; padding-bottom: 10px;">Income Statement (P&L Summary)</h5>
@@ -139,12 +150,10 @@
                     </div>
                 </div>
 
-                <!-- Balance Sheet Summary Data Grid -->
                 <div class="col-12 col-lg-6">
                     <div class="p-4" style="background: #1e1e24; border-radius: 8px; border: 1px solid #2d2d34;">
                         <h5 class="mb-3" style="font-weight: 700; border-bottom: 1px solid #2d2d34; padding-bottom: 10px;">Balance Sheet (Macro Equation Ledger)</h5>
                         <table class="w-100 financial-table">
-                            <!-- Assets Section -->
                             <tr>
                                 <td colspan="2" style="font-weight: 800; color: #3b82f6; background: #151518; padding: 6px 14px; font-size: 13px;">ASSETS</td>
                             </tr>
@@ -161,7 +170,6 @@
                                 <td class="text-end font-monospace text-info" style="font-weight: 700;">₱{{ "{:,.2f}".format(total_assets) }}</td>
                             </tr>
                             
-                            <!-- Liabilities Section -->
                             <tr>
                                 <td colspan="2" style="font-weight: 800; color: #ef4444; background: #151518; padding: 6px 14px; font-size: 13px;">LIABILITIES</td>
                             </tr>
@@ -170,7 +178,6 @@
                                 <td class="text-end font-monospace text-muted">- ₱{{ "{:,.2f}".format(total_liabilities) }}</td>
                             </tr>
                             
-                            <!-- Equity Section -->
                             <tr>
                                 <td colspan="2" style="font-weight: 800; color: #10b981; background: #151518; padding: 6px 14px; font-size: 13px;">OWNER'S EQUITY</td>
                             </tr>
@@ -188,7 +195,6 @@
                     </div>
                 </div>
                 
-                <!-- Recent Verified Sales Strip Records Table -->
                 <div class="col-12">
                     <h5 class="mb-3 mt-2" style="font-weight: 700;">Recent Transactions Ledger</h5>
                     <div class="content-card p-0 overflow-hidden" style="background: #1e1e24; border: 1px solid #2d2d34; border-radius: 8px;">
@@ -221,7 +227,219 @@
             </div>
         </div>
 
-        <!-- PANEL 2: MENU ENGINEERING MATRIX WORKSPACE -->
+        <!-- PANEL 2: BREAK-EVEN ANALYTICS ENGINE -->
+        <div class="tab-pane fade text-white" id="breakeven-panel" role="tabpanel">
+            <div class="p-4 mb-4 rounded shadow-sm d-flex flex-column flex-md-row align-items-md-center justify-content-between" style="background: #1e1e24; border-left: 6px solid {{ bep_status_color }}; border-top: 1px solid #2d2d34; border-right: 1px solid #2d2d34; border-bottom: 1px solid #2d2d34;">
+                <div>
+                    <span class="badge {{ bep_badge_class }} px-3 py-1 mb-2" style="font-size: 12px; font-weight: bold;">{{ bep_status_text }}</span>
+                    <h4 class="m-0 font-monospace text-white" style="font-weight: 800;">
+                        Target Progress: {{ "{:,.1f}".format(bep_progress_pct) }}%
+                    </h4>
+                    <p class="m-0 mt-1 text-muted small">{{ bep_status_desc }}</p>
+                </div>
+                <div class="mt-3 mt-md-0 text-md-end" style="min-width: 250px;">
+                    <div class="text-muted small mb-1" style="font-weight: 600;">Break-Even Target Progress</div>
+                    <div class="progress" style="height: 12px; background-color: #111118; border-radius: 6px;">
+                        <div class="progress-bar" role="progressbar" style="width: {{ bep_progress_pct }}%; background-color: {{ bep_status_color }};"></div>
+                    </div>
+                    <small class="text-muted mt-1 d-block font-monospace">₱{{ "{:,.2f}".format(total_revenue) }} / ₱{{ "{:,.2f}".format(break_even_target) }}</small>
+                </div>
+            </div>
+
+            <div class="row g-4">
+                <div class="col-12 col-lg-7">
+                    <div class="p-4" style="background: #1e1e24; border-radius: 8px; border: 1px solid #2d2d34;">
+                        <h5 class="mb-3" style="font-weight: 700; border-bottom: 1px solid #2d2d34; padding-bottom: 10px; color: #ffffff;">Break-Even Mathematical Equation</h5>
+                        <table class="w-100 financial-table">
+                            <tr>
+                                <td class="financial-title">Fixed Operating Overhead (Expenses)</td>
+                                <td class="text-end font-monospace text-danger" style="font-weight: 700;">₱{{ "{:,.2f}".format(total_expenses) }}</td>
+                            </tr>
+                            <tr>
+                                <td class="financial-title">Gross Contribution Margin %</td>
+                                <td class="text-end font-monospace text-info" style="font-weight: 700;">{{ "{:,.1f}".format(gross_margin_pct) }}%</td>
+                            </tr>
+                            <tr style="background: #151518;">
+                                <td style="font-weight: 800; color: #ffffff;">Required Revenue to Break-Even</td>
+                                <td class="text-end font-monospace text-warning" style="font-weight: 800; font-size: 16px;">₱{{ "{:,.2f}".format(break_even_target) }}</td>
+                            </tr>
+                            <tr>
+                                <td class="financial-title text-muted">Daily Revenue Milestone (30-Day Avg)</td>
+                                <td class="text-end font-monospace text-light" style="font-weight: 700;">₱{{ "{:,.2f}".format(daily_break_even) }} / day</td>
+                            </tr>
+                            <tr>
+                                <td class="financial-title text-muted">Average Ticket Value (AOV)</td>
+                                <td class="text-end font-monospace text-light" style="font-weight: 700;">₱{{ "{:,.2f}".format(aov) }} / order</td>
+                            </tr>
+                            <tr style="background: #1a1a20;">
+                                <td style="font-weight: 700; color: #10b981;">Daily Target Order Volume</td>
+                                <td class="text-end font-monospace text-success" style="font-weight: 800; font-size: 16px;">~{{ daily_tickets_needed }} orders / day</td>
+                            </tr>
+                        </table>
+                    </div>
+                </div>
+
+                <div class="col-12 col-lg-5">
+                    <div class="p-4" style="background: #1e1e24; border-radius: 8px; border: 1px solid #2d2d34;">
+                        <h5 class="mb-2" style="font-weight: 700; color: #60a5fa;">💡 Daily Ticket Goal Simulator</h5>
+                        <p class="text-muted small mb-3">Adjust your estimated customer ticket size to project daily required order volume.</p>
+
+                        <div class="p-3 mb-3 rounded" style="background: #151518; border: 1px solid #2d2d34;">
+                            <label class="form-label text-light mb-1" style="font-weight: 600; font-size: 12px;">Simulated Avg Order Value (AOV ₱):</label>
+                            <input type="number" step="10" id="simAovInput" class="form-control bg-dark text-white border-secondary mb-3" value="{{ "%.2f"|format(aov) }}" oninput="runBepSimulation({{ daily_break_even }})">
+
+                            <div class="p-3 rounded" style="background: #1c1c24; border: 1px solid #2a2a38;">
+                                <div class="text-muted small mb-1">Simulated Daily Order Target:</div>
+                                <h3 id="simTicketResult" class="m-0 font-monospace text-success" style="font-weight: 800;">~{{ daily_tickets_needed }} orders / day</h3>
+                            </div>
+                        </div>
+
+                        <p class="text-muted small m-0" style="font-size: 11.5px; line-height: 1.4;">
+                            * <strong>Consultant Note:</strong> If your ticket size increases (via cross-selling or side-dish add-ons), the total daily orders required to reach profitability drops significantly.
+                        </p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- PANEL 3: CONCEPT FEASIBILITY SANDBOX (NEW PANEL) -->
+        <div class="tab-pane fade text-white" id="sandbox-panel" role="tabpanel">
+            <div class="row g-4">
+                
+                <!-- INPUT PARAMETERS COLUMN -->
+                <div class="col-12 col-lg-6">
+                    <div class="p-4 rounded h-100" style="background: #1e1e24; border: 1px solid #2d2d34;">
+                        <h5 class="mb-1" style="font-weight: 700; color: #60a5fa;">🛠️ Pre-Opening Model Inputs</h5>
+                        <p class="text-muted small mb-4">Input prospective capital expenditures, operating overhead, and sales unit economics.</p>
+
+                        <!-- SECTION 1: CAPEX -->
+                        <div class="p-3 mb-3 rounded" style="background: #151518; border: 1px solid #2d2d34;">
+                            <h6 style="color: #facc15; font-size: 13px; font-weight: 700;" class="mb-2">1. Capital Expenditure (CapEx / Initial Setup)</h6>
+                            <div class="row g-2 sandbox-input">
+                                <div class="col-6">
+                                    <label>Equipment & Fit-out (₱):</label>
+                                    <input type="number" id="sbCapexEquip" class="form-control bg-dark text-white border-secondary" value="350000" oninput="runProFormaSandbox()">
+                                </div>
+                                <div class="col-6">
+                                    <label>Deposit & Permits (₱):</label>
+                                    <input type="number" id="sbCapexPermits" class="form-control bg-dark text-white border-secondary" value="100000" oninput="runProFormaSandbox()">
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- SECTION 2: OPEX -->
+                        <div class="p-3 mb-3 rounded" style="background: #151518; border: 1px solid #2d2d34;">
+                            <h6 style="color: #ef4444; font-size: 13px; font-weight: 700;" class="mb-2">2. Monthly Fixed Operating Expenses (OpEx)</h6>
+                            <div class="row g-2 sandbox-input">
+                                <div class="col-6 mb-2">
+                                    <label>Monthly Rent (₱):</label>
+                                    <input type="number" id="sbOpexRent" class="form-control bg-dark text-white border-secondary" value="30000" oninput="runProFormaSandbox()">
+                                </div>
+                                <div class="col-6 mb-2">
+                                    <label>Target Payroll / Staff (₱):</label>
+                                    <input type="number" id="sbOpexLabor" class="form-control bg-dark text-white border-secondary" value="45000" oninput="runProFormaSandbox()">
+                                </div>
+                                <div class="col-6">
+                                    <label>Utilities & Wifi (₱):</label>
+                                    <input type="number" id="sbOpexUtils" class="form-control bg-dark text-white border-secondary" value="18000" oninput="runProFormaSandbox()">
+                                </div>
+                                <div class="col-6">
+                                    <label>Marketing & Misc (₱):</label>
+                                    <input type="number" id="sbOpexMisc" class="form-control bg-dark text-white border-secondary" value="10000" oninput="runProFormaSandbox()">
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- SECTION 3: UNIT ECONOMICS -->
+                        <div class="p-3 rounded" style="background: #151518; border: 1px solid #2d2d34;">
+                            <h6 style="color: #10b981; font-size: 13px; font-weight: 700;" class="mb-2">3. Unit Economics & Traffic Projections</h6>
+                            <div class="row g-2 sandbox-input">
+                                <div class="col-4">
+                                    <label>Daily Traffic:</label>
+                                    <input type="number" id="sbTraffic" class="form-control bg-dark text-white border-secondary" value="70" oninput="runProFormaSandbox()">
+                                </div>
+                                <div class="col-4">
+                                    <label>Avg Ticket (₱):</label>
+                                    <input type="number" id="sbAov" class="form-control bg-dark text-white border-secondary" value="160" oninput="runProFormaSandbox()">
+                                </div>
+                                <div class="col-4">
+                                    <label>Food Cost %:</label>
+                                    <input type="number" step="0.5" id="sbFoodCostPct" class="form-control bg-dark text-white border-secondary" value="28.0" oninput="runProFormaSandbox()">
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- FEASIBILITY RESULTS COLUMN -->
+                <div class="col-12 col-lg-6">
+                    <div class="p-4 rounded h-100 d-flex flex-column" style="background: #1e1e24; border: 1px solid #2d2d34;">
+                        <h5 class="mb-1" style="font-weight: 700; color: #a6e3a1;">📊 Dynamic Pro-Forma Outputs</h5>
+                        <p class="text-muted small mb-3">Live financial feasibility metrics computed directly from input models.</p>
+
+                        <!-- STATUS BADGE -->
+                        <div id="sbStatusBox" class="p-3 rounded mb-3 text-center" style="background: #151518; border: 2px solid #10b981;">
+                            <span id="sbBadgeText" class="badge bg-success px-3 py-1 mb-1" style="font-size: 13px;">🟢 HIGHLY VIABLE CONCEPT</span>
+                            <div id="sbStatusSub" style="font-size: 12px; color: #cbd5e1;">Projected payback period is healthy and within investor standards.</div>
+                        </div>
+
+                        <div class="row g-3 mb-3">
+                            <div class="col-6">
+                                <div class="p-3 rounded" style="background: #151518; border: 1px solid #2d2d34;">
+                                    <small style="color: #cbd5e1; font-weight: 600;" class="d-block">Total Initial Investment:</small>
+                                    <span id="sbResultCapEx" class="font-monospace fw-bold style-val" style="font-size: 18px; color: #facc15;">₱450,000.00</span>
+                                </div>
+                            </div>
+                            <div class="col-6">
+                                <div class="col-6 w-100">
+                                    <div class="p-3 rounded" style="background: #151518; border: 1px solid #2d2d34;">
+                                        <small style="color: #cbd5e1; font-weight: 600;" class="d-block">Total Fixed Monthly OpEx:</small>
+                                        <span id="sbResultOpEx" class="font-monospace fw-bold style-val" style="font-size: 18px; color: #ef4444;">₱103,000.00</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="row g-3 mb-3">
+                            <div class="col-6">
+                                <div class="p-3 rounded" style="background: #151518; border: 1px solid #2d2d34;">
+                                    <small style="color: #cbd5e1; font-weight: 600;" class="d-block">Projected Monthly Revenue:</small>
+                                    <span id="sbResultRev" class="font-monospace fw-bold style-val" style="font-size: 18px; color: #10b981;">₱336,000.00</span>
+                                </div>
+                            </div>
+                            <div class="col-6">
+                                <div class="p-3 rounded" style="background: #151518; border: 1px solid #2d2d34;">
+                                    <small style="color: #cbd5e1; font-weight: 600;" class="d-block">Projected Net Monthly Profit:</small>
+                                    <span id="sbResultNet" class="font-monospace fw-bold style-val" style="font-size: 18px; color: #3b82f6;">₱138,920.00</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="p-3 rounded mb-3" style="background: #151518; border: 1px solid #2d2d34;">
+                            <div class="d-flex justify-content-between align-items-center">
+                                <div>
+                                    <small style="color: #cbd5e1; font-weight: 600;" class="d-block">Estimated Payback Period (ROI):</small>
+                                    <h3 id="sbResultPayback" class="m-0 font-monospace fw-bold text-info" style="font-size: 24px;">3.2 Months</h3>
+                                </div>
+                                <div class="text-end">
+                                    <small style="color: #cbd5e1; font-weight: 600;" class="d-block">Net Operating Margin:</small>
+                                    <h3 id="sbResultMarginPct" class="m-0 font-monospace fw-bold text-success" style="font-size: 24px;">41.3%</h3>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="p-3 rounded mt-auto" style="background: #181820; border-left: 4px solid #60a5fa;">
+                            <small class="d-block" style="color: #cbd5e1; font-size: 11.5px; line-height: 1.4;">
+                                💡 <strong>Consultant Insight:</strong> A store concept with a payback period under 18 months and a net operating margin over 18% represents an elite risk-adjusted investment for potential franchise partners.
+                            </small>
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+        </div>
+
+        <!-- PANEL 4: MENU ENGINEERING MATRIX WORKSPACE -->
         <div class="tab-pane fade" id="menu-panel" role="tabpanel">
             <div class="row g-4">
                 <div class="col-12 col-lg-8">
@@ -247,7 +465,7 @@
             </div>
         </div>
 
-        <!-- PANEL 3: HR COMPLIANCE AND WORKSPACE EVENTS REGISTER -->
+        <!-- PANEL 5: HR COMPLIANCE AND WORKSPACE EVENTS REGISTER -->
         <div class="tab-pane fade" id="incidents-panel" role="tabpanel">
             <div class="d-flex justify-content-between align-items-center mb-3">
                 <h5 class="m-0 text-white" style="font-weight: 700;">Operational Event Register & Customer Complaint Logs</h5>
@@ -300,7 +518,7 @@
     </div>
 </div>
 
-<!-- 📦 POPUP DIALOG FOR RECORDING NEW OPERATIONAL ACTIONS (Styles Fixed) -->
+<!-- 📦 POPUP DIALOG FOR RECORDING NEW OPERATIONAL ACTIONS -->
 <div class="modal fade" id="logIncidentModal" tabindex="-1" aria-hidden="true">
     <div class="modal-dialog modal-dialog-centered">
         <div class="modal-content text-white border-0 shadow-lg" style="background: #1e1e24; border-radius: 12px;">
@@ -340,7 +558,7 @@
                     </div>
 
                     <div>
-                        <label class="form-label">INITIAL INITIAL RECONCILIATION STATUS:</label>
+                        <label class="form-label">INITIAL RECONCILIATION STATUS:</label>
                         <select name="status" class="form-select">
                             <option value="Pending" selected>🔴 Pending Management Review</option>
                             <option value="Resolved">🟢 Resolved & Settled</option>
@@ -356,7 +574,7 @@
     </div>
 </div>
 
-<!-- 📊 CHARTJS INTERACTIVE ROUTINES GRAPH CONFIGURATION -->
+<!-- 📊 CHARTJS INTERACTIVE ROUTINES GRAPH CONFIGURATION & SIMULATOR JS -->
 <script>
     document.addEventListener("DOMContentLoaded", function () {
         const rawPointsData = {{ menu_data_json|safe }};
@@ -390,7 +608,88 @@
                 }
             }
         });
+
+        // Initialize Pro-Forma Sandbox on initial page render
+        runProFormaSandbox();
     });
+
+    function runBepSimulation(dailyTargetRevenue) {
+        const simAov = parseFloat(document.getElementById('simAovInput').value) || 0;
+        const resultLabel = document.getElementById('simTicketResult');
+        
+        if (simAov > 0 && dailyTargetRevenue > 0) {
+            const requiredTickets = Math.ceil(dailyTargetRevenue / simAov);
+            resultLabel.innerText = `~${requiredTickets} orders / day`;
+        } else {
+            resultLabel.innerText = "~0 orders / day";
+        }
+    }
+
+    // ===== PRO-FORMA CONCEPT SANDBOX CALCULATION ENGINE =====
+    function runProFormaSandbox() {
+        const capexEquip = parseFloat(document.getElementById('sbCapexEquip').value) || 0;
+        const capexPermits = parseFloat(document.getElementById('sbCapexPermits').value) || 0;
+        const totalCapex = capexEquip + capexPermits;
+
+        const opexRent = parseFloat(document.getElementById('sbOpexRent').value) || 0;
+        const opexLabor = parseFloat(document.getElementById('sbOpexLabor').value) || 0;
+        const opexUtils = parseFloat(document.getElementById('sbOpexUtils').value) || 0;
+        const opexMisc = parseFloat(document.getElementById('sbOpexMisc').value) || 0;
+        const totalOpEx = opexRent + opexLabor + opexUtils + opexMisc;
+
+        const dailyTraffic = parseFloat(document.getElementById('sbTraffic').value) || 0;
+        const aov = parseFloat(document.getElementById('sbAov').value) || 0;
+        const foodCostPct = parseFloat(document.getElementById('sbFoodCostPct').value) || 0;
+
+        const projMonthlyRev = dailyTraffic * aov * 30.0;
+        const grossMarginPct = 100.0 - foodCostPct;
+        const projGrossProfit = projMonthlyRev * (grossMarginPct / 100.0);
+        const projNetProfit = projGrossProfit - totalOpEx;
+
+        const netMarginPct = projMonthlyRev > 0 ? (projNetProfit / projMonthlyRev) * 100.0 : 0.0;
+        const paybackMonths = projNetProfit > 0 ? (totalCapex / projNetProfit) : 0;
+
+        // Render formatted text to UI
+        document.getElementById('sbResultCapEx').innerText = "₱" + totalCapex.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2});
+        document.getElementById('sbResultOpEx').innerText = "₱" + totalOpEx.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2});
+        document.getElementById('sbResultRev').innerText = "₱" + projMonthlyRev.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2});
+        
+        const netSpan = document.getElementById('sbResultNet');
+        netSpan.innerText = "₱" + projNetProfit.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2});
+        netSpan.style.color = projNetProfit >= 0 ? "#10b981" : "#ef4444";
+
+        document.getElementById('sbResultMarginPct').innerText = netMarginPct.toFixed(1) + "%";
+        document.getElementById('sbResultMarginPct').style.color = netMarginPct >= 18.0 ? "#10b981" : (netMarginPct > 0 ? "#f59e0b" : "#ef4444");
+
+        const paybackSpan = document.getElementById('sbResultPayback');
+        if (projNetProfit > 0) {
+            paybackSpan.innerText = paybackMonths.toFixed(1) + " Months";
+        } else {
+            paybackSpan.innerText = "N/A (Loss)";
+        }
+
+        // Feasibility Indicator Logic
+        const statusBox = document.getElementById('sbStatusBox');
+        const badgeText = document.getElementById('sbBadgeText');
+        const statusSub = document.getElementById('sbStatusSub');
+
+        if (projNetProfit > 0 && paybackMonths > 0 && paybackMonths <= 18.0 && netMarginPct >= 18.0) {
+            statusBox.style.borderColor = "#10b981";
+            badgeText.className = "badge bg-success px-3 py-1 mb-1";
+            badgeText.innerText = "🟢 HIGHLY VIABLE CONCEPT";
+            statusSub.innerText = "Projected payback is under 18 months with strong net cash flow margins.";
+        } else if (projNetProfit > 0 && paybackMonths <= 36.0) {
+            statusBox.style.borderColor = "#f59e0b";
+            badgeText.className = "badge bg-warning text-dark px-3 py-1 mb-1";
+            badgeText.innerText = "🟡 MODERATE FEASIBILITY";
+            statusSub.innerText = "Viable concept, but payback takes 1.5 to 3 years. Consider optimizing rent or labor overhead.";
+        } else {
+            statusBox.style.borderColor = "#ef4444";
+            badgeText.className = "badge bg-danger px-3 py-1 mb-1";
+            badgeText.innerText = "🔴 HIGH FINANCIAL RISK";
+            statusSub.innerText = "Projected sales volume is insufficient to cover fixed monthly overhead.";
+        }
+    }
 </script>
 
 {% endblock %}

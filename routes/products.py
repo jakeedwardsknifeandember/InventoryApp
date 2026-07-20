@@ -61,7 +61,6 @@ def web_products_tab(username):
     # ===== GET DATA & APPLY FILTERS =====
     df = db.read_tab('Products')
     
-    # Capture complete data list for real-time validation tracking before running layout filters
     all_products_raw = []
     if not df.empty:
         all_products_raw = df.to_dict('records')
@@ -71,12 +70,17 @@ def web_products_tab(username):
     total_count = 0
 
     if not df.empty:
-        # Safely convert number columns to avoid template crashes
+        # Safely convert numeric columns
         df['Selling_Price'] = pd.to_numeric(df['Selling_Price'], errors='coerce').fillna(0.0)
         df['Cost_Price'] = pd.to_numeric(df['Cost_Price'], errors='coerce').fillna(0.0)
         df['Margin_Percentage'] = pd.to_numeric(df['Margin_Percentage'], errors='coerce').fillna(0.0)
 
-        # Get unique categories for the dropdown menu
+        # Compute Cash Profit Spread and Food Cost %
+        df['Cash_Profit'] = df['Selling_Price'] - df['Cost_Price']
+        df['Food_Cost_Pct'] = 0.0
+        mask = df['Selling_Price'] > 0
+        df.loc[mask, 'Food_Cost_Pct'] = (df.loc[mask, 'Cost_Price'] / df.loc[mask, 'Selling_Price']) * 100.0
+
         if 'Category' in df.columns:
             categories = sorted([c for c in df['Category'].dropna().unique() if c])
 
@@ -87,19 +91,19 @@ def web_products_tab(username):
         sort_by = request.args.get('sort_by', 'name')
         order = request.args.get('order', 'asc')
 
-        # Filter Rule 1: Apply Search
+        # Filter Rule 1: Search
         if search:
             df = df[df['Product_Name'].str.lower().str.contains(search) | df['Product_ID'].str.lower().str.contains(search)]
 
-        # Filter Rule 2: Apply Status Filter (Active / Inactive)
+        # Filter Rule 2: Status Filter
         if status != 'All':
             df = df[df['Active'].astype(str).str.upper() == status.upper()]
 
-        # Filter Rule 3: Apply Category Filter
+        # Filter Rule 3: Category Filter
         if category != 'All':
             df = df[df['Category'] == category]
 
-        # Filter Rule 4: Apply Sorting
+        # Filter Rule 4: Sorting Matrix
         ascending = (order == 'asc')
         if sort_by == 'name':
             df = df.sort_values('Product_Name', ascending=ascending)
@@ -107,6 +111,8 @@ def web_products_tab(username):
             df = df.sort_values('Selling_Price', ascending=ascending)
         elif sort_by == 'margin':
             df = df.sort_values('Margin_Percentage', ascending=ascending)
+        elif sort_by == 'food_cost':
+            df = df.sort_values('Food_Cost_Pct', ascending=ascending)
 
         total_count = len(df)
         products_list = df.to_dict('records')
