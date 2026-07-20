@@ -35,6 +35,9 @@
             <button class="btn btn-sm btn-success fw-bold d-flex align-items-center gap-1 px-3 py-2" data-bs-toggle="modal" data-bs-target="#receiveStockModal">
                 🚚 Receive Bulk Delivery
             </button>
+            <button class="btn btn-sm btn-warning text-dark fw-bold d-flex align-items-center gap-1 px-3 py-2" data-bs-toggle="modal" data-bs-target="#logPrepModal">
+                🥣 Log Kitchen Prep
+            </button>
             <button class="btn btn-sm btn-primary fw-bold d-flex align-items-center gap-1 px-3 py-2" data-bs-toggle="modal" data-bs-target="#reconcileStockModal">
                 ⚖️ Audit Raw Counts
             </button>
@@ -218,7 +221,7 @@
 </div>
 
 <!-- =================================================================================== -->
-<!-- 🚚 MODAL A: RECEIVE SUPPLIER SHIPMENTS INVOICE INTAKE CONTAINER (FIXED PIPELINE) -->
+<!-- 🚚 MODAL A: RECEIVE SUPPLIER SHIPMENTS INVOICE INTAKE CONTAINER -->
 <!-- =================================================================================== -->
 <div class="modal fade" id="receiveStockModal" tabindex="-1" aria-hidden="true">
     <div class="modal-dialog modal-xl modal-dialog-centered">
@@ -258,7 +261,6 @@
                         <input type="text" name="delivery_notes" placeholder="e.g. Invoice #INV-2026-991A, Batch Ref #A4" class="form-control bg-dark text-white border-secondary">
                     </div>
 
-                    <!-- Granular Row Array Configuration Block -->
                     <div class="border-top border-secondary pt-3">
                         <label class="form-label-custom mb-2 d-block text-info">Material Registration Rows Array</label>
                         <div id="modalReceiveRowsContainer">
@@ -285,7 +287,7 @@
                                 </div>
                                 <div class="col-md-1 text-end">
                                     <button type="button" class="btn btn-outline-danger border-secondary w-100" onclick="removeDeliveryRowItem(this)">✕</button>
-                                }</div>
+                                </div>
                             </div>
                         </div>
                         <button type="button" class="btn btn-sm btn-outline-info fw-bold mt-2" onclick="addNewDeliveryRowItem()">
@@ -305,7 +307,56 @@
 </div>
 
 <!-- =================================================================================== -->
-<!-- ⚖️ MODAL B: AUDIT COUNTS RECONCILIATION CONTAINER -->
+<!-- 🥣 MODAL B: LOG KITCHEN PREP BATCH PRODUCTION CONTAINER (NEW MODAL) -->
+<!-- =================================================================================== -->
+<div class="modal fade" id="logPrepModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-centered">
+        <div class="modal-content modal-custom-content shadow-lg">
+            <form method="post" action="/portal/{{ username }}/inventory?type={{ current_type }}">
+                <input type="hidden" name="action_type" value="log_production_prep">
+                
+                <div class="modal-custom-header d-flex justify-content-between align-items-center">
+                    <h5 class="fw-bold m-0 text-white">🥣 Log Kitchen Prep Production Batch</h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                
+                <div class="modal-body p-4">
+                    <div class="row g-3 mb-3">
+                        <div class="col-md-6">
+                            <label class="form-label-custom">Chef / Kitchen Staff Identity:</label>
+                            <input type="text" name="prepped_by" required placeholder="e.g. Line Cook Alex" class="form-control bg-dark text-white border-secondary">
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label-custom" style="color: #facc15;">Select Kitchen Prepped Item:</label>
+                            <select name="prep_ingredient_id" required class="form-select bg-dark text-white border-secondary fw-bold">
+                                <option value="" disabled selected>Choose prepped component...</option>
+                                {% for prepped in prepped_options %}
+                                    <option value="{{ prepped.Ingredient_ID }}">{{ prepped.Ingredient_Name }} (in {{ prepped.Unit }})</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label-custom">Batch Quantity / Servings Prepped:</label>
+                        <input type="number" name="prep_quantity" step="0.001" min="0.001" required placeholder="e.g. 5.0 (Generates batch output based on recipe formula)" class="form-control bg-dark text-white border-secondary font-monospace">
+                        <small class="text-high-contrast-muted d-block mt-1" style="font-size: 11.5px;">
+                            💡 <strong>Automatic Recipe Conversion:</strong> Executing this prep run will automatically calculate and deduct required wholesale raw materials (e.g., Milk & Heavy Cream) directly from your bulk warehouse inventory based on your formula specifications.
+                        </small>
+                    </div>
+                </div>
+                
+                <div class="modal-custom-footer text-end">
+                    <button type="button" class="btn btn-sm btn-secondary me-2 fw-bold" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-sm btn-warning text-dark fw-bold px-4">Execute Kitchen Prep & Convert Stock</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- =================================================================================== -->
+<!-- ⚖️ MODAL C: AUDIT COUNTS RECONCILIATION CONTAINER -->
 <!-- =================================================================================== -->
 <div class="modal fade" id="reconcileStockModal" tabindex="-1" aria-hidden="true">
     <div class="modal-dialog modal-lg modal-dialog-centered">
@@ -359,7 +410,7 @@
 </div>
 
 <!-- =================================================================================== -->
-<!-- 🗑️ MODAL C: SPOILAGE AND WASTE MANAGER CONTAINER -->
+<!-- 🗑️ MODAL D: SPOILAGE AND WASTE MANAGER CONTAINER -->
 <!-- =================================================================================== -->
 <div class="modal fade" id="logWasteModal" tabindex="-1" aria-hidden="true">
     <div class="modal-dialog modal-lg modal-dialog-centered">
@@ -460,7 +511,7 @@ function addNewDeliveryRowItem() {
     if (templateRow) {
         const newRow = templateRow.cloneNode(true);
         newRow.querySelector('select').selectedIndex = 0;
-        newRow.querySelectorAll('input').forEach(input => input.value = ''); // Clears both qty and price fields cleanly
+        newRow.querySelectorAll('input').forEach(input => input.value = '');
         container.appendChild(newRow);
     }
 }
