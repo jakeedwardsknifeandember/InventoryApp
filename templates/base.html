@@ -2,33 +2,128 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    
     <!-- 🌐 DYNAMIC TITLE ENGINE: Automatically brands the browser tab relative to the tenant account name -->
-    <title>{{ username|capitalize }} Hub | Operations Command Center</title>
+    <title>{% block title %}{{ username|capitalize }} Hub | Operations Command Center{% endblock %}</title>
+    
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    
     <style>
         /* Custom Theme Overrides to match your Desktop App */
-        body { font-family: 'Segoe UI', Arial, sans-serif; background-color: #242424; color: #ffffff; margin: 0; display: flex; height: 100vh; overflow: hidden; }
-        .sidebar { width: 220px; background-color: #2b2b2b; padding: 20px 10px; display: flex; flex-direction: column; gap: 5px; border-right: 1px solid #313244; flex-shrink: 0; }
-        .sidebar-title { font-size: 22px; font-weight: bold; padding: 10px; color: #fff; letter-spacing: 1px; }
+        body { 
+            font-family: 'Segoe UI', Arial, sans-serif; 
+            background-color: #242424; 
+            color: #ffffff; 
+            margin: 0; 
+            display: flex; 
+            height: 100vh; 
+            overflow: hidden; 
+        }
+        
+        .sidebar { 
+            width: 220px; 
+            background-color: #2b2b2b; 
+            padding: 20px 10px; 
+            display: flex; 
+            flex-direction: column; 
+            gap: 5px; 
+            border-right: 1px solid #313244; 
+            flex-shrink: 0; 
+        }
+        
+        .sidebar-title { 
+            font-size: 22px; 
+            font-weight: bold; 
+            padding: 10px; 
+            color: #fff; 
+            letter-spacing: 1px; 
+        }
         
         /* 🎨 CONTRAST UPGRADE: Forced high scannability values on subtext labels */
-        .sidebar-subtitle { font-size: 13px; color: #cbd5e1; font-weight: 500; padding-left: 10px; margin-bottom: 20px; text-transform: uppercase; letter-spacing: 0.5px; }
+        .sidebar-subtitle { 
+            font-size: 13px; 
+            color: #cbd5e1; 
+            font-weight: 500; 
+            padding-left: 10px; 
+            margin-bottom: 20px; 
+            text-transform: uppercase; 
+            letter-spacing: 0.5px; 
+        }
         
-        .sidebar a { color: #ffffff; text-decoration: none; padding: 12px 15px; border-radius: 4px; font-size: 14px; display: block; border-left: 4px solid transparent; }
-        .sidebar a:hover { background-color: #3a3a3a; }
-        .sidebar a.active { background-color: #3a3a3a; border-left: 4px solid #3b8ed0; font-weight: bold; }
-        .exit-btn { margin-top: auto; background-color: #c24b4b !important; text-align: center; font-weight: bold; }
+        .sidebar a { 
+            color: #ffffff; 
+            text-decoration: none; 
+            padding: 12px 15px; 
+            border-radius: 4px; 
+            font-size: 14px; 
+            display: block; 
+            border-left: 4px solid transparent; 
+            transition: background-color 0.2s ease, border-color 0.2s ease;
+        }
         
-        .main-content { flex: 1; padding: 30px 40px; overflow-y: auto; background-color: #242424; }
-        .content-card { background-color: #2b2b2b; padding: 25px; border-radius: 6px; border: 1px solid #313244; margin-bottom: 20px; }
-        .table { color: #ffffff; margin-bottom: 0; }
+        .sidebar a:hover { 
+            background-color: #3a3a3a; 
+        }
+        
+        .sidebar a.active { 
+            background-color: #3a3a3a; 
+            border-left: 4px solid #3b8ed0; 
+            font-weight: bold; 
+        }
+        
+        .exit-btn { 
+            margin-top: auto; 
+            background-color: #c24b4b !important; 
+            text-align: center; 
+            font-weight: bold; 
+        }
+        
+        .exit-btn:hover {
+            background-color: #a83b3b !important;
+        }
+        
+        .main-content { 
+            flex: 1; 
+            padding: 30px 40px; 
+            overflow-y: auto; 
+            background-color: #242424; 
+        }
+        
+        .content-card { 
+            background-color: #2b2b2b; 
+            padding: 25px; 
+            border-radius: 6px; 
+            border: 1px solid #313244; 
+            margin-bottom: 20px; 
+        }
+        
+        .table { 
+            color: #ffffff; 
+            margin-bottom: 0; 
+        }
         
         /* 🎨 CONTRAST UPGRADE: Replaced dark #8a8a8a table headers with readable high contrast text */
-        .table thead th { background-color: #3a3a3a; color: #ffffff; font-weight: 700; border-bottom: 2px solid #242424; text-transform: uppercase; font-size: 11px; letter-spacing: 0.5px; }
-        .table tbody td { border-bottom: 1px solid #3a3a3a; background-color: transparent; }
+        .table thead th { 
+            background-color: #3a3a3a; 
+            color: #ffffff; 
+            font-weight: 700; 
+            border-bottom: 2px solid #242424; 
+            text-transform: uppercase; 
+            font-size: 11px; 
+            letter-spacing: 0.5px; 
+        }
+        
+        .table tbody td { 
+            border-bottom: 1px solid #3a3a3a; 
+            background-color: transparent; 
+        }
     </style>
+    
+    {% block styles %}{% endblock %}
 </head>
 <body>
+
     <div class="sidebar">
         <div class="sidebar-title">INVENTORY</div>
         
@@ -49,10 +144,11 @@
         <!-- 🟢 INVENTORY: Open to everyone so Baristas can still submit Prep Runs and Spoilage Waste forms -->
         <a href="/portal/{{ username }}/inventory" class="{{ 'active' if 'inventory' in request.path else '' }}">📦 Inventory</a>
         
-        <!-- 🟡 FINANCIAL EXPENSES: Only Managers and Owners can track/log outlays -->
+        <!-- 🟡 FINANCIAL & AUDIT PANELS: Managers and Owners only -->
         {% if session.get('staff_role') in ['Platform Owner Admin', 'Store Manager'] %}
             <a href="/portal/{{ username }}/expenses" class="{{ 'active' if 'expenses' in request.path else '' }}">💸 Expenses</a>
             <a href="/portal/{{ username }}/reports" class="{{ 'active' if 'reports' in request.path else '' }}">📊 Reports</a>
+            <a href="/portal/{{ username }}/audit-log" class="{{ 'active' if 'audit-log' in request.path else '' }}">📋 Audit Log</a>
         {% endif %}
         
         <!-- 🔴 SETTINGS: Exclusively locked away for the Master Platform Owner Admin profile only -->
@@ -64,9 +160,23 @@
     </div>
 
     <div class="main-content">
+        <!-- ⚡ FLASH MESSAGES ENGINE -->
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+                {% for category, message in messages %}
+                    <div class="alert alert-{{ 'danger' if category in ['error', 'danger'] else category }} alert-dismissible fade show" role="alert">
+                        {{ message }}
+                        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="alert" aria-label="Close"></button>
+                    </div>
+                {% endfor %}
+            {% endif %}
+        {% endwith %}
+
+        <!-- MAIN PAGE CONTENT BLOCK -->
         {% block content %}{% endblock %}
     </div>
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    {% block scripts %}{% endblock %}
 </body>
 </html>

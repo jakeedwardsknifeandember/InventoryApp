@@ -1,5 +1,5 @@
 # app.py - COMPLETE MAIN CORE SAAS ENGINE WITH INTEGRATED ANALYTICS, LOGBOOK & MENU ENGINEERING
-from flask import Flask, redirect, session, render_template, request
+from flask import Flask, redirect, session, render_template, request, flash
 from modules.database import InventoryDB
 import sqlite3
 import os
@@ -321,6 +321,89 @@ def client_portal(username):
         menu_matrix=menu_engineering_list,
         logbook=logbook_stream,
         sales_count=sales_count
+    )
+
+# 📋 AUDIT LOG ROUTE: View operational ledger with date filtering
+@app.route('/portal/<username>/audit-log')
+def audit_log(username):
+    username = username.lower().strip()
+    
+    if session.get('logged_in_user') != username: 
+        return redirect('/login')
+
+    # 🔒 Access Control: Managers & Platform Admins only
+    if session.get('staff_role') not in ['Platform Owner Admin', 'Store Manager']:
+        flash('Unauthorized access to Audit Logs.', 'danger')
+        return redirect(f"/portal/{username}")
+
+    client_db_path = f"data/client_{username}.db"
+    client_db = InventoryDB(client_db_path)
+
+    # 📅 Date Filter Parsing Controls
+    selected_period = request.args.get('period', 'this_month')
+    start_date_str = request.args.get('start_date', '')
+    end_date_str = request.args.get('end_date', '')
+
+    now = datetime.datetime.now()
+    today_start = now.date()
+
+    start_bound = None
+    end_bound = None
+
+    if selected_period == 'today':
+        start_bound = pd.to_datetime(today_start)
+        end_bound = pd.to_datetime(today_start) + pd.Timedelta(days=1) - pd.Timedelta(seconds=1)
+    elif selected_period == 'this_week':
+        start_bound = pd.to_datetime(today_start - datetime.timedelta(days=today_start.weekday()))
+        end_bound = start_bound + pd.Timedelta(days=7) - pd.Timedelta(seconds=1)
+    elif selected_period == 'this_month':
+        start_bound = pd.to_datetime(datetime.date(now.year, now.month, 1))
+        end_bound = start_bound + pd.offsets.MonthEnd(1) + pd.Timedelta(days=1) - pd.Timedelta(seconds=1)
+    elif selected_period == 'custom' and start_date_str and end_date_str:
+        try:
+            start_bound = pd.to_datetime(start_date_str)
+            end_bound = pd.to_datetime(end_date_str) + pd.Timedelta(days=1) - pd.Timedelta(seconds=1)
+        except Exception:
+            selected_period = 'all'
+            start_bound = None
+            end_bound = None
+    elif selected_period == 'all':
+        start_bound = None
+        end_bound = None
+    else:
+        selected_period = 'this_month'
+        start_bound = pd.to_datetime(datetime.date(now.year, now.month, 1))
+        end_bound = start_bound + pd.offsets.MonthEnd(1) + pd.Timedelta(days=1) - pd.Timedelta(seconds=1)
+
+    formatted_start_str = start_bound.strftime("%Y-%m-%d") if start_bound is not None else ""
+    formatted_end_str = end_bound.strftime("%Y-%m-%d") if end_bound is not None else ""
+
+    # Read primary audit ledger table
+    audit_log_df = client_db.read_tab('Inventory_Audit_Log')
+    if audit_log_df is None or audit_log_df.empty:
+        audit_log_df = client_db.read_tab('Inventory_Log')
+
+    logs = []
+    if audit_log_df is not None and not audit_log_df.empty:
+        possible_date_cols = ['Date', 'Log_Date', 'timestamp', 'created_at', 'sales_date']
+        date_col = next((col for col in possible_date_cols if col in audit_log_df.columns), None)
+
+        if date_col and start_bound is not None and end_bound is not None:
+            audit_log_df['Parsed_Date'] = pd.to_datetime(audit_log_df[date_col], errors='coerce')
+            filtered_df = audit_log_df[(audit_log_df['Parsed_Date'] >= start_bound) & (audit_log_df['Parsed_Date'] <= end_bound)].drop(columns=['Parsed_Date'], errors='ignore')
+        else:
+            filtered_df = audit_log_df.copy()
+
+        logs = filtered_df.to_dict(orient='records')
+        logs.reverse()  # Show most recent entries at the top
+
+    return render_template(
+        'audit_log.html', 
+        username=username, 
+        logs=logs,
+        current_period=selected_period,
+        start_date=start_date_str if start_date_str else formatted_start_str,
+        end_date=end_date_str if end_date_str else formatted_end_str
     )
 
 if __name__ == '__main__':

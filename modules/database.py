@@ -1,4 +1,4 @@
-# modules/database.py - FULL, RESTORED WEB SQLITE VERSION WITH SUB-RECIPE INSIGHTS
+# modules/database.py - FULL, RESTORED WEB SQLITE VERSION WITH SUB-RECIPE INSIGHTS & AUDIT LOGGING
 import pandas as pd
 import sqlite3
 import os
@@ -10,7 +10,7 @@ class InventoryDB:
         self.db_file = db_file
         self.ensure_tables_exist()
 
-    # ===== CORE SQLITE ENGINE (Replaces the Excel Engine) =====
+    # ===== CORE SQLITE ENGINE =====
     def get_connection(self):
         os.makedirs(os.path.dirname(self.db_file), exist_ok=True)
         return sqlite3.connect(self.db_file)
@@ -56,33 +56,36 @@ class InventoryDB:
                 'Expenses': pd.DataFrame(columns=[
                     'Expense_ID', 'Expense_Date', 'Expense_Type', 
                     'Description', 'Amount', 'Category', 'Payment_Method', 'Notes'
+                ]),
+                'Audit_Logs': pd.DataFrame(columns=[
+                    'Log_ID', 'Timestamp', 'Username', 'Action_Type', 'Module', 'Details'
                 ])
             }
             
             for tab_name, df in default_tabs.items():
                 if tab_name not in existing_tables:
                     df.to_sql(tab_name, conn, index=False, if_exists='replace')
-                    print(f"➕ Added missing table: {tab_name}")
+                    print(f"Added missing table: {tab_name}")
             
-            # ⚙️ SELF-HEALING MIGRATION 1: Ensure 'Ingredient_Type' exists inside existing databases safely
+            # SCHEMA MIGRATION 1: Ensure 'Ingredient_Type' exists inside existing databases safely
             cursor.execute("PRAGMA table_info(Ingredients);")
             columns = [row[1] for row in cursor.fetchall()]
             if 'Ingredient_Type' not in columns:
                 cursor.execute("ALTER TABLE Ingredients ADD COLUMN Ingredient_Type TEXT DEFAULT 'RAW';")
                 conn.commit()
-                print("⚙️ Schema Migration: Added 'Ingredient_Type' field safely to existing data rows.")
+                print("Schema Migration: Added 'Ingredient_Type' field safely to existing data rows.")
 
-            # ⚙️ SELF-HEALING MIGRATION 2: Ensure 'Batch_Yield' column exists inside Prep_Recipes safely
+            # SCHEMA MIGRATION 2: Ensure 'Batch_Yield' column exists inside Prep_Recipes safely
             cursor.execute("PRAGMA table_info(Prep_Recipes);")
             prep_columns = [row[1] for row in cursor.fetchall()]
             if 'Batch_Yield' not in prep_columns:
                 cursor.execute("ALTER TABLE Prep_Recipes ADD COLUMN Batch_Yield REAL DEFAULT 1.0;")
                 conn.commit()
-                print("⚙️ Schema Migration: Added 'Batch_Yield' divisor column safely to Prep_Recipes.")
+                print("Schema Migration: Added 'Batch_Yield' divisor column safely to Prep_Recipes.")
 
             conn.close()
         except Exception as e:
-            print(f"⚠️ Warning creating Database tables: {e}")
+            print(f"Warning creating Database tables: {e}")
 
     def read_tab(self, tab_name):
         """Reads an SQLite table into a Pandas DataFrame."""
@@ -92,7 +95,7 @@ class InventoryDB:
             conn.close()
             return df
         except Exception as e:
-            print(f"⚠️ Could not read table '{tab_name}': {e}")
+            print(f"Could not read table '{tab_name}': {e}")
             return pd.DataFrame()
 
     def save_tab(self, tab_name, data_df):
@@ -103,15 +106,54 @@ class InventoryDB:
             conn.close()
             return True
         except Exception as e:
-            print(f"❌ Error saving table '{tab_name}': {e}")
+            print(f"Error saving table '{tab_name}': {e}")
             return False
 
     def is_file_locked(self, filepath):
         """SQLite handles its own locks, returning False to satisfy legacy logic"""
         return False
 
-    # ===== YOUR ORIGINAL BUSINESS LOGIC STARTS HERE =====
-    def add_expense(self, expense_data):
+    # ===== AUDIT LOGGING ENGINE =====
+    def log_user_action(self, username, action_type, module, details):
+        """Log user actions across all app modules for accountability and security audit."""
+        try:
+            logs_df = self.read_tab('Audit_Logs')
+            new_log = {
+                'Log_ID': f"AUD{len(logs_df) + 1:06d}",
+                'Timestamp': datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                'Username': username or 'System',
+                'Action_Type': action_type,
+                'Module': module,
+                'Details': details
+            }
+            logs_df = pd.concat([logs_df, pd.DataFrame([new_log])], ignore_index=True)
+            self.save_tab('Audit_Logs', logs_df)
+        except Exception as e:
+            print(f"Failed to record user action audit log: {e}")
+
+    def get_audit_logs(self, limit=100, module=None, username=None):
+        """Fetch recent user action audit logs with optional filtering."""
+        try:
+            logs_df = self.read_tab('Audit_Logs')
+            if logs_df.empty:
+                return pd.DataFrame()
+            
+            if 'Timestamp' in logs_df.columns:
+                logs_df['Timestamp'] = pd.to_datetime(logs_df['Timestamp'], errors='coerce')
+                logs_df = logs_df.sort_values('Timestamp', ascending=False)
+            
+            if module and module != 'All':
+                logs_df = logs_df[logs_df['Module'] == module]
+            if username and username != 'All':
+                logs_df = logs_df[logs_df['Username'] == username]
+                
+            return logs_df.head(limit)
+        except Exception as e:
+            print(f"Error reading audit logs: {e}")
+            return pd.DataFrame()
+
+    # ===== BUSINESS LOGIC WITH INTEGRATED AUDIT LOGGING =====
+    def add_expense(self, expense_data, username="System"):
         """Add a new expense record"""
         try:
             expenses_df = self.read_tab('Expenses')
@@ -120,7 +162,6 @@ class InventoryDB:
             if expenses_df.empty:
                 expense_id = "EXP0001"
             else:
-                # Find highest EXP number
                 exp_numbers = []
                 for exp_id in expenses_df['Expense_ID'].dropna():
                     if isinstance(exp_id, str) and exp_id.startswith('EXP'):
@@ -130,26 +171,29 @@ class InventoryDB:
                         except:
                             pass
                 
-                if exp_numbers:
-                    next_num = max(exp_numbers) + 1
-                else:
-                    next_num = 1
-                
+                next_num = max(exp_numbers) + 1 if exp_numbers else 1
                 expense_id = f"EXP{next_num:04d}"
             
             expense_data['Expense_ID'] = expense_id
             
-            # Add to dataframe
             new_expense_df = pd.DataFrame([expense_data])
             expenses_df = pd.concat([expenses_df, new_expense_df], ignore_index=True)
             
-            # Save
             self.save_tab('Expenses', expenses_df)
-            print(f"✅ Added expense: {expense_data['Description']} - {expense_data['Amount']}")
+            
+            # Record Audit Log
+            self.log_user_action(
+                username=username,
+                action_type="ADD_EXPENSE",
+                module="Expenses",
+                details=f"Added Expense {expense_id}: {expense_data.get('Description', '')} (PHP {expense_data.get('Amount', 0):.2f})"
+            )
+            
+            print(f"Added expense: {expense_data['Description']} - {expense_data['Amount']}")
             return True, f"Expense added successfully (ID: {expense_id})"
             
         except Exception as e:
-            print(f"❌ Error adding expense: {e}")
+            print(f"Error adding expense: {e}")
             return False, f"Error adding expense: {str(e)}"
     
     def get_expenses(self, start_date=None, end_date=None):
@@ -160,11 +204,9 @@ class InventoryDB:
             if expenses_df.empty:
                 return pd.DataFrame()
             
-            # Convert date column
             if 'Expense_Date' in expenses_df.columns:
                 expenses_df['Expense_Date'] = pd.to_datetime(expenses_df['Expense_Date'])
                 
-                # Apply date filter if provided
                 if start_date:
                     start_date = pd.to_datetime(start_date)
                     expenses_df = expenses_df[expenses_df['Expense_Date'] >= start_date]
@@ -176,7 +218,7 @@ class InventoryDB:
             return expenses_df.sort_values('Expense_Date', ascending=False)
             
         except Exception as e:
-            print(f"❌ Error getting expenses: {e}")
+            print(f"Error getting expenses: {e}")
             return pd.DataFrame()
     
     def get_expense_summary(self, month=None, year=None):
@@ -187,35 +229,31 @@ class InventoryDB:
             if expenses_df.empty:
                 return pd.DataFrame()
             
-            # Convert date
             if 'Expense_Date' in expenses_df.columns:
                 expenses_df['Expense_Date'] = pd.to_datetime(expenses_df['Expense_Date'])
                 expenses_df['Year'] = expenses_df['Expense_Date'].dt.year
                 expenses_df['Month'] = expenses_df['Expense_Date'].dt.month
                 
-                # Filter by month/year if provided
                 if year:
                     expenses_df = expenses_df[expenses_df['Year'] == year]
                 if month:
                     expenses_df = expenses_df[expenses_df['Month'] == month]
             
-            # Group by category
             if 'Category' in expenses_df.columns:
                 summary = expenses_df.groupby('Category').agg({
                     'Amount': ['sum', 'count']
                 }).reset_index()
                 
-                # Flatten column names
                 summary.columns = ['Category', 'Total_Amount', 'Transaction_Count']
                 return summary.sort_values('Total_Amount', ascending=False)
             
             return pd.DataFrame()
             
         except Exception as e:
-            print(f"❌ Error getting expense summary: {e}")
+            print(f"Error getting expense summary: {e}")
             return pd.DataFrame()
     
-    def delete_expense(self, expense_id):
+    def delete_expense(self, expense_id, username="System"):
         """Delete an expense record"""
         try:
             expenses_df = self.read_tab('Expenses')
@@ -223,42 +261,65 @@ class InventoryDB:
             if expenses_df.empty:
                 return False, "No expenses found"
             
-            # Find and remove expense
             initial_count = len(expenses_df)
+            deleted_rows = expenses_df[expenses_df['Expense_ID'] == expense_id]
             expenses_df = expenses_df[expenses_df['Expense_ID'] != expense_id]
             
             if len(expenses_df) == initial_count:
                 return False, f"Expense {expense_id} not found"
             
-            # Save updated expenses
             self.save_tab('Expenses', expenses_df)
-            print(f"✅ Deleted expense: {expense_id}")
+            
+            desc = deleted_rows.iloc[0].get('Description', '') if not deleted_rows.empty else ''
+            amt = deleted_rows.iloc[0].get('Amount', 0) if not deleted_rows.empty else 0
+            
+            # Record Audit Log
+            self.log_user_action(
+                username=username,
+                action_type="DELETE_EXPENSE",
+                module="Expenses",
+                details=f"Deleted Expense {expense_id}: {desc} (PHP {amt:.2f})"
+            )
+            
+            print(f"Deleted expense: {expense_id}")
             return True, f"Expense {expense_id} deleted successfully"
             
         except Exception as e:
-            print(f"❌ Error deleting expense: {e}")
+            print(f"Error deleting expense: {e}")
             return False, f"Error deleting expense: {str(e)}"
     
-    def add_sale(self, product_id, quantity, unit_price):
+    def add_sale(self, product_id, quantity, unit_price, username="System"):
         """Record a new sale"""
         try:
             sales_df = self.read_tab('Sales')
             
+            sale_id = f"SALE{len(sales_df) + 1:04d}"
+            total_amt = quantity * unit_price
+            
             new_sale = {
-                'Sale_ID': f"SALE{len(sales_df) + 1:04d}",
+                'Sale_ID': sale_id,
                 'Product_ID': product_id,
                 'Quantity': quantity,
                 'Sale_Date': datetime.now().strftime("%Y-%m-%d"),
                 'Sale_Time': datetime.now().strftime("%H:%M:%S"),
-                'Total_Amount': quantity * unit_price
+                'Total_Amount': total_amt
             }
             
             sales_df = pd.concat([sales_df, pd.DataFrame([new_sale])], ignore_index=True)
             self.save_tab('Sales', sales_df)
-            print(f"💰 Recorded sale: {quantity} x {product_id}")
+            
+            # Record Audit Log
+            self.log_user_action(
+                username=username,
+                action_type="RECORD_SALE",
+                module="Sales",
+                details=f"Logged Sale {sale_id}: {quantity}x {product_id} at PHP {unit_price:.2f} each (Total: PHP {total_amt:.2f})"
+            )
+            
+            print(f"Recorded sale: {quantity} x {product_id}")
             return new_sale
         except Exception as e:
-            print(f"❌ Error recording sale: {e}")
+            print(f"Error recording sale: {e}")
             return None
     
     def get_all_products(self):
@@ -267,7 +328,6 @@ class InventoryDB:
         if products_df.empty:
             return pd.DataFrame()
         
-        # Filter active products
         if 'Active' in products_df.columns:
             active_products = products_df[products_df['Active'].astype(str).str.upper() == 'YES']
         else:
@@ -288,13 +348,11 @@ class InventoryDB:
         if recipes_df.empty:
             return pd.DataFrame()
         
-        # Filter recipes for this product
         product_recipes = recipes_df[recipes_df['Product_ID'] == product_id].copy()
         
         if product_recipes.empty:
             return pd.DataFrame()
         
-        # Join with ingredient details
         if not ingredients_df.empty:
             merged = pd.merge(product_recipes, ingredients_df, 
                             left_on='Ingredient_ID', right_on='Ingredient_ID', 
@@ -302,7 +360,6 @@ class InventoryDB:
             
             cols_to_return = ['Ingredient_ID', 'Ingredient_Name', 'Quantity_Required', 'Cost_Per_Unit']
             
-            # Handle potential suffix conflicts if Unit exists in both tables
             if 'Unit_x' in merged.columns and 'Unit_y' in merged.columns:
                 merged['Unit'] = merged['Unit_x'].fillna(merged['Unit_y'])
                 cols_to_return.append('Unit')
@@ -316,19 +373,14 @@ class InventoryDB:
         else:
             return product_recipes
     
-    def save_recipe(self, product_id, recipe_items):
-        """
-        Save or update a recipe
-        recipe_items: list of dictionaries with Ingredient_ID, Quantity_Required, and unit
-        """
+    def save_recipe(self, product_id, recipe_items, username="System"):
+        """Save or update a recipe"""
         try:
             recipes_df = self.read_tab('Recipes')
             
-            # Remove existing recipe for this product
             if not recipes_df.empty:
                 recipes_df = recipes_df[recipes_df['Product_ID'] != product_id]
             
-            # Add new recipe items
             new_records = []
             for idx, item in enumerate(recipe_items):
                 new_records.append({
@@ -339,35 +391,47 @@ class InventoryDB:
                     'Unit': item.get('unit', '')
                 })
             
-            # Add to dataframe
             new_df = pd.DataFrame(new_records)
             recipes_df = pd.concat([recipes_df, new_df], ignore_index=True)
             
-            # Save back to database
             success = self.save_tab('Recipes', recipes_df)
             
             if success:
-                print(f"✅ Saved recipe for {product_id} with {len(recipe_items)} ingredients")
+                self.log_user_action(
+                    username=username,
+                    action_type="SAVE_RECIPE",
+                    module="Recipes",
+                    details=f"Saved recipe specification matrix for Product {product_id} ({len(recipe_items)} line components)"
+                )
+                print(f"Saved recipe for {product_id} with {len(recipe_items)} ingredients")
             else:
-                print(f"❌ Failed to save recipe for {product_id}")
+                print(f"Failed to save recipe for {product_id}")
             
             return success
         except Exception as e:
-            print(f"❌ Error saving recipe: {e}")
+            print(f"Error saving recipe: {e}")
             return False
 
-    def delete_recipe(self, product_id):
+    def delete_recipe(self, product_id, username="System"):
         """Removes all recipe entries for a specific product."""
         try:
             recipes_df = self.read_tab('Recipes')
             if not recipes_df.empty:
                 recipes_df = recipes_df[recipes_df['Product_ID'] != product_id]
                 success = self.save_tab('Recipes', recipes_df)
-                print(f"🗑️ Deleted recipe entries for {product_id}")
+                
+                self.log_user_action(
+                    username=username,
+                    action_type="DELETE_RECIPE",
+                    module="Recipes",
+                    details=f"Deleted recipe matrix for Product {product_id}"
+                )
+                
+                print(f"Deleted recipe entries for {product_id}")
                 return success
             return True
         except Exception as e:
-            print(f"❌ Error deleting recipe: {e}")
+            print(f"Error deleting recipe: {e}")
             return False
     
     def calculate_product_cost(self, product_id):
@@ -398,7 +462,6 @@ class InventoryDB:
             if products_df.empty:
                 return products_df
             
-            # Step 1: Calculate the unit costs of PREPPED components from their raw constituents
             if not prep_recipes_df.empty and not ingredients_df.empty:
                 ingredients_df['Ingredient_ID'] = ingredients_df['Ingredient_ID'].astype(str)
                 
@@ -408,7 +471,6 @@ class InventoryDB:
                     
                     if not formulas.empty:
                         computed_prep_cost = 0.0
-                        # 📈 DYNAMIC COST AMORTIZATION OVER BATCH YIELD FACTOR
                         batch_yield = 1.0
                         if 'Batch_Yield' in formulas.columns:
                             try:
@@ -427,12 +489,10 @@ class InventoryDB:
                                 raw_unit_cost = float(match['Cost_Per_Unit'].values[0] or 0.0)
                                 computed_prep_cost += (req_qty * raw_unit_cost)
                         
-                        # True Amortized Cost = Total Batch Cost Summary / Total Pieces or Servings Yielded
                         ingredients_df.at[idx, 'Cost_Per_Unit'] = computed_prep_cost / batch_yield
                 
                 self.save_tab('Ingredients', ingredients_df)
             
-            # Step 2: Calculate final retail product costs
             costs = []
             for _, product in products_df.iterrows():
                 product_id = product['Product_ID']
@@ -441,7 +501,6 @@ class InventoryDB:
             
             products_df['Cost_Price'] = costs
             
-            # Calculate profit margin if Selling_Price exists
             if 'Selling_Price' in products_df.columns:
                 products_df['Selling_Price'] = pd.to_numeric(products_df['Selling_Price'], errors='coerce').fillna(0.0)
                 products_df['Cost_Price'] = pd.to_numeric(products_df['Cost_Price'], errors='coerce').fillna(0.0)
@@ -452,43 +511,33 @@ class InventoryDB:
                 valid_sp = products_df['Selling_Price'] > 0
                 products_df.loc[valid_sp, 'Margin_Percentage'] = (products_df.loc[valid_sp, 'Profit_Margin'] / products_df.loc[valid_sp, 'Selling_Price'] * 100).round(2)
             
-            # Save updated products
             self.save_tab('Products', products_df)
-            print(f"✅ Recalculated costs for {len(products_df)} menu items across multi-tier production lines.")
+            print(f"Recalculated costs for {len(products_df)} menu items across multi-tier production lines.")
             return products_df
         except Exception as e:
-            print(f"❌ Error updating product costs: {e}")
+            print(f"Error updating product costs: {e}")
             return pd.DataFrame()
     
-    def update_inventory_from_sale(self, product_id, quantity_sold):
-        """
-        Deduct ingredients from inventory when a product is sold
-        Returns: success (True/False), message
-        """
+    def update_inventory_from_sale(self, product_id, quantity_sold, username="System"):
+        """Deduct ingredients from inventory when a product is sold"""
         try:
-            # 1. Get the recipe for this product
             recipe_items = self.get_product_recipes(product_id)
             
             if recipe_items.empty:
                 return False, f"No recipe found for product {product_id}"
             
-            # 2. Get current inventory
             inventory_df = self.read_tab('Ingredients')
             if inventory_df.empty:
                 return False, "No ingredients in inventory"
             
-            # 3. Check if we have enough stock and calculate deductions
             deductions = []
             insufficient_stock = []
             
             for _, recipe_item in recipe_items.iterrows():
                 ingredient_id = recipe_item['Ingredient_ID']
-                
-                # FIXED: Force recipe variables into numeric decimals to break string sequence errors
                 quantity_needed = float(recipe_item['Quantity_Required'] or 0.0)
                 total_needed = quantity_needed * float(quantity_sold)
                 
-                # Find the ingredient in inventory
                 ingredient_idx = inventory_df[inventory_df['Ingredient_ID'] == ingredient_id].index
                 
                 if len(ingredient_idx) == 0:
@@ -504,7 +553,6 @@ class InventoryDB:
                         f"need {total_needed}, have {current_stock}"
                     )
                 else:
-                    # Record the deduction
                     deductions.append({
                         'ingredient_id': ingredient_id,
                         'ingredient_name': recipe_item.get('Ingredient_Name', ingredient_id),
@@ -514,46 +562,40 @@ class InventoryDB:
                         'index': idx
                     })
             
-            # 4. If any ingredient is insufficient, don't proceed
             if insufficient_stock:
                 return False, f"Insufficient stock:\n" + "\n".join(insufficient_stock)
             
-            # 5. Apply all deductions
             for deduction in deductions:
                 idx = deduction['index']
                 inventory_df.at[idx, 'Current_Stock'] = deduction['new_stock']
             
-            # 6. Save updated inventory
             self.save_tab('Ingredients', inventory_df)
             
-            # 7. Log the inventory change
             self.log_inventory_change(
                 product_id=product_id,
                 quantity_sold=quantity_sold,
                 deductions=deductions
             )
             
-            # Get ingredient names for message
             ingredient_names = [d['ingredient_name'] for d in deductions]
             return True, f"Deducted from: {', '.join(ingredient_names)}"
             
         except Exception as e:
             return False, f"Error updating inventory: {str(e)}"
     
-    def delete_ingredient(self, ingredient_id):
+    def delete_ingredient(self, ingredient_id, username="System"):
         """Delete an ingredient safely if unlinked to any product formula"""
         try:
             ingredients_df = self.read_tab('Ingredients')
             
-            # Find the ingredient
             ingredient_idx = ingredients_df[ingredients_df['Ingredient_ID'] == ingredient_id].index
             
             if len(ingredient_idx) == 0:
                 return False, f"Ingredient {ingredient_id} not found"
             
             idx = ingredient_idx[0]
+            ing_name = ingredients_df.at[idx, 'Ingredient_Name']
             
-            # Check if ingredient is used in any recipes or sub-prep blueprints
             recipes_df = self.read_tab('Recipes')
             prep_recipes_df = self.read_tab('Prep_Recipes')
             
@@ -562,16 +604,23 @@ class InventoryDB:
             if not prep_recipes_df.empty and (not prep_recipes_df[prep_recipes_df['Raw_Ingredient_ID'] == ingredient_id].empty or not prep_recipes_df[prep_recipes_df['Prepped_Ingredient_ID'] == ingredient_id].empty):
                 return False, "Cannot delete! This ingredient is linked inside active sub-recipe portion templates."
             
-            # Delete the ingredient row completely
             ingredients_df = ingredients_df.drop(idx).reset_index(drop=True)
             
-            # Save
             self.save_tab('Ingredients', ingredients_df)
-            print(f"✅ Deleted ingredient: {ingredient_id}")
+            
+            # Record Audit Log
+            self.log_user_action(
+                username=username,
+                action_type="DELETE_INGREDIENT",
+                module="Ingredients",
+                details=f"Permanently deleted ingredient {ing_name} ({ingredient_id})"
+            )
+            
+            print(f"Deleted ingredient: {ingredient_id}")
             return True, f"Ingredient {ingredient_id} deleted successfully"
             
         except Exception as e:
-            print(f"❌ Error deleting ingredient: {e}")
+            print(f"Error deleting ingredient: {e}")
             return False, f"Error deleting ingredient: {str(e)}"
 
     def log_inventory_change(self, product_id, quantity_sold, deductions):
@@ -584,19 +633,19 @@ class InventoryDB:
                     'Log_ID': f"LOG{len(logs_df) + 1:06d}",
                     'Ingredient_ID': deduction['ingredient_id'],
                     'Change_Type': 'SALE_DEDUCTION',
-                    'Quantity': -deduction['deduction'],  # Negative for deduction
+                    'Quantity': -deduction['deduction'],
                     'Date': datetime.now().strftime("%Y-%m-%d"),
                     'Notes': f"Product {product_id} x{quantity_sold}"
                 }
                 logs_df = pd.concat([logs_df, pd.DataFrame([new_log])], ignore_index=True)
             
             self.save_tab('Inventory_Log', logs_df)
-            print(f"📝 Logged inventory change for {product_id}")
+            print(f"Logged inventory change for {product_id}")
             
         except Exception as e:
-            print(f"⚠️ Failed to log inventory change: {e}")
+            print(f"Failed to log inventory change: {e}")
     
-    def add_inventory_stock(self, ingredient_id, quantity_to_add, notes=""):
+    def add_inventory_stock(self, ingredient_id, quantity_to_add, notes="", username="System"):
         """Add stock to an ingredient (purchase/replenishment)"""
         try:
             inventory_df = self.read_tab('Ingredients')
@@ -604,7 +653,6 @@ class InventoryDB:
             if inventory_df.empty:
                 return False, "No ingredients found"
             
-            # Find the ingredient
             ingredient_idx = inventory_df[inventory_df['Ingredient_ID'] == ingredient_id].index
             
             if len(ingredient_idx) == 0:
@@ -614,11 +662,9 @@ class InventoryDB:
             old_stock = inventory_df.at[idx, 'Current_Stock']
             new_stock = old_stock + quantity_to_add
             
-            # Update stock
             inventory_df.at[idx, 'Current_Stock'] = new_stock
             self.save_tab('Ingredients', inventory_df)
             
-            # Log the addition
             logs_df = self.read_tab('Inventory_Log')
             new_log = {
                 'Log_ID': f"LOG{len(logs_df) + 1:06d}",
@@ -632,11 +678,20 @@ class InventoryDB:
             self.save_tab('Inventory_Log', logs_df)
             
             ingredient_name = inventory_df.at[idx, 'Ingredient_Name']
-            print(f"📦 Added {quantity_to_add} to {ingredient_name}. New stock: {new_stock}")
+            
+            # Record Audit Log
+            self.log_user_action(
+                username=username,
+                action_type="ADD_STOCK",
+                module="Ingredients",
+                details=f"Injected +{quantity_to_add} stock to {ingredient_name} ({ingredient_id}). Old: {old_stock:.2f}, New: {new_stock:.2f}"
+            )
+            
+            print(f"Added {quantity_to_add} to {ingredient_name}. New stock: {new_stock}")
             return True, f"Added {quantity_to_add} to {ingredient_name}. New stock: {new_stock}"
             
         except Exception as e:
-            print(f"❌ Error adding stock: {e}")
+            print(f"Error adding stock: {e}")
             return False, f"Error adding stock: {str(e)}"
     
     def get_inventory_status(self):
@@ -646,22 +701,17 @@ class InventoryDB:
         if inventory_df.empty:
             return pd.DataFrame()
         
-        # Calculate status
         inventory_df = inventory_df.copy()
         
-        # Ensure columns exist
         if 'Min_Stock' not in inventory_df.columns:
             inventory_df['Min_Stock'] = 0
         
-        # Calculate status
         inventory_df['Status'] = 'Normal'
         inventory_df['Days_Remaining'] = None
         
-        # Check low stock
         low_stock_mask = pd.to_numeric(inventory_df['Current_Stock']) <= pd.to_numeric(inventory_df['Min_Stock'])
         inventory_df.loc[low_stock_mask, 'Status'] = 'Low Stock'
         
-        # Check critical (below 50% of min stock)
         critical_mask = pd.to_numeric(inventory_df['Current_Stock']) <= (pd.to_numeric(inventory_df['Min_Stock']) * 0.5)
         inventory_df.loc[critical_mask, 'Status'] = 'Critical'
         
@@ -674,7 +724,6 @@ class InventoryDB:
         if logs_df.empty:
             return pd.DataFrame()
         
-        # Convert date column if it exists
         if 'Date' in logs_df.columns:
             try:
                 logs_df['Date'] = pd.to_datetime(logs_df['Date'])
@@ -683,34 +732,26 @@ class InventoryDB:
                 recent_logs = recent_logs.sort_values('Date', ascending=False)
                 return recent_logs
             except:
-                return logs_df.tail(100)  # Return last 100 if date conversion fails
+                return logs_df.tail(100)
         
         return logs_df.tail(100)
     
-    def add_product(self, product_data):
+    def add_product(self, product_data, username="System"):
         """Add a new product to the database"""
         try:
-            print(f"🔍 DEBUG: Adding product with data: {product_data}")
-            
-            # Check if product_data has required fields
             required_fields = ['Product_ID', 'Product_Name', 'Selling_Price', 'Active']
             for field in required_fields:
                 if field not in product_data:
-                    print(f"❌ Missing required field: {field}")
                     return False, f"Missing required field: {field}"
             
             products_df = self.read_tab('Products')
-            print(f"🔍 DEBUG: Current products: {len(products_df)} rows")
             
-            # Check if product ID already exists
             if 'Product_ID' in products_df.columns:
                 if product_data['Product_ID'] in products_df['Product_ID'].values:
                     return False, f"Product ID {product_data['Product_ID']} already exists"
             else:
-                # If Product_ID column doesn't exist, add it
                 products_df['Product_ID'] = ''
             
-            # Ensure all required columns exist
             required_columns = ['Product_ID', 'Product_Name', 'Category', 'Selling_Price', 'Active', 
                                'Cost_Price', 'Profit_Margin', 'Margin_Percentage']
             
@@ -718,20 +759,17 @@ class InventoryDB:
                 if col not in products_df.columns:
                     products_df[col] = None
             
-            # Prepare new product row
             new_product_row = {}
             for col in products_df.columns:
                 if col in product_data:
                     new_product_row[col] = product_data[col]
                 elif col == 'Cost_Price':
-                    new_product_row[col] = 0.0  # Default cost price
+                    new_product_row[col] = 0.0
                 elif col == 'Profit_Margin':
-                    # Calculate profit margin
                     selling_price = product_data.get('Selling_Price', 0)
                     cost_price = product_data.get('Cost_Price', 0)
                     new_product_row[col] = selling_price - cost_price
                 elif col == 'Margin_Percentage':
-                    # Calculate margin percentage
                     selling_price = product_data.get('Selling_Price', 0)
                     cost_price = product_data.get('Cost_Price', 0)
                     if selling_price > 0:
@@ -741,85 +779,102 @@ class InventoryDB:
                 else:
                     new_product_row[col] = None
             
-            # Add new product
             new_product_df = pd.DataFrame([new_product_row])
             products_df = pd.concat([products_df, new_product_df], ignore_index=True)
             
-            # Save
             success = self.save_tab('Products', products_df)
             
             if success:
-                print(f"✅ Added product: {product_data['Product_Name']} ({product_data['Product_ID']})")
-                
-                # Update cost for this product
                 self.update_all_product_costs()
                 
+                # Record Audit Log
+                self.log_user_action(
+                    username=username,
+                    action_type="ADD_PRODUCT",
+                    module="Products",
+                    details=f"Created new product {product_data['Product_Name']} ({product_data['Product_ID']}) set at Selling Price PHP {product_data['Selling_Price']:.2f}"
+                )
+                
+                print(f"Added product: {product_data['Product_Name']} ({product_data['Product_ID']})")
                 return True, f"Product '{product_data['Product_Name']}' added successfully"
             else:
                 return False, "Failed to save product to database"
             
         except Exception as e:
-            print(f"❌ Error adding product: {e}")
-            import traceback
-            traceback.print_exc()  # Print full traceback for debugging
+            print(f"Error adding product: {e}")
             return False, f"Error adding product: {str(e)}"
     
-    def update_product(self, product_id, updated_data):
+    def update_product(self, product_id, updated_data, username="System"):
         """Update an existing product"""
         try:
             products_df = self.read_tab('Products')
             
-            # Find the product
             product_idx = products_df[products_df['Product_ID'] == product_id].index
             
             if len(product_idx) == 0:
                 return False, f"Product {product_id} not found"
             
             idx = product_idx[0]
+            old_name = products_df.at[idx, 'Product_Name']
             
-            # Update fields
+            changes = []
             for key, value in updated_data.items():
                 if key in products_df.columns:
+                    old_val = products_df.at[idx, key]
+                    if str(old_val) != str(value):
+                        changes.append(f"{key}: '{old_val}' -> '{value}'")
                     products_df.at[idx, key] = value
             
-            # Save
             self.save_tab('Products', products_df)
-            print(f"✅ Updated product: {product_id}")
+            
+            if changes:
+                self.log_user_action(
+                    username=username,
+                    action_type="EDIT_PRODUCT",
+                    module="Products",
+                    details=f"Updated product {old_name} ({product_id}): {', '.join(changes)}"
+                )
+                
+            print(f"Updated product: {product_id}")
             return True, f"Product {product_id} updated successfully"
             
         except Exception as e:
-            print(f"❌ Error updating product: {e}")
+            print(f"Error updating product: {e}")
             return False, f"Error updating product: {str(e)}"
     
-    def delete_product(self, product_id):
+    def delete_product(self, product_id, username="System"):
         """Completely delete a product permanently from the database table (Hard Delete)"""
         try:
             products_df = self.read_tab('Products')
             
-            # Find the product's index row number
             product_idx = products_df[products_df['Product_ID'] == product_id].index
             
             if len(product_idx) == 0:
                 return False, f"Product {product_id} not found"
             
             idx = product_idx[0]
+            product_name = products_df.at[idx, 'Product_Name']
             
-            # HARD DELETE: Drop the product row completely from the spreadsheet dataset
             products_df = products_df.drop(idx).reset_index(drop=True)
-            
-            # CLEANUP: Automatically wipe any secret recipes assigned to this dead product ID
-            self.delete_recipe(product_id)
-            
-            # Save the clean table back to SQLite
+            self.delete_recipe(product_id, username=username)
             self.save_tab('Products', products_df)
-            print(f"🗑️ Permanently erased product and recipe structures: {product_id}")
+            
+            # Record Audit Log
+            self.log_user_action(
+                username=username,
+                action_type="DELETE_PRODUCT",
+                module="Products",
+                details=f"Permanently deleted product {product_name} ({product_id}) and purged recipes"
+            )
+            
+            print(f"Permanently erased product and recipe structures: {product_id}")
             return True, f"Product {product_id} completely removed from system"
             
         except Exception as e:
-            print(f"❌ Error permanently deleting product: {e}")
+            print(f"Error permanently deleting product: {e}")
             return False, f"Error deleting product: {str(e)}"
     
-    def add_ingredient(self, ingredient_data):
+    def add_ingredient(self, ingredient_data, username="System"):
         """Add a new ingredient to the database with unique name verification rules"""
         try:
             ingredients_df = self.read_tab('Ingredients')
@@ -827,65 +882,79 @@ class InventoryDB:
             if 'Ingredient_Type' not in ingredient_data:
                 ingredient_data['Ingredient_Type'] = 'RAW'
             
-            # Safety Rule 1: Prevent absolute duplicate ID generation
             if ingredient_data['Ingredient_ID'] in ingredients_df['Ingredient_ID'].values:
                 return False, f"Ingredient ID {ingredient_data['Ingredient_ID']} already exists"
             
-            # Safety Rule 2: Case-Insensitive Name Duplicate Guard (Solves the "Sugar" duplication problem)
             if 'Ingredient_Name' in ingredients_df.columns and not ingredients_df.empty:
                 existing_names = ingredients_df['Ingredient_Name'].astype(str).str.lower().str.strip().values
                 new_name = str(ingredient_data['Ingredient_Name']).lower().strip()
                 if new_name in existing_names:
                     return False, f"An ingredient named '{ingredient_data['Ingredient_Name']}' is already registered."
             
-            # Add new ingredient row if cleared
             new_ingredient_df = pd.DataFrame([ingredient_data])
             ingredients_df = pd.concat([ingredients_df, new_ingredient_df], ignore_index=True)
             
-            # Save to SQLite
             self.save_tab('Ingredients', ingredients_df)
-            print(f"✅ Added ingredient: {ingredient_data['Ingredient_Name']} ({ingredient_data['Ingredient_ID']})")
+            
+            # Record Audit Log
+            self.log_user_action(
+                username=username,
+                action_type="ADD_INGREDIENT",
+                module="Ingredients",
+                details=f"Registered new ingredient {ingredient_data['Ingredient_Name']} ({ingredient_data['Ingredient_ID']}) [{ingredient_data.get('Ingredient_Type', 'RAW')}] Cost: PHP {ingredient_data.get('Cost_Per_Unit', 0):.2f}/{ingredient_data.get('Unit', 'pcs')}"
+            )
+            
+            print(f"Added ingredient: {ingredient_data['Ingredient_Name']} ({ingredient_data['Ingredient_ID']})")
             return True, f"Ingredient '{ingredient_data['Ingredient_Name']}' added successfully"
             
         except Exception as e:
-            print(f"❌ Error adding ingredient: {e}")
+            print(f"Error adding ingredient: {e}")
             return False, f"Error adding ingredient: {str(e)}"
     
-    def update_ingredient(self, ingredient_id, updated_data):
+    def update_ingredient(self, ingredient_id, updated_data, username="System"):
         """Update an existing ingredient with modification safety name collision checks"""
         try:
             ingredients_df = self.read_tab('Ingredients')
             
-            # Find the target ingredient row index
             ingredient_idx = ingredients_df[ingredients_df['Ingredient_ID'] == ingredient_id].index
             
             if len(ingredient_idx) == 0:
                 return False, f"Ingredient {ingredient_id} not found"
             
             idx = ingredient_idx[0]
+            ing_name = ingredients_df.at[idx, 'Ingredient_Name']
             
-            # Modification Safety Rule: Prevent users from renaming an item into another existing item's name
             if 'Ingredient_Name' in updated_data and not ingredients_df.empty:
                 new_name = str(updated_data['Ingredient_Name']).lower().strip()
-                # Exclude the current row item we are editing from the search list
                 other_rows = ingredients_df[ingredients_df['Ingredient_ID'] != ingredient_id]
                 if 'Ingredient_Name' in other_rows.columns:
                     existing_other_names = other_rows['Ingredient_Name'].astype(str).str.lower().str.strip().values
                     if new_name in existing_other_names:
                         return False, f"Cannot rename! Another ingredient named '{updated_data['Ingredient_Name']}' already exists."
             
-            # Update fields safely
+            changes = []
             for key, value in updated_data.items():
                 if key in ingredients_df.columns:
+                    old_val = ingredients_df.at[idx, key]
+                    if str(old_val) != str(value):
+                        changes.append(f"{key}: '{old_val}' -> '{value}'")
                     ingredients_df.at[idx, key] = value
             
-            # Save
             self.save_tab('Ingredients', ingredients_df)
-            print(f"✅ Updated ingredient: {ingredient_id}")
+            
+            if changes:
+                self.log_user_action(
+                    username=username,
+                    action_type="EDIT_INGREDIENT",
+                    module="Ingredients",
+                    details=f"Updated ingredient {ing_name} ({ingredient_id}): {', '.join(changes)}"
+                )
+                
+            print(f"Updated ingredient: {ingredient_id}")
             return True, f"Ingredient {ingredient_id} updated successfully"
             
         except Exception as e:
-            print(f"❌ Error updating ingredient: {e}")
+            print(f"Error updating ingredient: {e}")
             return False, f"Error updating ingredient: {str(e)}"
     
     def generate_product_id(self):
@@ -895,24 +964,19 @@ class InventoryDB:
         if products_df.empty:
             return "PROD001"
         
-        # Find the highest PROD number
         product_ids = products_df['Product_ID'].dropna()
         prod_numbers = []
         
         for pid in product_ids:
             if isinstance(pid, str) and pid.startswith('PROD'):
                 try:
-                    num = int(pid[4:])  # Extract number after 'PROD'
+                    num = int(pid[4:])
                     prod_numbers.append(num)
                 except:
                     pass
         
-        if prod_numbers:
-            next_num = max(prod_numbers) + 1
-        else:
-            next_num = 1
-        
-        return f"PROD{next_num:03d}"  # Format as 3-digit number
+        next_num = max(prod_numbers) + 1 if prod_numbers else 1
+        return f"PROD{next_num:03d}"
     
     def generate_ingredient_id(self):
         """Generate a new unique ingredient ID"""
@@ -921,7 +985,6 @@ class InventoryDB:
         if ingredients_df.empty:
             return "ING001"
         
-        # Find the highest ING number
         ingredient_ids = ingredients_df['Ingredient_ID'].dropna()
         ing_numbers = []
         
@@ -933,20 +996,12 @@ class InventoryDB:
                 except:
                     pass
         
-        if ing_numbers:
-            next_num = max(ing_numbers) + 1
-        else:
-            next_num = 1
-        
+        next_num = max(ing_numbers) + 1 if ing_numbers else 1
         return f"ING{next_num:03d}"
     
     def add_ingredient_stock(self, ingredient_id, amount, notes, username):
-        """
-        Web-app helper method to add stock and log it.
-        This bridges your web route to your existing database logic.
-        """
+        """Web-app helper method to add stock and log it."""
         try:
-            # 1. Update the stock in the Ingredients tab
             ingredients_df = self.read_tab('Ingredients')
             if 'Ingredient_ID' not in ingredients_df.columns:
                 return False, "Ingredients table not found"
@@ -960,7 +1015,6 @@ class InventoryDB:
             ingredients_df.at[idx, 'Current_Stock'] = current_stock + amount
             self.save_tab('Ingredients', ingredients_df)
             
-            # 2. Log the transaction in Inventory_Log
             logs_df = self.read_tab('Inventory_Log')
             new_log = {
                 'Log_ID': f"LOG{len(logs_df) + 1:06d}",
@@ -973,7 +1027,16 @@ class InventoryDB:
             logs_df = pd.concat([logs_df, pd.DataFrame([new_log])], ignore_index=True)
             self.save_tab('Inventory_Log', logs_df)
             
+            ingredient_name = ingredients_df.at[idx, 'Ingredient_Name']
+            
+            self.log_user_action(
+                username=username,
+                action_type="ADD_STOCK",
+                module="Ingredients",
+                details=f"Injected +{amount} stock to {ingredient_name} ({ingredient_id}) [Note: {notes}]"
+            )
+            
             return True, f"Successfully added {amount} to {ingredient_id}"
         except Exception as e:
-            print(f"❌ Error in add_ingredient_stock: {e}")
+            print(f"Error in add_ingredient_stock: {e}")
             return False, str(e)

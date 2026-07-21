@@ -1,0 +1,144 @@
+{% extends "base.html" %}
+
+{% block title %}Audit Log | {{ username|capitalize }} Hub{% endblock %}
+
+{% block styles %}
+<style>
+    /* High contrast dark theme overrides for Audit Table */
+    .audit-table {
+        width: 100%;
+        color: #ffffff !important;
+    }
+    .audit-table thead th {
+        background-color: #3a3a3a !important;
+        color: #ffffff !important;
+        font-weight: 700;
+        text-transform: uppercase;
+        font-size: 11px;
+        letter-spacing: 0.5px;
+        padding: 12px;
+        border-bottom: 2px solid #242424;
+    }
+    .audit-table tbody td {
+        padding: 12px;
+        border-bottom: 1px solid #3a3a3a;
+        vertical-align: middle;
+        color: #ffffff !important;
+    }
+    .audit-date {
+        color: #f1f5f9 !important;
+        font-weight: 600;
+        font-size: 0.9rem;
+    }
+    .audit-code {
+        background-color: #383838;
+        color: #f472b6 !important;
+        padding: 4px 8px;
+        border-radius: 4px;
+        font-family: monospace;
+        font-size: 0.85rem;
+        border: 1px solid #4a4a4a;
+    }
+    .audit-target {
+        color: #38bdf8 !important;
+        font-weight: 700;
+    }
+    .audit-notes {
+        color: #cbd5e1 !important;
+        font-size: 0.875rem;
+        max-width: 300px;
+        word-wrap: break-word;
+        white-space: normal;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <div>
+        <h2 class="fw-bold mb-1 text-white">Operational Audit Log</h2>
+        <p class="text-light opacity-75 mb-0">System-wide inventory adjustments, stock movements, and audit history.</p>
+    </div>
+</div>
+
+<!-- 📅 DATE FILTER TOOLBAR -->
+<div class="content-card mb-4">
+    <div class="d-flex flex-wrap justify-content-between align-items-center gap-3">
+        <!-- Quick Preset Buttons -->
+        <div class="btn-group" role="group" aria-label="Date presets">
+            <a href="/portal/{{ username }}/audit-log?period=today" class="btn btn-sm {{ 'btn-primary fw-bold' if current_period == 'today' else 'btn-outline-secondary text-white' }}">Today</a>
+            <a href="/portal/{{ username }}/audit-log?period=this_week" class="btn btn-sm {{ 'btn-primary fw-bold' if current_period == 'this_week' else 'btn-outline-secondary text-white' }}">This Week</a>
+            <a href="/portal/{{ username }}/audit-log?period=this_month" class="btn btn-sm {{ 'btn-primary fw-bold' if current_period == 'this_month' else 'btn-outline-secondary text-white' }}">This Month</a>
+            <a href="/portal/{{ username }}/audit-log?period=all" class="btn btn-sm {{ 'btn-primary fw-bold' if current_period == 'all' else 'btn-outline-secondary text-white' }}">All Time</a>
+        </div>
+
+        <!-- Custom Date Range Controls -->
+        <form method="GET" action="/portal/{{ username }}/audit-log" class="d-flex align-items-center gap-2">
+            <input type="hidden" name="period" value="custom">
+            <small class="text-light opacity-75">Custom Range:</small>
+            <input type="date" name="start_date" class="form-control form-control-sm bg-dark text-white border-secondary" value="{{ start_date }}" style="color-scheme: dark;" required>
+            <small class="text-light opacity-75">to</small>
+            <input type="date" name="end_date" class="form-control form-control-sm bg-dark text-white border-secondary" value="{{ end_date }}" style="color-scheme: dark;" required>
+            <button type="submit" class="btn btn-sm btn-info text-white fw-bold px-3">Filter</button>
+        </form>
+    </div>
+</div>
+
+<div class="content-card">
+    {% if logs %}
+        <div class="table-responsive">
+            <table class="table audit-table align-middle">
+                <thead>
+                    <tr>
+                        <th style="width: 15%;">Date & Time</th>
+                        <th style="width: 12%;">User / Operator</th>
+                        <th style="width: 15%;">Action / Ref ID</th>
+                        <th style="width: 18%;">Item Target</th>
+                        <th style="width: 15%;">Variance / Qty</th>
+                        <th style="width: 25%;">Notes & Details</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for log in logs %}
+                    <tr>
+                        <td class="text-nowrap audit-date">
+                            {{ log.get('Date') or log.get('Log_Date') or log.get('timestamp') or '—' }}
+                        </td>
+                        <td>
+                            <span class="badge bg-secondary text-white px-2 py-1">
+                                {{ log.get('Updated_By') or log.get('User') or log.get('user') or 'System' }}
+                            </span>
+                        </td>
+                        <td>
+                            <span class="audit-code">{{ log.get('Audit_ID') or log.get('Type') or log.get('type') or 'AUDIT' }}</span>
+                        </td>
+                        <td class="audit-target">
+                            {{ log.get('Ingredient_Name') or log.get('Ingredient_ID') or log.get('Item_Name') or log.get('title') or '—' }}
+                        </td>
+                        <td>
+                            {% set raw_qty = log.get('Variance') or log.get('Quantity_Changed') or log.get('Quantity') or log.get('quantity') or 0 %}
+                            {% set qty_num = raw_qty | float(default=0) | round(4) %}
+                            {% if qty_num > 0 %}
+                                <span class="text-success fw-bold fs-6">+{{ qty_num }}</span>
+                            {% elif qty_num < 0 %}
+                                <span class="text-danger fw-bold fs-6">{{ qty_num }}</span>
+                            {% else %}
+                                <span class="text-secondary fw-bold">0</span>
+                            {% endif %}
+                        </td>
+                        <td class="audit-notes">
+                            {{ log.get('Notes') or log.get('Reason') or log.get('notes') or 'Routine system transaction.' }}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    {% else %}
+        <div class="text-center py-5 opacity-75">
+            <h5 class="fw-bold mb-2 text-white">No audit log records found for this period</h5>
+            <p class="text-secondary mb-0 fs-6">Try selecting a different date range or preset above.</p>
+        </div>
+    {% endif %}
+</div>
+{% endblock %}
