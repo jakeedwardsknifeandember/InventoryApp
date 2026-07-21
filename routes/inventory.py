@@ -37,7 +37,7 @@ def web_inventory_tab(username):
             ingredients_df['Ingredient_ID'] = ingredients_df['Ingredient_ID'].astype(str)
             ingredients_df['Current_Stock'] = pd.to_numeric(ingredients_df['Current_Stock'], errors='coerce').fillna(0.0)
 
-            # 🚚 1. PROCESS SUPPLY DELIVERIES (WITH SMART AUTO-COLUMN MATCHING MATRIX)
+            # 1. PROCESS SUPPLY DELIVERIES (WITH WEIGHTED AVERAGE COSTING)
             if action == 'receive_stock':
                 ing_ids = request.form.getlist('ingredient_id[]')
                 quantities = request.form.getlist('quantity[]')
@@ -56,14 +56,13 @@ def web_inventory_tab(username):
                 item_summaries = []
                 meta_notes = f"Supplier: {supplier} (Rec'd by: {received_by}) | Pay-Method: {payment_method} | Notes: {delivery_notes}".strip(" | Notes: ")
                 
-                # 🧮 DYNAMIC SELF-HEALING COST COLUMN DETECTOR
                 cost_price_col = None
                 for col in ingredients_df.columns:
                     if 'cost' in col.lower() or 'price' in col.lower():
                         cost_price_col = col
                         break
                 if not cost_price_col:
-                    cost_price_col = 'Cost_Price' # Fallback baseline default
+                    cost_price_col = 'Cost_Price'
                 
                 for i_id, q_val, p_val in zip(ing_ids, quantities, purchase_prices):
                     if not q_val or float(q_val or 0) <= 0: continue
@@ -80,7 +79,6 @@ def web_inventory_tab(username):
                         except Exception:
                             old_unit_cost = 0.0
                         
-                        # Execute Weighted Average Costing Formula
                         if current_stock_bal <= 0 or old_unit_cost <= 0:
                             new_weighted_cost = incoming_unit_price
                         else:
@@ -95,7 +93,7 @@ def web_inventory_tab(username):
                         total_delivery_expense += line_cost
                         
                         display_qty = int(qty) if qty % 1 == 0 else qty
-                        item_summaries.append(f"{display_qty:,}x {ing_name} @ ₱{incoming_unit_price:,.2f}")
+                        item_summaries.append(f"{display_qty:,}x {ing_name} @ P{incoming_unit_price:,.2f}")
                         
                         new_row = {
                             'Audit_ID': f"RCV{datetime.now().strftime('%M%S')}{logged_count}",
@@ -104,7 +102,7 @@ def web_inventory_tab(username):
                             'Theoretical': current_stock_bal,
                             'Physical': current_stock_bal + qty,
                             'Variance': qty,
-                            'Notes': f"Intake Cost: ₱{incoming_unit_price:,.2f}/unit | {meta_notes}"
+                            'Notes': f"Intake Cost: P{incoming_unit_price:,.2f}/unit | {meta_notes}"
                         }
                         audit_ledger_df = pd.concat([audit_ledger_df, pd.DataFrame([new_row])], ignore_index=True)
                         logged_count += 1
@@ -125,10 +123,10 @@ def web_inventory_tab(username):
                             'Notes': f"Auto-weighted cost matrix recalculated cleanly via column handle: {cost_price_col}."
                         })
                     
-                    feedback_msg = f"🚚 Success: Processed delivery for {logged_count} items from supplier: {supplier}. Financial invoice total of ₱{total_delivery_expense:,.2f} pushed to accounting."
+                    feedback_msg = f"Success: Processed delivery for {logged_count} items from supplier: {supplier}. Financial invoice total of P{total_delivery_expense:,.2f} pushed to accounting."
                     alert_type = "success"
 
-            # 🍳 2. PROCESS KITCHEN PRODUCTION PREP LOGS (FIXED MATH CALCULATION)
+            # 2. PROCESS KITCHEN PRODUCTION PREP LOGS
             elif action == 'log_production_prep':
                 prep_ing_id = request.form.get('prep_ingredient_id')
                 prep_qty_str = request.form.get('prep_quantity', '0')
@@ -164,7 +162,6 @@ def web_inventory_tab(username):
                     error_details = ", ".join(insufficient_stocks)
                     return redirect(f"/portal/{username}/inventory?type=PREPPED&error=Shortage Warning: Cannot complete prep run. Raw stock deficit: {error_details}")
                 
-                # Determine yield output per batch dynamically
                 yield_per_batch = 0.0
                 if 'Batch_Yield' in formula_df.columns and pd.notna(formula_df['Batch_Yield'].iloc[0]) and float(formula_df['Batch_Yield'].iloc[0] or 0) > 0:
                     yield_per_batch = float(formula_df['Batch_Yield'].iloc[0])
@@ -175,7 +172,6 @@ def web_inventory_tab(username):
                     if not target_idx.empty and 'Batch_Yield' in ingredients_df.columns and pd.notna(ingredients_df.loc[target_idx[0], 'Batch_Yield']) and float(ingredients_df.loc[target_idx[0], 'Batch_Yield'] or 0) > 0:
                         yield_per_batch = float(ingredients_df.loc[target_idx[0], 'Batch_Yield'])
                 
-                # Fallback: Sum combined raw ingredient input volumes if explicit yield column isn't specified
                 if yield_per_batch <= 0:
                     yield_per_batch = pd.to_numeric(formula_df['Quantity_Required'], errors='coerce').fillna(0.0).sum()
                     if yield_per_batch <= 0:
@@ -190,7 +186,6 @@ def web_inventory_tab(username):
                 target_idx = ingredients_df[ingredients_df['Ingredient_ID'] == str(prep_ing_id)].index
                 target_name = ingredients_df.loc[target_idx[0], 'Ingredient_Name'] if not target_idx.empty else "Portioned Component"
                 
-                # Deduct raw ingredients based on batch quantity
                 for _, row in formula_df.iterrows():
                     raw_id = str(row['Raw_Ingredient_ID'])
                     req_qty = float(row['Quantity_Required'] or 0)
@@ -212,7 +207,6 @@ def web_inventory_tab(username):
                     audit_ledger_df = pd.concat([audit_ledger_df, pd.DataFrame([raw_log_row])], ignore_index=True)
                     logged_count += 1
                 
-                # Credit target prepped ingredient balance with full calculated yield
                 current_prep_stock = float(ingredients_df.loc[target_idx[0], 'Current_Stock'])
                 ingredients_df.loc[target_idx[0], 'Current_Stock'] = current_prep_stock + total_yield_produced
                 
@@ -231,10 +225,10 @@ def web_inventory_tab(username):
                 if logged_count > 0:
                     client_db.save_tab('Ingredients', ingredients_df)
                     client_db.save_tab('Inventory_Audit_Log', audit_ledger_df)
-                    feedback_msg = f"🍳 Kitchen Prep Logged: Converted warehouse elements into {total_yield_produced:g} units of {target_name} ({int(prep_batches) if prep_batches % 1 == 0 else prep_batches} batch/es) successfully."
+                    feedback_msg = f"Kitchen Prep Logged: Converted warehouse elements into {total_yield_produced:g} units of {target_name} ({int(prep_batches) if prep_batches % 1 == 0 else prep_batches} batch/es) successfully."
                     alert_type = "success"
 
-            # 🗑️ 3. PROCESS ENHANCED BIFURCATED WASTE ENGINE
+            # 3. PROCESS ENHANCED BIFURCATED WASTE ENGINE (WITH FRACTIONAL SUPPORT)
             elif action == 'log_waste':
                 waste_target = request.form.get('waste_target_type')
                 wasted_by = request.form.get('wasted_by', '').strip()
@@ -258,6 +252,7 @@ def web_inventory_tab(username):
                         idx = ingredients_df[ingredients_df['Ingredient_ID'] == str(i_id)].index
                         if not idx.empty:
                             current_amt = float(ingredients_df.loc[idx[0], 'Current_Stock'])
+                            unit_label = ingredients_df.loc[idx[0], 'Unit'] if 'Unit' in ingredients_df.columns else ''
                             new_amt = max(0.0, current_amt - qty)
                             ingredients_df.loc[idx[0], 'Current_Stock'] = new_amt
                             
@@ -268,7 +263,7 @@ def web_inventory_tab(username):
                                 'Theoretical': current_amt,
                                 'Physical': new_amt,
                                 'Variance': -qty,
-                                'Notes': meta_notes
+                                'Notes': f"Direct Loss: {qty:g} {unit_label} | {meta_notes}"
                             }
                             audit_ledger_df = pd.concat([audit_ledger_df, pd.DataFrame([new_row])], ignore_index=True)
                             logged_count += 1
@@ -310,7 +305,7 @@ def web_inventory_tab(username):
                                         'Theoretical': current_amt,
                                         'Physical': new_amt,
                                         'Variance': -total_wasted_ing,
-                                        'Notes': f"Product Waste: {int(p_qty) if p_qty % 1 == 0 else p_qty}x {p_name} | {meta_notes}"
+                                        'Notes': f"Product Waste: {p_qty:g}x {p_name} | {meta_notes}"
                                     }
                                     audit_ledger_df = pd.concat([audit_ledger_df, pd.DataFrame([new_row])], ignore_index=True)
                                     logged_count += 1
@@ -318,10 +313,10 @@ def web_inventory_tab(username):
                 if logged_count > 0:
                     client_db.save_tab('Ingredients', ingredients_df)
                     client_db.save_tab('Inventory_Audit_Log', audit_ledger_df)
-                    feedback_msg = f"🗑️ Waste Log Complete: Deducted stock components successfully."
+                    feedback_msg = "Waste Log Complete: Deducted stock components successfully."
                     alert_type = "warning"
 
-            # ⚖️ 4. PROCESS PHYSICAL RECONCILIATION AUDITS
+            # 4. PROCESS PHYSICAL RECONCILIATION AUDITS
             elif action == 'reconcile_stock':
                 ing_ids = request.form.getlist('ingredient_id[]')
                 quantities = request.form.getlist('quantity[]')
@@ -361,7 +356,7 @@ def web_inventory_tab(username):
                 if logged_count > 0:
                     client_db.save_tab('Ingredients', ingredients_df)
                     client_db.save_tab('Inventory_Audit_Log', audit_ledger_df)
-                    feedback_msg = f"⚖️ Inventory Reconciled: Balance adjustments permanently recorded."
+                    feedback_msg = "Inventory Reconciled: Balance adjustments permanently recorded."
                     alert_type = "info"
                     
             client_db.update_all_product_costs()
@@ -398,7 +393,7 @@ def web_inventory_tab(username):
     if products_df is not None and not products_df.empty:
         products_list = products_df.to_dict(orient='records')
 
-    # TWO-WAY HISTORICAL TIMELINE ACCORDION PRE-COMPILER
+    # HISTORICAL TIMELINE ACCORDION PRE-COMPILER
     audit_df = client_db.read_tab('Inventory_Audit_Log')
     delivery_history_list = []
     waste_history_list = []
