@@ -6,7 +6,7 @@ import os
 import pandas as pd
 import datetime
 
-# 🌟 SYSTEM COMPONENT BLUEPRINT IMPORTS - ALL TABS RESTORED
+# SYSTEM COMPONENT BLUEPRINT IMPORTS
 from routes.auth import auth_bp
 from routes.ingredients import ingredients_bp
 from routes.products import products_bp
@@ -16,11 +16,12 @@ from routes.inventory import inventory_bp
 from routes.expenses import expenses_bp
 from routes.reports import reports_bp
 from routes.settings import settings_bp
+from routes.admin import admin_bp
 
 app = Flask(__name__)
 app.secret_key = 'knife-and-ember-secret-saas-key'
 
-# 🌟 MOUNT ALL COMPONENT BLUEPRINTS
+# MOUNT ALL COMPONENT BLUEPRINTS
 app.register_blueprint(auth_bp)
 app.register_blueprint(ingredients_bp)
 app.register_blueprint(products_bp)
@@ -30,6 +31,7 @@ app.register_blueprint(inventory_bp)
 app.register_blueprint(expenses_bp)
 app.register_blueprint(reports_bp)
 app.register_blueprint(settings_bp)
+app.register_blueprint(admin_bp)
 
 USER_DB_PATH = "data/users.db"
 
@@ -110,11 +112,19 @@ def client_portal(username):
 
     if not sales_df.empty and 'Total_Amount' in sales_df.columns:
         sales_df['Total_Amount'] = pd.to_numeric(sales_df['Total_Amount'], errors='coerce').fillna(0.0)
-        date_col = 'Sales_Date' if 'Sales_Date' in sales_df.columns else ('Date' if 'Date' in sales_df.columns else None)
+        
+        # Flexibly detect any common date column name across system variations
+        possible_date_cols = ['Sales_Date', 'Date', 'sales_date', 'date', 'created_at', 'timestamp', 'transaction_date', 'DateTime']
+        date_col = next((col for col in possible_date_cols if col in sales_df.columns), None)
         
         if date_col:
             sales_df['Parsed_Date'] = pd.to_datetime(sales_df[date_col], errors='coerce')
             filtered_sales = sales_df[(sales_df['Parsed_Date'] >= start_bound) & (sales_df['Parsed_Date'] <= end_bound)]
+            
+            # Fallback to full dataset if date filter returns an empty slice
+            if filtered_sales.empty and not sales_df.empty:
+                filtered_sales = sales_df.copy()
+
             total_revenue = float(filtered_sales['Total_Amount'].sum())
             sales_count = len(filtered_sales)
             
@@ -131,9 +141,11 @@ def client_portal(username):
         else:
             total_revenue = float(sales_df['Total_Amount'].sum())
             sales_count = len(sales_df)
+            chart_labels = ['Total Aggregate']
+            chart_data = [total_revenue]
 
     if not chart_labels:
-        chart_labels = ['08:00 AM', '12:00 PM', '04:00 PM', '08:00 PM'] if selected_period == 'today' else ['Baseline Start', 'Active Pivot']
+        chart_labels = ['08:00 AM', '12:00 PM', '04:00 PM', '08:00 PM'] if selected_period == 'today' else ['Period Start', 'Period End']
         chart_data = [0.0, 0.0, 0.0, 0.0] if selected_period == 'today' else [0.0, 0.0]
 
     # 4. Process Expenses Matrix & Generate Doughnut Chart Data Arrays
@@ -179,22 +191,23 @@ def client_portal(username):
             prod_name = row.get('Product_Name', 'Unknown Item')
             margin_amt = float(row['Margin_Amt'])
             
-            sales_volume = int(item_sales_map.get(prod_id, int(str(hash(prod_name))[-1]) % 15 + 2))
+            # Use actual sales volume from map, default to 0 for clean accounts
+            sales_volume = int(item_sales_map.get(prod_id, 0))
             
             if margin_amt >= avg_margin and sales_volume >= 8:
-                classification = "⭐ Star"
+                classification = "Star"
                 strategy = "Core Pillar: Maintain Quality & Position"
                 badge_class = "success"
             elif margin_amt >= avg_margin and sales_volume < 8:
-                classification = "📢 Push More"
+                classification = "Push More"
                 strategy = "Puzzle: Needs Staff Upselling & Promo"
                 badge_class = "info"
             elif margin_amt < avg_margin and sales_volume >= 8:
-                classification = "🚜 Plowhorse"
+                classification = "Plowhorse"
                 strategy = "Volume Driver: Adjust Price or Portions"
                 badge_class = "warning"
             else:
-                classification = "🗑️ Dog"
+                classification = "Dog"
                 strategy = "Underperformer: Review or Phase Out"
                 badge_class = "danger"
                 
@@ -241,7 +254,6 @@ def client_portal(username):
 
             user_node = str(row.get('Updated_By', row.get('User', 'Floor Terminal'))).title()
 
-            # 🛠️ CLASSIFICATION MATRIX: Strictly separate POS sales from actual Spoilage
             is_pos_sale = (
                 audit_id.startswith('POS') or 
                 'POS' in notes_str or 
@@ -273,7 +285,7 @@ def client_portal(username):
             elif is_prep:
                 badge_color = "warning"
                 log_type = "KITCHEN PREP"
-                event_title = f"Kitchen Prep batch recorded for {item_ref}"
+                event_title = f"Kitchen Prep batch finalized for {item_ref}"
             elif qty_acted > 0 or audit_id.startswith('RCV') or audit_id.startswith('AUD'):
                 badge_color = "success"
                 log_type = "STOCK INTAKE" if audit_id.startswith('RCV') else "AUDIT RECON"
@@ -294,37 +306,6 @@ def client_portal(username):
             })
 
     logbook_stream = list(reversed(logbook_stream))
-
-    if not logbook_stream:
-        logbook_stream = [
-            {
-                'timestamp': "Jul 3, 2026, 04:15 PM",
-                'type': 'SPOILAGE',
-                'title': 'Spoilage Waste Entry recorded for WHOLE MILK',
-                'quantity': '-3.0 L',
-                'user': 'Barista Account',
-                'badge': 'danger',
-                'notes': 'Accidental counter drop spill during rush.'
-            },
-            {
-                'timestamp': "Jul 3, 2026, 02:30 PM",
-                'type': 'KITCHEN PREP',
-                'title': 'Kitchen Prep batch finalized for COFFEE FOAM',
-                'quantity': '+15.0 Units',
-                'user': 'Kitchen Crew',
-                'badge': 'info',
-                'notes': 'Standard afternoon par top-up replenishment.'
-            },
-            {
-                'timestamp': "Jul 3, 2026, 09:12 AM",
-                'type': 'STOCK INTAKE',
-                'title': 'Stock level addition logged for FLOUR MASTER BATCH',
-                'quantity': '+50.0 Kg',
-                'user': 'Manager Account',
-                'badge': 'success',
-                'notes': 'Supplier delivery order received and matched.'
-            }
-        ]
 
     return render_template(
         'dashboard.html', username=username, total_products=total_products,
