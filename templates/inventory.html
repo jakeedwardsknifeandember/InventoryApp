@@ -2,12 +2,14 @@
 {% block content %}
 
 <style>
+    /* Industrial High-Contrast Inventory Custom Styles */
     .inventory-title-block { font-size: 24px; font-weight: 800; color: #ffffff; }
     .nav-tabs-custom { border-bottom: 2px solid #2d2d3f; margin-bottom: 20px; }
     .nav-link-custom { color: #cbd5e1; font-weight: bold; border: none; padding: 10px 20px; text-decoration: none; display: inline-block; transition: all 0.2s; }
     .nav-link-custom:hover { color: #ffffff; background: #222235; border-radius: 4px; }
     .nav-link-custom.active { color: #3b8ed0; border-bottom: 3px solid #3b8ed0; background: transparent; }
     
+    /* High contrast typography labels overrides */
     .ledger-table th { color: #cbd5e1 !important; font-size: 12px; text-transform: uppercase; letter-spacing: 0.5px; font-weight: 700; border-bottom: 2px solid #3f3f46 !important; }
     .ledger-table td { font-size: 13.5px; color: #ffffff; vertical-align: middle; border-bottom: 1px solid #2d2d3f; }
     .status-badge { font-size: 11px; font-weight: bold; padding: 4px 8px; border-radius: 4px; }
@@ -26,26 +28,26 @@
 
 <div class="container-fluid p-0">
     
-    <!-- TOP CONTROL BAR BANNER -->
+    <!-- 👑 TOP CONTROL BAR BANNER -->
     <div class="d-flex justify-content-between align-items-center mb-4">
         <h1 class="inventory-title-block">Inventory Ledger Control</h1>
         <div class="d-flex gap-2">
             <button class="btn btn-sm btn-success fw-bold d-flex align-items-center gap-1 px-3 py-2" data-bs-toggle="modal" data-bs-target="#receiveStockModal">
-                Receive Bulk Delivery
+                🚚 Receive Bulk Delivery
             </button>
             <button class="btn btn-sm btn-warning text-dark fw-bold d-flex align-items-center gap-1 px-3 py-2" data-bs-toggle="modal" data-bs-target="#logPrepModal">
-                Log Kitchen Prep
+                🥣 Log Kitchen Prep
             </button>
             <button class="btn btn-sm btn-primary fw-bold d-flex align-items-center gap-1 px-3 py-2" data-bs-toggle="modal" data-bs-target="#reconcileStockModal">
-                Audit Raw Counts
+                ⚖️ Audit Raw Counts
             </button>
             <button class="btn btn-sm btn-danger fw-bold d-flex align-items-center gap-1 px-3 py-2" data-bs-toggle="modal" data-bs-target="#logWasteModal">
-                Log Spoilage Waste
+                🗑️ Log Spoilage Waste
             </button>
         </div>
     </div>
 
-    <!-- RESPONSE CHANNELS TERMINAL -->
+    <!-- 📢 RESPONSE CHANNELS TERMINAL -->
     {% if msg %}
         <div class="alert alert-{{ alert_type if alert_type else 'success' }} border-start border-4 mb-4 fw-bold shadow-sm">
             {{ msg }}
@@ -53,21 +55,21 @@
     {% endif %}
     {% if request.args.get('error') %}
         <div class="alert alert-danger border-start border-4 mb-4 fw-bold shadow-sm">
-            Warning: {{ request.args.get('error') }}
+            ⚠️ {{ request.args.get('error') }}
         </div>
     {% endif %}
 
-    <!-- SUB-TAB STRUCTURAL ROUTING -->
+    <!-- 👑 SUB-TAB STRUCTURAL ROUTING -->
     <div class="nav-tabs-custom">
         <a href="/portal/{{ username }}/inventory?type=RAW" class="nav-link-custom {% if current_type == 'RAW' %}active{% endif %}">
-            Bulk Warehouse Operations
+            📦 Bulk Warehouse Operations
         </a>
         <a href="/portal/{{ username }}/inventory?type=PREPPED" class="nav-link-custom {% if current_type == 'PREPPED' %}active{% endif %}">
-            Kitchen Line Production
+            🍳 Kitchen Line Production
         </a>
     </div>
 
-    <!-- LAYOUT WINDOW -->
+    <!-- 👑 LAYOUT SPLIT SPLIT WINDOW -->
     <div class="row g-4">
         
         <!-- LEFT COLUMN: MAIN GRID WORKSPACE LEDGER -->
@@ -116,9 +118,9 @@
                                 <td class="text-end font-monospace text-high-contrast-muted">{{ "{:,.2f}".format(item.Par_Level or 0.0) }}</td>
                                 <td class="text-end">
                                     {% if item.Status == 'Low Stock' %}
-                                        <span class="status-badge bg-danger text-white shadow-sm">LOW STOCK</span>
+                                        <span class="status-badge bg-danger text-white shadow-sm">⚠️ LOW STOCK</span>
                                     {% else %}
-                                        <span class="status-badge bg-success text-white shadow-sm">HEALTHY</span>
+                                        <span class="status-badge bg-success text-white shadow-sm">● HEALTHY</span>
                                     {% endif %}
                                 </td>
                             </tr>
@@ -145,7 +147,7 @@
                     <input type="date" name="filter_date" value="{{ current_filter_date }}" class="form-control form-control-sm bg-dark text-white border-secondary font-monospace" onchange="this.form.submit()">
                 </form>
 
-                <div class="stream-header">Supply Receipts & Audits</div>
+                <div class="stream-header">🚚 Supply Receipts & Audits</div>
                 <div class="stream-card-container">
                     {% for log in delivery_history %}
                     <div class="stream-entry" style="border-left-color: #2fa572;">
@@ -163,7 +165,7 @@
                     {% endfor %}
                 </div>
 
-                <div class="stream-header">Kitchen Prep Batches Log</div>
+                <div class="stream-header">🍳 Kitchen Prep Batches Log</div>
                 <div class="stream-card-container">
                     {% for batch in production_history %}
                     <div class="stream-entry" style="border-left-color: #3b8ed0;">
@@ -185,7 +187,7 @@
                     {% endfor %}
                 </div>
 
-                <div class="stream-header">Kitchen Spoilage Discards</div>
+                <div class="stream-header">🗑️ Kitchen Spoilage Discards</div>
                 <div class="stream-card-container">
                     {% for log in waste_history %}
                     <div class="stream-entry" style="border-left-color: #c24b4b;">
@@ -203,7 +205,7 @@
                         {% else %}
                             <div class="text-white fw-bold">{{ log.Ingredient_Name }} (<span class="text-danger">{{ log.Variance }}</span>)</div>
                         {% endif %}
-                        <div class="text-high-contrast-muted mt-1 font-italic" style="font-size: 11.5px;">Details: {{ log.Notes }}</div>
+                        <div class="text-high-contrast-muted mt-1 font-italic" style="font-size: 11.5px;">Reason: {{ log.Notes }}</div>
                     </div>
                     {% else %}
                     <div class="text-center text-high-contrast-muted small py-4 border border-secondary border-dashed rounded" style="background: rgba(0,0,0,0.1);">
@@ -219,7 +221,7 @@
 </div>
 
 <!-- =================================================================================== -->
-<!-- MODAL A: RECEIVE SUPPLIER SHIPMENTS INVOICE INTAKE CONTAINER -->
+<!-- 🚚 MODAL A: RECEIVE SUPPLIER SHIPMENTS INVOICE INTAKE CONTAINER -->
 <!-- =================================================================================== -->
 <div class="modal fade" id="receiveStockModal" tabindex="-1" aria-hidden="true">
     <div class="modal-dialog modal-xl modal-dialog-centered">
@@ -228,7 +230,7 @@
                 <input type="hidden" name="action_type" value="receive_stock">
                 
                 <div class="modal-custom-header d-flex justify-content-between align-items-center">
-                    <h5 class="fw-bold m-0 text-white">Receive Supplier Shipments Invoice Intake</h5>
+                    <h5 class="fw-bold m-0 text-white">🚚 Receive Supplier Shipments Invoice Intake</h5>
                     <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
                 </div>
                 
@@ -279,12 +281,12 @@
                                 <div class="col-md-3">
                                     <label class="small text-high-contrast-muted d-md-none fw-bold">Purchase Price per Unit:</label>
                                     <div class="input-group">
-                                        <span class="input-group-text bg-secondary border-secondary text-white small fw-bold">P</span>
+                                        <span class="input-group-text bg-secondary border-secondary text-white small fw-bold">₱</span>
                                         <input type="number" name="purchase_price[]" step="0.01" min="0.00" placeholder="Purchase Price / Unit" required class="form-control bg-dark text-white border-secondary font-monospace">
                                     </div>
                                 </div>
                                 <div class="col-md-1 text-end">
-                                    <button type="button" class="btn btn-outline-danger border-secondary w-100" onclick="removeDeliveryRowItem(this)">X</button>
+                                    <button type="button" class="btn btn-outline-danger border-secondary w-100" onclick="removeDeliveryRowItem(this)">✕</button>
                                 </div>
                             </div>
                         </div>
@@ -305,7 +307,7 @@
 </div>
 
 <!-- =================================================================================== -->
-<!-- MODAL B: LOG KITCHEN PREP BATCH PRODUCTION CONTAINER -->
+<!-- 🥣 MODAL B: LOG KITCHEN PREP BATCH PRODUCTION CONTAINER -->
 <!-- =================================================================================== -->
 <div class="modal fade" id="logPrepModal" tabindex="-1" aria-hidden="true">
     <div class="modal-dialog modal-lg modal-dialog-centered">
@@ -314,7 +316,7 @@
                 <input type="hidden" name="action_type" value="log_production_prep">
                 
                 <div class="modal-custom-header d-flex justify-content-between align-items-center">
-                    <h5 class="fw-bold m-0 text-white">Log Kitchen Prep Production Batch</h5>
+                    <h5 class="fw-bold m-0 text-white">🥣 Log Kitchen Prep Production Batch</h5>
                     <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
                 </div>
                 
@@ -339,7 +341,7 @@
                         <label class="form-label-custom">Number of Batches Produced:</label>
                         <input type="number" name="prep_quantity" step="0.1" min="0.1" required placeholder="e.g. 2.0 (Produces total calculated yield based on sub-recipe yield ratio)" class="form-control bg-dark text-white border-secondary font-monospace">
                         <small class="text-high-contrast-muted d-block mt-1" style="font-size: 11.5px;">
-                            Automatic Yield & Deduction: System calculates raw material deductions and credits inventory balance by multiplying your batch count against the formula yield ratio.
+                            💡 <strong>Automatic Yield & Deduction:</strong> System calculates raw material deductions and credits inventory balance by multiplying your batch count against the formula yield ratio.
                         </small>
                     </div>
                 </div>
@@ -354,7 +356,7 @@
 </div>
 
 <!-- =================================================================================== -->
-<!-- MODAL C: AUDIT COUNTS RECONCILIATION CONTAINER -->
+<!-- ⚖️ MODAL C: AUDIT COUNTS RECONCILIATION CONTAINER -->
 <!-- =================================================================================== -->
 <div class="modal fade" id="reconcileStockModal" tabindex="-1" aria-hidden="true">
     <div class="modal-dialog modal-lg modal-dialog-centered">
@@ -363,7 +365,7 @@
                 <input type="hidden" name="action_type" value="reconcile_stock">
                 
                 <div class="modal-custom-header">
-                    <h5 class="fw-bold m-0 text-white">Initiate Physical Floor Count Audit Reconciliation</h5>
+                    <h5 class="fw-bold m-0 text-white">⚖️ Initiate Physical Floor Count Audit Reconciliation</h5>
                 </div>
                 
                 <div class="modal-body p-4">
@@ -408,7 +410,7 @@
 </div>
 
 <!-- =================================================================================== -->
-<!-- MODAL D: SPOILAGE AND WASTE MANAGER CONTAINER (ENHANCED UNIT & DECIMAL PRECISION) -->
+<!-- 🗑️ MODAL D: SPOILAGE AND WASTE MANAGER CONTAINER -->
 <!-- =================================================================================== -->
 <div class="modal fade" id="logWasteModal" tabindex="-1" aria-hidden="true">
     <div class="modal-dialog modal-lg modal-dialog-centered">
@@ -417,7 +419,7 @@
                 <input type="hidden" name="action_type" value="log_waste">
                 
                 <div class="modal-custom-header">
-                    <h5 class="fw-bold m-0 text-white">Log Structural Material Spoilage or Operational Waste</h5>
+                    <h5 class="fw-bold m-0 text-white">🗑️ Log Structural Material Spoilage or Operational Waste</h5>
                 </div>
                 
                 <div class="modal-body p-4">
@@ -456,24 +458,27 @@
                         </div>
                     </div>
 
-                    <!-- RAW INGREDIENT WASTE BLOCK -->
+                    <!-- RAW INGREDIENT WASTE BLOCK WITH AUTOMATIC UNIT BADGE -->
                     <div id="wasteIngredientListBlock" class="border-top border-secondary pt-2">
                         <label class="form-label-custom text-white-50">Bulk Materials Loss Roster:</label>
                         <div id="ingredientWasteRowsContainer">
                             <div class="row g-2 mb-2 waste-ing-row align-items-center">
-                                <div class="col-md-7">
-                                    <select name="ingredient_id[]" class="form-select bg-dark text-white border-secondary">
+                                <div class="col-md-6">
+                                    <select name="ingredient_id[]" class="form-select bg-dark text-white border-secondary" onchange="updateWasteUnitBadge(this)">
                                         <option value="" disabled selected>Select spoiled bulk material...</option>
                                         {% for item in inventory_status %}
-                                            <option value="{{ item.Ingredient_ID }}">{{ item.Ingredient_Name }} (in {{ item.Unit }})</option>
+                                            <option value="{{ item.Ingredient_ID }}" data-unit="{{ item.Unit }}">{{ item.Ingredient_Name }} (in {{ item.Unit }})</option>
                                         {% endfor %}
                                     </select>
                                 </div>
-                                <div class="col-md-4">
-                                    <input type="number" name="quantity[]" step="0.001" min="0.001" placeholder="Quantity Lost in Base Unit (e.g., 0.1 for 100g)" class="form-control bg-dark text-white border-secondary font-monospace">
+                                <div class="col-md-5">
+                                    <div class="input-group">
+                                        <input type="number" name="quantity[]" step="0.001" min="0.001" placeholder="e.g. 0.1 for 100g" class="form-control bg-dark text-white border-secondary font-monospace">
+                                        <span class="input-group-text bg-secondary border-secondary text-white small fw-bold waste-unit-display">unit</span>
+                                    </div>
                                 </div>
                                 <div class="col-md-1 text-end">
-                                    <button type="button" class="btn btn-outline-danger border-secondary w-100" onclick="removeWasteRowItem(this, 'waste-ing-row')">X</button>
+                                    <button type="button" class="btn btn-outline-danger border-secondary w-100" onclick="removeWasteRowItem(this, 'waste-ing-row')">✕</button>
                                 </div>
                             </div>
                         </div>
@@ -487,7 +492,7 @@
                         <label class="form-label-custom text-white-50">Menu Recipe Loss Roster:</label>
                         <div id="productWasteRowsContainer">
                             <div class="row g-2 mb-2 waste-prod-row align-items-center">
-                                <div class="col-md-7">
+                                <div class="col-md-6">
                                     <select name="product_id[]" class="form-select bg-dark text-white border-secondary">
                                         <option value="" disabled selected>Select wasted menu item product...</option>
                                         {% for prod in all_products %}
@@ -495,11 +500,14 @@
                                         {% endfor %}
                                     </select>
                                 </div>
-                                <div class="col-md-4">
-                                    <input type="number" name="product_quantity[]" step="0.001" min="0.001" placeholder="Portion / Units Lost (e.g. 1.0 or 0.5)" class="form-control bg-dark text-white border-secondary font-monospace">
+                                <div class="col-md-5">
+                                    <div class="input-group">
+                                        <input type="number" name="product_quantity[]" step="0.001" min="0.001" placeholder="Portion / Units Lost (e.g. 1.0 or 0.5)" class="form-control bg-dark text-white border-secondary font-monospace">
+                                        <span class="input-group-text bg-secondary border-secondary text-white small fw-bold">servings</span>
+                                    </div>
                                 </div>
                                 <div class="col-md-1 text-end">
-                                    <button type="button" class="btn btn-outline-danger border-secondary w-100" onclick="removeWasteRowItem(this, 'waste-prod-row')">X</button>
+                                    <button type="button" class="btn btn-outline-danger border-secondary w-100" onclick="removeWasteRowItem(this, 'waste-prod-row')">✕</button>
                                 </div>
                             </div>
                         </div>
@@ -551,6 +559,10 @@ function addWasteRowItem(containerId, rowClass) {
         const newRow = templateRow.cloneNode(true);
         newRow.querySelector('select').selectedIndex = 0;
         newRow.querySelectorAll('input').forEach(input => input.value = '');
+        
+        const badge = newRow.querySelector('.waste-unit-display');
+        if (badge) badge.textContent = 'unit';
+        
         container.appendChild(newRow);
     }
 }
@@ -565,6 +577,18 @@ function removeWasteRowItem(buttonNode, rowClass) {
     } else {
         row.querySelector('select').selectedIndex = 0;
         row.querySelectorAll('input').forEach(input => input.value = '');
+        const badge = row.querySelector('.waste-unit-display');
+        if (badge) badge.textContent = 'unit';
+    }
+}
+
+function updateWasteUnitBadge(selectNode) {
+    const selectedOption = selectNode.options[selectNode.selectedIndex];
+    const unit = selectedOption.getAttribute('data-unit') || 'unit';
+    const row = selectNode.closest('.waste-ing-row');
+    const badge = row.querySelector('.waste-unit-display');
+    if (badge) {
+        badge.textContent = unit;
     }
 }
 
