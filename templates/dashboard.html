@@ -10,7 +10,7 @@
     .dashboard-subtitle { font-size: 13px; color: #a1a1aa; margin: 2px 0 0 0; }
     
     .kpi-card { background: #1e1e2e; border: 1px solid #3f3f46; border-radius: 8px; padding: 20px; box-sizing: border-box; }
-    .kpi-title { font-size: 12px; font-weight: 700; color: #94a3b8; text-uppercase: uppercase; letter-spacing: 0.5px; margin-bottom: 6px; }
+    .kpi-title { font-size: 12px; font-weight: 700; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 6px; }
     .kpi-value { font-size: 26px; font-weight: 800; color: #ffffff; line-height: 1.2; }
     .kpi-subtext { font-size: 12px; font-weight: 600; color: #cbd5e1; margin-top: 8px; display: flex; align-items: center; gap: 6px; }
 
@@ -18,7 +18,7 @@
     .badge-filter-btn:hover { background: #2d2d3f; color: #fff; }
     .badge-filter-btn.active { background: #2fa572; color: #fff; border-color: #2fa572; }
 
-    /* Custom Split Layout Matrix Components matching Image 1 Blueprint specs */
+    /* Custom Split Layout Matrix Components */
     .dashboard-split-row { display: grid; grid-template-columns: 1.6fr 1fr; gap: 20px; margin-bottom: 20px; align-items: start; }
     @media(max-width: 992px) { .dashboard-split-row { grid-template-columns: 1fr; } }
 
@@ -154,20 +154,24 @@
             
             <div class="log-stream-container">
                 {% for log in logbook %}
-                <div class="log-entry-item" style="border-left-color: {% if log.badge == 'danger' %}#c24b4b{% elif log.badge == 'info' %}#3b8ed0{% else %}#2fa572{% endif %};">
+                <div class="log-entry-item" style="border-left-color: {% if log.type == 'POS SALE' or log.badge == 'info' or log.badge == 'primary' %}#3b8ed0{% elif log.type == 'SPOILAGE' or log.badge == 'danger' %}#c24b4b{% else %}#2fa572{% endif %};">
                     <div class="log-meta-row">
-                        <span class="badge bg-{{ log.badge }} font-monospace" style="font-size: 10px; font-weight:900; color:#white;">{{ log.type }}</span>
+                        <span class="badge bg-{% if log.type == 'POS SALE' %}primary{% elif log.type == 'SPOILAGE' %}danger{% else %}{{ log.badge }}{% endif %} font-monospace" style="font-size: 10px; font-weight:900; color:#ffffff;">
+                            {{ log.type }}
+                        </span>
                         <span class="log-timestamp">{{ log.timestamp }}</span>
                     </div>
                     <div class="log-title-string">{{ log.title }}</div>
                     <div style="font-size: 12px; color: #e2e8f0; display:flex; justify-content:space-between; align-items:center;">
-                        <span>Impact Magnitude Metric: <b class="font-monospace text-warning">{{ log.quantity }}</b></span>
+                        <span>Impact Magnitude Metric: <b class="font-monospace {% if log.type == 'POS SALE' %}text-info{% else %}text-warning{% endif %}">{{ log.quantity }}</b></span>
                         <span>Operator Node Reference: <b class="text-info font-monospace">{{ log.user }}</b></span>
                     </div>
                     {% if log.notes %}
                         <div class="log-notes-body">Shift Handover Commentary: "{{ log.notes }}"</div>
                     {% endif %}
                 </div>
+                {% else %}
+                <div class="text-center text-muted small py-4">No operational events logged during this timeframe.</div>
                 {% endfor %}
             </div>
         </div>

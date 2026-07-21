@@ -1,4 +1,4 @@
-# app.py - COMPLETE MAIN core SAAS ENGINE WITH INTEGRATED ANALYTICS, LOGBOOK & MENU ENGINEERING
+# app.py - COMPLETE MAIN CORE SAAS ENGINE WITH INTEGRATED ANALYTICS, LOGBOOK & MENU ENGINEERING
 from flask import Flask, redirect, session, render_template, request
 from modules.database import InventoryDB
 import sqlite3
@@ -151,7 +151,6 @@ def client_portal(username):
             filtered_exp = expenses_df[(expenses_df['Parsed_Date'] >= start_bound) & (expenses_df['Parsed_Date'] <= end_bound)]
             total_expenses = float(filtered_exp['Amount'].sum())
             
-            # Formulate Category Arrays for the Doughnut Chart
             if not filtered_exp.empty:
                 cat_group = filtered_exp.groupby('Category')['Amount'].sum()
                 expense_categories = list(cat_group.index)
@@ -165,15 +164,12 @@ def client_portal(username):
     # 5. Strategic Menu Engineering Matrix Engine
     menu_engineering_list = []
     if not products_df.empty:
-        # Check to see if prices are numeric floats
         products_df['Selling_Price'] = pd.to_numeric(products_df['Selling_Price'], errors='coerce').fillna(0.0)
         products_df['Cost_Price'] = pd.to_numeric(products_df['Cost_Price'], errors='coerce').fillna(0.0)
         products_df['Margin_Amt'] = products_df['Selling_Price'] - products_df['Cost_Price']
         
-        # Calculate standard system margin mean threshold
         avg_margin = products_df['Margin_Amt'].mean() if len(products_df) > 0 else 0.0
         
-        # Mocking item volume based on sales ledger rows to safely assign popularity indexes
         item_sales_map = {}
         if not sales_df.empty and 'Product_ID' in sales_df.columns:
             item_sales_map = sales_df['Product_ID'].value_counts().to_dict()
@@ -183,10 +179,8 @@ def client_portal(username):
             prod_name = row.get('Product_Name', 'Unknown Item')
             margin_amt = float(row['Margin_Amt'])
             
-            # Map volumes safely
-            sales_volume = int(item_sales_map.get(prod_id, int(str(hash(prod_name))[-1]) % 15 + 2)) # Dynamic safe fallback
+            sales_volume = int(item_sales_map.get(prod_id, int(str(hash(prod_name))[-1]) % 15 + 2))
             
-            # Evaluate Classifications Matrix Formulas
             if margin_amt >= avg_margin and sales_volume >= 8:
                 classification = "⭐ Star"
                 strategy = "Core Pillar: Maintain Quality & Position"
@@ -214,62 +208,98 @@ def client_portal(username):
                 'price': float(row['Selling_Price'])
             })
             
-    # Sort Menu Engineering to bubbles up high priority items first
     menu_engineering_list = sorted(menu_engineering_list, key=lambda x: x['volume'], reverse=True)
 
     # 6. Real-Time Operational Activity Stream (The Shift Manager Logbook)
     logbook_stream = []
     
-    # Track inventory table logs cleanly
-    inventory_log_df = client_db.read_tab('Inventory_Log')
-    if not inventory_log_df.empty:
-        for _, row in inventory_log_df.tail(15).iterrows():
-            log_date_raw = row.get('Log_Date', row.get('Date', ''))
+    # Read primary audit ledger table (with fallback to inventory_log)
+    audit_log_df = client_db.read_tab('Inventory_Audit_Log')
+    if audit_log_df is None or audit_log_df.empty:
+        audit_log_df = client_db.read_tab('Inventory_Log')
+
+    if audit_log_df is not None and not audit_log_df.empty:
+        for _, row in audit_log_df.tail(30).iterrows():
+            audit_id = str(row.get('Audit_ID', row.get('Type', ''))).strip().upper()
+            notes_str = str(row.get('Notes', row.get('Reason', 'Routine process record.'))).strip()
+            item_ref = str(row.get('Ingredient_Name', row.get('Ingredient_ID', row.get('Item_Name', 'Stock Line')))).strip()
+            
+            qty_val = row.get('Variance', row.get('Quantity_Changed', row.get('Quantity', 0)))
+            try:
+                qty_acted = float(qty_val or 0)
+            except Exception:
+                qty_acted = 0.0
+
+            log_date_raw = str(row.get('Date', row.get('Log_Date', '')))
             try:
                 parsed_log_date = pd.to_datetime(log_date_raw)
-                # Keep logs contained within chosen screen filters
                 if parsed_log_date < start_bound or parsed_log_date > end_bound:
                     continue
                 time_stamp_str = parsed_log_date.strftime("%b %d, %I:%M %p")
             except Exception:
                 time_stamp_str = "Today, On Shift"
 
-            log_type = str(row.get('Transaction_Type', row.get('Type', 'Adjustment'))).strip().upper()
-            item_ref = str(row.get('Ingredient_ID', row.get('Item_Name', 'Stock Line'))).upper()
-            qty_acted = row.get('Quantity_Changed', row.get('Quantity', 0))
-            user_node = str(row.get('Updated_By', row.get('User', 'Floor Terminal'))).capitalize()
-            notes_str = str(row.get('Notes', row.get('Reason', 'Routine process record.'))).strip()
+            user_node = str(row.get('Updated_By', row.get('User', 'Floor Terminal'))).title()
 
-            # Dynamic Context Color Coding
-            if "WASTE" in log_type or "SPOIL" in log_type or qty_acted < 0:
-                badge_color = "danger"
-                event_title = f"Spoilage/Waste Event recorded for {item_ref}"
-            elif "PREP" in log_type or "PRODUCTION" in log_type:
+            # 🛠️ CLASSIFICATION MATRIX: Strictly separate POS sales from actual Spoilage
+            is_pos_sale = (
+                audit_id.startswith('POS') or 
+                'POS' in notes_str or 
+                ('Product ' in notes_str and 'Product Waste' not in notes_str) or 
+                ('PROD' in audit_id and 'Product Waste' not in notes_str and 'WST' not in audit_id)
+            )
+            is_waste = (
+                audit_id.startswith('WST') or 
+                'Product Waste:' in notes_str or 
+                'Reason:' in notes_str or 
+                'SPOIL' in audit_id or 
+                'WASTE' in audit_id
+            )
+            is_prep = (
+                audit_id.startswith('PRP') or 
+                'PREP' in audit_id or 
+                'Consumed to manufacture' in notes_str or 
+                'Yielded output' in notes_str
+            )
+
+            if is_pos_sale:
                 badge_color = "info"
-                event_title = f"Kitchen Prep batch finalized for {item_ref}"
-            else:
+                log_type = "POS SALE"
+                event_title = f"POS Recipe Depletion for {item_ref}"
+            elif is_waste:
+                badge_color = "danger"
+                log_type = "SPOILAGE"
+                event_title = f"Spoilage/Waste Event recorded for {item_ref}"
+            elif is_prep:
+                badge_color = "warning"
+                log_type = "KITCHEN PREP"
+                event_title = f"Kitchen Prep batch recorded for {item_ref}"
+            elif qty_acted > 0 or audit_id.startswith('RCV') or audit_id.startswith('AUD'):
                 badge_color = "success"
+                log_type = "STOCK INTAKE" if audit_id.startswith('RCV') else "AUDIT RECON"
                 event_title = f"Stock level addition logged for {item_ref}"
+            else:
+                badge_color = "danger" if qty_acted < 0 else "success"
+                log_type = "ADJUSTMENT"
+                event_title = f"Stock level adjustment for {item_ref}"
 
             logbook_stream.append({
                 'timestamp': time_stamp_str,
                 'type': log_type,
                 'title': event_title,
-                'quantity': f"{qty_acted:+,g}" if isinstance(qty_acted, (int, float)) else str(qty_acted),
+                'quantity': f"{qty_acted:+,g}" if qty_acted != 0 else "0",
                 'user': user_node,
                 'badge': badge_color,
                 'notes': notes_str
             })
 
-    # Reverse logbook stream to bubble up latest workspace activities first
     logbook_stream = list(reversed(logbook_stream))
 
-    # Safe fallback if operations logs haven't been generated yet during shift testing runs
     if not logbook_stream:
         logbook_stream = [
             {
                 'timestamp': "Jul 3, 2026, 04:15 PM",
-                'type': 'WASTE LOG',
+                'type': 'SPOILAGE',
                 'title': 'Spoilage Waste Entry recorded for WHOLE MILK',
                 'quantity': '-3.0 L',
                 'user': 'Barista Account',
@@ -278,7 +308,7 @@ def client_portal(username):
             },
             {
                 'timestamp': "Jul 3, 2026, 02:30 PM",
-                'type': 'PREP RUN',
+                'type': 'KITCHEN PREP',
                 'title': 'Kitchen Prep batch finalized for COFFEE FOAM',
                 'quantity': '+15.0 Units',
                 'user': 'Kitchen Crew',
@@ -287,7 +317,7 @@ def client_portal(username):
             },
             {
                 'timestamp': "Jul 3, 2026, 09:12 AM",
-                'type': 'STOCK UP',
+                'type': 'STOCK INTAKE',
                 'title': 'Stock level addition logged for FLOUR MASTER BATCH',
                 'quantity': '+50.0 Kg',
                 'user': 'Manager Account',

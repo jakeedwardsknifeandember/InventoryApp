@@ -307,7 +307,7 @@
 </div>
 
 <!-- =================================================================================== -->
-<!-- 🥣 MODAL B: LOG KITCHEN PREP BATCH PRODUCTION CONTAINER (NEW MODAL) -->
+<!-- 🥣 MODAL B: LOG KITCHEN PREP BATCH PRODUCTION CONTAINER -->
 <!-- =================================================================================== -->
 <div class="modal fade" id="logPrepModal" tabindex="-1" aria-hidden="true">
     <div class="modal-dialog modal-lg modal-dialog-centered">
@@ -338,10 +338,10 @@
                     </div>
 
                     <div class="mb-3">
-                        <label class="form-label-custom">Batch Quantity / Servings Prepped:</label>
-                        <input type="number" name="prep_quantity" step="0.001" min="0.001" required placeholder="e.g. 5.0 (Generates batch output based on recipe formula)" class="form-control bg-dark text-white border-secondary font-monospace">
+                        <label class="form-label-custom">Number of Batches Produced:</label>
+                        <input type="number" name="prep_quantity" step="0.1" min="0.1" required placeholder="e.g. 2.0 (Produces total calculated yield based on sub-recipe yield ratio)" class="form-control bg-dark text-white border-secondary font-monospace">
                         <small class="text-high-contrast-muted d-block mt-1" style="font-size: 11.5px;">
-                            💡 <strong>Automatic Recipe Conversion:</strong> Executing this prep run will automatically calculate and deduct required wholesale raw materials (e.g., Milk & Heavy Cream) directly from your bulk warehouse inventory based on your formula specifications.
+                            💡 <strong>Automatic Yield & Deduction:</strong> System calculates raw material deductions and credits inventory balance by multiplying your batch count against the formula yield ratio.
                         </small>
                     </div>
                 </div>

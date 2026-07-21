@@ -72,6 +72,22 @@ def web_sales_tab(username):
                 
                 client_db.save_tab('Sales', sales_df)
 
+            # 🛠️ SELF-HEALING AUDIT LOG RE-TAGGER
+            # Updates inventory audit log entries created during sales from generic PRD to explicit POS tags
+            audit_df = client_db.read_tab('Inventory_Audit_Log')
+            if audit_df is not None and not audit_df.empty:
+                time_stamp_code = datetime.now().strftime("%M%S")
+                for idx in reversed(audit_df.index):
+                    row_notes = str(audit_df.loc[idx, 'Notes'] or '')
+                    row_audit_id = str(audit_df.loc[idx, 'Audit_ID'] or '')
+                    
+                    # If this is a recent sales depletion row lacking explicit POS tagging
+                    if ("Product " in row_notes or row_audit_id.startswith('PRD')) and "Product Waste:" not in row_notes and "POS Sale" not in row_notes:
+                        audit_df.loc[idx, 'Audit_ID'] = f"POS{time_stamp_code}_{idx}"
+                        audit_df.loc[idx, 'Notes'] = f"POS Recipe Depletion: {row_notes}".strip()
+                
+                client_db.save_tab('Inventory_Audit_Log', audit_df)
+
         if processed_count > 0 and not blocked_items:
             feedback_msg = f"📋 EOD Sync Complete! Successfully logged operations for {processed_count} items on accounting date: {chosen_date}."
             alert_type = "success"
