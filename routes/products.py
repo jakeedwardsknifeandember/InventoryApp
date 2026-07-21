@@ -1,5 +1,5 @@
 # routes/products.py
-from flask import Blueprint, request, redirect, session, render_template
+from flask import Blueprint, request, redirect, session, render_template, flash
 from modules.database import InventoryDB
 import pandas as pd
 
@@ -8,8 +8,15 @@ products_bp = Blueprint('products', __name__)
 @products_bp.route('/portal/<username>/products', methods=['GET', 'POST'])
 def web_products_tab(username):
     username = username.lower().strip()
+    
+    # 🔒 1. Session Authentication Check
     if session.get('logged_in_user') != username: 
         return redirect('/login')
+
+    # 🔒 2. Role-Based Access Guard (Restricted strictly to Platform Owner Admin)
+    if session.get('staff_role') != 'Platform Owner Admin':
+        flash('Unauthorized access: Products management is strictly reserved for Platform Owner Admins.', 'danger')
+        return redirect(f"/portal/{username}")
     
     db = InventoryDB(f"data/client_{username}.db")
     

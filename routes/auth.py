@@ -1,5 +1,5 @@
-# routes/auth.py - Dedicated Authentication & Access Blueprint Engine
-from flask import Blueprint, request, redirect, session, render_template
+# routes/auth.py - Multi-Role Authentication Engine
+from flask import Blueprint, render_template, request, redirect, session, flash
 import sqlite3
 import os
 
@@ -9,58 +9,95 @@ USER_DB_PATH = "data/users.db"
 
 @auth_bp.route('/login', methods=['GET', 'POST'])
 def login():
-    error = None
     if request.method == 'POST':
-        login_type = request.form.get('login_type', 'owner')
-        tenant_company = request.form.get('username', '').lower().strip()
-        password = request.form.get('password', '')
-        
-        # 👑 SCENARIO A: AUTHENTICATE MASTER BUSINESS OWNER
-        if login_type == 'owner':
+        username = request.form.get('username', '').strip().lower()
+        staff_username = request.form.get('staff_username', '').strip().lower()
+        password = request.form.get('password', '').strip()
+        login_role = request.form.get('login_type', 'owner').strip()
+
+        if not username or not password:
+            flash('Please enter all required login details.', 'danger')
+            return render_template('login.html', username=username, staff_username=staff_username, active_tab=login_role)
+
+        if login_role == 'owner':
+            # 👑 BUSINESS OWNER LOGIN
             conn = sqlite3.connect(USER_DB_PATH)
             cursor = conn.cursor()
-            cursor.execute("SELECT password FROM users WHERE username = ?", (tenant_company,))
-            record = cursor.fetchone()
+            cursor.execute("SELECT username, password FROM users WHERE LOWER(username) = ?", (username,))
+            user = cursor.fetchone()
             conn.close()
-            
-            if record and record[0] == password:
-                session['logged_in_user'] = tenant_company
-                session['staff_user'] = tenant_company
+
+            if user and user[1] == password:
+                session['logged_in_user'] = username
                 session['staff_role'] = 'Platform Owner Admin'
-                return redirect(f'/portal/{tenant_company}')
+                return redirect(f"/portal/{username}")
             else:
-                error = "Invalid master owner company credentials."
-        
-        # 👥 SCENARIO B: AUTHENTICATE TEAM MEMBER (MANAGER / CREW)
+                flash('Invalid Business Owner credentials supplied.', 'danger')
+                return render_template('login.html', username=username, active_tab='owner')
+
         else:
-            staff_user = request.form.get('staff_username', '').lower().strip()
-            client_db_path = f"data/client_{tenant_company}.db"
+            # 🍳 KITCHEN TERMINAL LOGIN
             
-            if not os.path.exists(client_db_path):
-                error = f"Store database code '{tenant_company}' does not exist."
-            else:
-                conn = sqlite3.connect(client_db_path)
+            # 1. Verify Store Name exists in users.db
+            conn = sqlite3.connect(USER_DB_PATH)
+            cursor = conn.cursor()
+            cursor.execute("SELECT username, password FROM users WHERE LOWER(username) = ?", (username,))
+            store_record = cursor.fetchone()
+            conn.close()
+
+            if not store_record:
+                flash('Store account not found. Please check the Store Name.', 'danger')
+                return render_template('login.html', username=username, staff_username=staff_username, active_tab='kitchen')
+
+            store_name = store_record[0].lower()
+            master_pass = store_record[1]
+
+            client_db = f"data/client_{store_name}.db"
+
+            # 2. Check if logging in directly to tenant database
+            if os.path.exists(client_db):
+                conn = sqlite3.connect(client_db)
                 cursor = conn.cursor()
+                cursor.execute("""
+                    CREATE TABLE IF NOT EXISTS Staff_Accounts (
+                        Staff_ID TEXT PRIMARY KEY,
+                        Username TEXT UNIQUE,
+                        Password TEXT,
+                        Role TEXT,
+                        Active TEXT DEFAULT 'Yes'
+                    )
+                """)
                 
-                # Check to see if staff registry exists inside sqlite metadata
-                cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='Staff_Accounts'")
-                if not cursor.fetchone():
-                    conn.close()
-                    error = "No staff accounts provisioned for this store location."
+                # Search by Staff Username + Password
+                if staff_username:
+                    cursor.execute(
+                        "SELECT Role FROM Staff_Accounts WHERE LOWER(Username) = ? AND Password = ? AND Active = 'Yes'",
+                        (staff_username, password)
+                    )
                 else:
-                    cursor.execute("SELECT Password, Role FROM Staff_Accounts WHERE Username = ?", (staff_user,))
-                    record = cursor.fetchone()
-                    conn.close()
+                    cursor.execute(
+                        "SELECT Role FROM Staff_Accounts WHERE Password = ? AND Active = 'Yes'",
+                        (password,)
+                    )
                     
-                    if record and record[0] == password:
-                        session['logged_in_user'] = tenant_company  # Safe file resolution tracking
-                        session['staff_user'] = staff_user
-                        session['staff_role'] = record[1]          # Grant RBAC permissions key token
-                        return redirect(f'/portal/{tenant_company}')
-                    else:
-                        error = "Invalid staff user credentials or access passkey."
-                        
-    return render_template('login.html', error=error)
+                row = cursor.fetchone()
+                conn.close()
+
+                if row:
+                    session['logged_in_user'] = store_name
+                    session['staff_role'] = row[0]
+                    return redirect(f"/portal/{store_name}")
+
+            # 3. Fallback: Owner using master store password on Kitchen Terminal
+            if password == master_pass:
+                session['logged_in_user'] = store_name
+                session['staff_role'] = 'Barista / Kitchen Crew'
+                return redirect(f"/portal/{store_name}")
+
+            flash('Invalid Kitchen Terminal credentials supplied.', 'danger')
+            return render_template('login.html', username=username, staff_username=staff_username, active_tab='kitchen')
+
+    return render_template('login.html', active_tab='owner')
 
 @auth_bp.route('/logout')
 def logout():

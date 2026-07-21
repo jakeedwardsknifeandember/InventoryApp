@@ -122,7 +122,7 @@
             box-shadow: 0 2px 8px rgba(143, 21, 25, 0.4);
         }
 
-        /* Flask Error Message Alert Box */
+        /* Alert Box */
         .alert-box {
             background: rgba(185, 28, 28, 0.18);
             border: 1px solid #991b1b;
@@ -212,18 +212,14 @@
         <!-- Login Card -->
         <div class="login-card">
             
-            <!-- Displays Backend Error Messages if Login Fails -->
-            {% with messages = get_flashed_messages(with_categories=true) %}
-                {% if messages %}
-                    {% for category, message in messages %}
-                        <div class="alert-box">{{ message }}</div>
-                    {% endfor %}
-                {% endif %}
-            {% endwith %}
+            <!-- Error Alert Box Rendering -->
+            {% if error %}
+                <div class="alert-box">{{ error }}</div>
+            {% endif %}
 
-            {% with messages = get_flashed_messages() %}
-                {% if messages and not get_flashed_messages(with_categories=true) %}
-                    {% for message in messages %}
+            {% with messages = get_flashed_messages(with_categories=true) %}
+                {% if messages and not error %}
+                    {% for category, message in messages %}
                         <div class="alert-box">{{ message }}</div>
                     {% endfor %}
                 {% endif %}
@@ -231,27 +227,29 @@
 
             <!-- Role Selector Tabs -->
             <div class="role-tabs">
-                <button type="button" class="tab-btn active" id="tab-owner" onclick="switchRole('owner')">Business Owner</button>
-                <button type="button" class="tab-btn" id="tab-kitchen" onclick="switchRole('kitchen')">Kitchen Terminal</button>
+                <button type="button" class="tab-btn {% if active_tab != 'kitchen' %}active{% endif %}" id="tab-owner" onclick="switchRole('owner')">Business Owner</button>
+                <button type="button" class="tab-btn {% if active_tab == 'kitchen' %}active{% endif %}" id="tab-kitchen" onclick="switchRole('kitchen')">Kitchen Terminal</button>
             </div>
 
-            <!-- Main Login Form (Submits POST request directly to Python backend) -->
-            <form method="POST" action="">
+            <!-- Main Login Form -->
+            <form method="POST" action="/login">
                 
-                <!-- CSRF Token Compatibility (if Flask-WTF is active) -->
                 {% if csrf_token %}
                     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
                 {% endif %}
-                {% if form and form.csrf_token %}
-                    {{ form.csrf_token }}
-                {% endif %}
 
-                <!-- Hidden Input for Selected Role -->
-                <input type="hidden" name="role" id="role-input" value="owner">
+                <!-- Hidden Input Aligned to Backend -->
+                <input type="hidden" name="login_type" id="role-input" value="{{ active_tab if active_tab else 'owner' }}">
 
                 <div class="form-group">
-                    <label class="form-label" for="username">Store Username</label>
-                    <input type="text" id="username" name="username" class="form-input" placeholder="Enter store username" required autocomplete="username">
+                    <label class="form-label" for="username">Store Name / Username</label>
+                    <input type="text" id="username" name="username" class="form-input" placeholder="Enter store username (e.g. bakery)" value="{{ username if username else '' }}" required autocomplete="username">
+                </div>
+
+                <!-- Staff Sub-Account Username (Visible only in Kitchen Terminal mode) -->
+                <div class="form-group" id="staff-group" style="display: {% if active_tab == 'kitchen' %}block{% else %}none{% endif %};">
+                    <label class="form-label" for="staff_username">Staff Username</label>
+                    <input type="text" id="staff_username" name="staff_username" class="form-input" placeholder="Enter staff username (e.g. barista_john)" value="{{ staff_username if staff_username else '' }}" autocomplete="username">
                 </div>
 
                 <div class="form-group">
@@ -259,7 +257,13 @@
                     <input type="password" id="password" name="password" class="form-input" placeholder="Enter password" required autocomplete="current-password">
                 </div>
 
-                <button type="submit" id="submit-btn" class="submit-btn">Sign In as Business Owner</button>
+                <button type="submit" id="submit-btn" class="submit-btn">
+                    {% if active_tab == 'kitchen' %}
+                        Sign In to Kitchen Terminal
+                    {% else %}
+                        Sign In as Business Owner
+                    {% endif %}
+                </button>
             </form>
         </div>
     </div>
@@ -270,16 +274,22 @@
             const submitBtn = document.getElementById('submit-btn');
             const tabOwner = document.getElementById('tab-owner');
             const tabKitchen = document.getElementById('tab-kitchen');
+            const staffGroup = document.getElementById('staff-group');
+            const staffInput = document.getElementById('staff_username');
 
             roleInput.value = role;
 
             if (role === 'owner') {
                 tabOwner.classList.add('active');
                 tabKitchen.classList.remove('active');
+                staffGroup.style.display = 'none';
+                staffInput.required = false;
                 submitBtn.textContent = 'Sign In as Business Owner';
             } else {
                 tabKitchen.classList.add('active');
                 tabOwner.classList.remove('active');
+                staffGroup.style.display = 'block';
+                staffInput.required = true;
                 submitBtn.textContent = 'Sign In to Kitchen Terminal';
             }
         }

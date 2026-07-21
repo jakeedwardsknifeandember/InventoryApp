@@ -127,31 +127,35 @@
     <div class="sidebar">
         <div class="sidebar-title">INVENTORY</div>
         
-        <!-- 🌐 DYNAMIC SIDEBAR BRANDING: Flips between "Bakery Operations", "Kitchen Operations", etc. based on login session context -->
+        <!-- 🌐 DYNAMIC SIDEBAR BRANDING -->
         <div class="sidebar-subtitle">{{ username|capitalize }} Operations</div>
         
         <!-- 🟢 DASHBOARD: Viewable by ALL validated sessions -->
         <a href="/portal/{{ username }}" class="{{ 'active' if request.path == '/portal/' + username else '' }}">📊 Dashboard</a>
         
-        <!-- 🟡 EXECUTIVE PANELS: Restricted strictly to MANAGERS and PLATFORM ADMINS -->
-        {% if session.get('staff_role') in ['Platform Owner Admin', 'Store Manager'] %}
+        <!-- 🔴 PLATFORM OWNER ADMIN ONLY: Catalog Setup (Products, Ingredients, Recipes) -->
+        {% if session.get('staff_role') == 'Platform Owner Admin' %}
             <a href="/portal/{{ username }}/products" class="{{ 'active' if 'products' in request.path else '' }}">📦 Products</a>
             <a href="/portal/{{ username }}/ingredients" class="{{ 'active' if 'ingredients' in request.path else '' }}">🍎 Ingredients</a>
             <a href="/portal/{{ username }}/recipes" class="{{ 'active' if 'recipes' in request.path else '' }}">🍕 Recipes (Linked)</a>
+        {% endif %}
+
+        <!-- 🟡 MANAGERS & ADMINS ONLY: Sales -->
+        {% if session.get('staff_role') in ['Platform Owner Admin', 'Store Manager'] %}
             <a href="/portal/{{ username }}/sales" class="{{ 'active' if 'sales' in request.path else '' }}">💰 Sales</a>
         {% endif %}
         
-        <!-- 🟢 INVENTORY: Open to everyone so Baristas can still submit Prep Runs and Spoilage Waste forms -->
+        <!-- 🟢 INVENTORY: Open to everyone (Owners, Managers, and Kitchen Crew) -->
         <a href="/portal/{{ username }}/inventory" class="{{ 'active' if 'inventory' in request.path else '' }}">📦 Inventory</a>
         
-        <!-- 🟡 FINANCIAL & AUDIT PANELS: Managers and Owners only -->
+        <!-- 🟡 MANAGERS & ADMINS ONLY: Expenses, Reports, Audit Logs -->
         {% if session.get('staff_role') in ['Platform Owner Admin', 'Store Manager'] %}
             <a href="/portal/{{ username }}/expenses" class="{{ 'active' if 'expenses' in request.path else '' }}">💸 Expenses</a>
             <a href="/portal/{{ username }}/reports" class="{{ 'active' if 'reports' in request.path else '' }}">📊 Reports</a>
             <a href="/portal/{{ username }}/audit-log" class="{{ 'active' if 'audit-log' in request.path else '' }}">📋 Audit Log</a>
         {% endif %}
         
-        <!-- 🔴 SETTINGS: Exclusively locked away for the Master Platform Owner Admin profile only -->
+        <!-- 🔴 PLATFORM OWNER ADMIN ONLY: Settings -->
         {% if session.get('staff_role') == 'Platform Owner Admin' %}
             <a href="/portal/{{ username }}/settings" class="{{ 'active' if 'settings' in request.path else '' }}">⚙️ Settings</a>
         {% endif %}
