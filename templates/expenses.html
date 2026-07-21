@@ -23,6 +23,28 @@
         color: #64748b !important; 
         opacity: 1;
     }
+
+    /* Date Filter Preset Buttons */
+    .badge-filter-btn { 
+        padding: 4px 12px; 
+        border-radius: 20px; 
+        font-size: 12px; 
+        font-weight: bold; 
+        border: 1px solid #3f3f46; 
+        background: #1e1e2e; 
+        color: #94a3b8; 
+        text-decoration: none; 
+        transition: all 0.2s; 
+    }
+    .badge-filter-btn:hover { 
+        background: #2d2d3f; 
+        color: #fff; 
+    }
+    .badge-filter-btn.active { 
+        background: #2fa572; 
+        color: #fff; 
+        border-color: #2fa572; 
+    }
 </style>
 
 <div class="expenses-workspace">
@@ -82,17 +104,21 @@
         </div>
     </div>
 
-    <!-- 🔍 LIVE COMPREHENSIVE FILTER ENGINE CONTROL BAR -->
+    <!-- 🔍 LIVE COMPREHENSIVE FILTER ENGINE CONTROL BAR WITH CUSTOM DATE RANGE -->
     <div class="p-3 mb-4" style="background: #18181c; border: 1px solid #2d2d34; border-radius: 8px;">
-        <form method="get" action="/portal/{{ username }}/expenses" class="row g-2 align-items-center">
-            <div class="col-12 col-md-4">
+        <form method="get" action="/portal/{{ username }}/expenses" id="expensesFilterForm" class="row g-2 align-items-center">
+            <input type="hidden" name="period" id="periodTrackingHiddenInput" value="{{ current_period }}">
+
+            <!-- Search Field -->
+            <div class="col-12 col-md-3">
                 <div class="input-group">
                     <span class="input-group-text border-0 text-muted" style="background: #27272c;">🔍</span>
-                    <input type="text" name="search" value="{{ current_search }}" class="form-control text-white border-0" placeholder="Search item description or merchant vendor..." style="background: #27272c;">
+                    <input type="text" name="search" value="{{ current_search }}" class="form-control text-white border-0" placeholder="Search description..." style="background: #27272c;">
                 </div>
             </div>
             
-            <div class="col-6 col-md-3">
+            <!-- Category Filter Dropdown -->
+            <div class="col-12 col-md-3">
                 <select name="category" class="form-select text-white border-0" style="background: #27272c;" onchange="this.form.submit()">
                     <option value="All" {% if current_category == 'All' %}selected{% endif %}>All Spending Categories</option>
                     {% for cat in categories %}
@@ -101,17 +127,19 @@
                 </select>
             </div>
             
-            <div class="col-6 col-md-3">
-                <select name="period" class="form-select text-white border-0" style="background: #27272c;" onchange="this.form.submit()">
-                    <option value="this_month" {% if current_period == 'this_month' %}selected{% endif %}>This Current Month</option>
-                    <option value="last_month" {% if current_period == 'last_month' %}selected{% endif %}>Previous Month</option>
-                    <option value="all_time" {% if current_period == 'all_time' %}selected{% endif %}>All Historical Ledger Records</option>
-                </select>
-            </div>
-            
-            <div class="col-12 col-md-2 d-flex gap-1">
-                <button type="submit" class="btn btn-secondary flex-grow-1" style="font-weight:600; border-radius: 6px;">Filter</button>
-                <a href="/portal/{{ username }}/expenses" class="btn btn-dark" title="Clear All Active Filter Settings" style="border: 1px solid #2d2d34;">🔄</a>
+            <!-- Custom Date Range Bar & Quick Preset Buttons -->
+            <div class="col-12 col-md-6 d-flex flex-wrap align-items-center justify-content-end gap-2">
+                <div class="d-flex align-items-center gap-1 bg-dark p-1 border border-secondary rounded">
+                    <a href="/portal/{{ username }}/expenses?period=today{% if current_search %}&search={{ current_search }}{% endif %}{% if current_category != 'All' %}&category={{ current_category }}{% endif %}" class="badge-filter-btn {% if current_period == 'today' %}active{% endif %}">Today</a>
+                    <a href="/portal/{{ username }}/expenses?period=this_week{% if current_search %}&search={{ current_search }}{% endif %}{% if current_category != 'All' %}&category={{ current_category }}{% endif %}" class="badge-filter-btn {% if current_period in ['this_week', 'week'] %}active{% endif %}">Week</a>
+                    <a href="/portal/{{ username }}/expenses?period=this_month{% if current_search %}&search={{ current_search }}{% endif %}{% if current_category != 'All' %}&category={{ current_category }}{% endif %}" class="badge-filter-btn {% if current_period in ['this_month', 'month'] %}active{% endif %}">Month</a>
+                    <a href="/portal/{{ username }}/expenses?period=all_time{% if current_search %}&search={{ current_search }}{% endif %}{% if current_category != 'All' %}&category={{ current_category }}{% endif %}" class="badge-filter-btn {% if current_period in ['all_time', 'all'] %}active{% endif %}">All</a>
+
+                    <input type="date" name="start_date" id="customStartDateInput" value="{{ start_date }}" class="form-control form-control-sm bg-secondary text-white border-0 font-monospace" style="width:115px; font-size:11px; color-scheme: dark;" onchange="document.getElementById('periodTrackingHiddenInput').value='custom';">
+                    <input type="date" name="end_date" id="customEndDateInput" value="{{ end_date }}" class="form-control form-control-sm bg-secondary text-white border-0 font-monospace" style="width:115px; font-size:11px; color-scheme: dark;" onchange="document.getElementById('periodTrackingHiddenInput').value='custom';">
+                    <button type="submit" class="btn btn-sm btn-success fw-bold text-white px-2 py-1" style="font-size:11px;">Apply</button>
+                    <a href="/portal/{{ username }}/expenses" class="btn btn-sm btn-dark" title="Clear All Active Filter Settings" style="border: 1px solid #2d2d34; padding: 2px 8px;">🔄</a>
+                </div>
             </div>
         </form>
     </div>

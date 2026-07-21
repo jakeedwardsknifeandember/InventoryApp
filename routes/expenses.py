@@ -1,7 +1,7 @@
 # routes/expenses.py - Advanced Business Analytics & Filtering Engine
 from flask import Blueprint, request, redirect, session, render_template
 from modules.database import InventoryDB
-from datetime import datetime
+from datetime import datetime, timedelta
 import pandas as pd
 
 expenses_bp = Blueprint('expenses', __name__)
@@ -77,12 +77,17 @@ def web_expenses_tab(username):
     cash_ratio = 50.0  
     gcash_ratio = 50.0
     
-    # 💥 SECURITY CRITICAL CHANGE: "Raw Ingredients" stripped to prevent double-entry vulnerability
     categories_list = ["Utilities", "Rent & Lease", "Staff Salaries", "Packaging", "Equipment Maintenance", "Misc"]
     
     search_query = request.args.get('search', '').lower().strip()
     selected_category = request.args.get('category', 'All')
-    selected_period = request.args.get('period', 'this_month') 
+    selected_period = request.args.get('period', 'this_month')
+    start_date_str = request.args.get('start_date', '')
+    end_date_str = request.args.get('end_date', '')
+
+    now = datetime.now()
+    current_year = now.year
+    current_month = now.month
 
     if not expenses_df.empty:
         expenses_df['Amount'] = pd.to_numeric(expenses_df['Amount'], errors='coerce').fillna(0.0)
@@ -91,11 +96,8 @@ def web_expenses_tab(username):
         if 'Category' in expenses_df.columns:
             db_categories = expenses_df['Category'].dropna().unique().tolist()
             categories_list = sorted(list(set(categories_list + [str(c) for c in db_categories if c and str(c).strip()])))
-
-        now = datetime.now()
-        current_year = now.year
-        current_month = now.month
         
+        # Monthly KPI Outflow calculation
         this_month_mask = (expenses_df['Expense_Date'].dt.year == current_year) & (expenses_df['Expense_Date'].dt.month == current_month)
         this_month_df = expenses_df[this_month_mask]
         total_this_month = float(this_month_df['Amount'].sum())
@@ -116,19 +118,47 @@ def web_expenses_tab(username):
             gcash_ratio = round(100.0 - cash_ratio, 1)
 
         # ==========================================
-        # 🔍 3. FRONTEND SEARCH & FILTER PROCESSING
+        # 🔍 3. DATE RANGE & ADVANCED FILTER ENGINE
         # ==========================================
-        if selected_period == 'this_month':
-            expenses_df = expenses_df[this_month_mask]
+        today_start = now.date()
+        start_bound = None
+        end_bound = None
+
+        if selected_period == 'today':
+            start_bound = pd.to_datetime(today_start)
+            end_bound = pd.to_datetime(today_start) + pd.Timedelta(days=1) - pd.Timedelta(seconds=1)
+        elif selected_period in ['this_week', 'week']:
+            start_bound = pd.to_datetime(today_start - timedelta(days=today_start.weekday()))
+            end_bound = start_bound + pd.Timedelta(days=7) - pd.Timedelta(seconds=1)
+        elif selected_period in ['this_month', 'month']:
+            start_bound = pd.to_datetime(datetime(current_year, current_month, 1))
+            end_bound = start_bound + pd.offsets.MonthEnd(1) + pd.Timedelta(days=1) - pd.Timedelta(seconds=1)
         elif selected_period == 'last_month':
             last_month = 12 if current_month == 1 else current_month - 1
             last_year = current_year - 1 if current_month == 1 else current_year
-            last_month_mask = (expenses_df['Expense_Date'].dt.year == last_year) & (expenses_df['Expense_Date'].dt.month == last_month)
-            expenses_df = expenses_df[last_month_mask]
-            
+            start_bound = pd.to_datetime(datetime(last_year, last_month, 1))
+            end_bound = start_bound + pd.offsets.MonthEnd(1) + pd.Timedelta(days=1) - pd.Timedelta(seconds=1)
+        elif selected_period == 'custom' and start_date_str and end_date_str:
+            try:
+                start_bound = pd.to_datetime(start_date_str)
+                end_bound = pd.to_datetime(end_date_str) + pd.Timedelta(days=1) - pd.Timedelta(seconds=1)
+            except Exception:
+                selected_period = 'this_month'
+                start_bound = pd.to_datetime(datetime(current_year, current_month, 1))
+                end_bound = start_bound + pd.offsets.MonthEnd(1) + pd.Timedelta(days=1) - pd.Timedelta(seconds=1)
+        elif selected_period in ['all_time', 'all']:
+            start_bound = None
+            end_bound = None
+
+        # Apply Date Range Filtering
+        if start_bound is not None and end_bound is not None:
+            expenses_df = expenses_df[(expenses_df['Expense_Date'] >= start_bound) & (expenses_df['Expense_Date'] <= end_bound)]
+
+        # Apply Category Filter
         if selected_category != 'All':
             expenses_df = expenses_df[expenses_df['Category'].astype(str) == selected_category]
             
+        # Apply Search Query
         if search_query:
             expenses_df = expenses_df[
                 expenses_df['Description'].astype(str).str.lower().str.contains(search_query) |
@@ -137,7 +167,7 @@ def web_expenses_tab(username):
 
         final_list = []
         for _, row in expenses_df.iterrows():
-            date_str = datetime.now().strftime("%Y-%m-%d")
+            date_str = now.strftime("%Y-%m-%d")
             if pd.notnull(row['Expense_Date']):
                 date_str = row['Expense_Date'].strftime("%Y-%m-%d")
                 
@@ -158,6 +188,11 @@ def web_expenses_tab(username):
             })
     else:
         final_list = []
+        start_bound = pd.to_datetime(datetime(current_year, current_month, 1))
+        end_bound = start_bound + pd.offsets.MonthEnd(1) + pd.Timedelta(days=1) - pd.Timedelta(seconds=1)
+
+    formatted_start_str = start_bound.strftime("%Y-%m-%d") if 'start_bound' in locals() and start_bound is not None else ""
+    formatted_end_str = end_bound.strftime("%Y-%m-%d") if 'end_bound' in locals() and end_bound is not None else ""
 
     return render_template(
         'expenses.html',
@@ -172,5 +207,8 @@ def web_expenses_tab(username):
         alert_type=alert_type,
         current_search=search_query,
         current_category=selected_category,
-        current_period=selected_period
+        current_period=selected_period,
+        start_date=start_date_str if start_date_str else formatted_start_str,
+        end_date=end_date_str if end_date_str else formatted_end_str,
+        current_date=now.strftime("%Y-%m-%d")
     )

@@ -36,6 +36,28 @@
         font-size: 12px;
         margin-bottom: 4px;
     }
+
+    /* Date Filter Preset Buttons */
+    .badge-filter-btn { 
+        padding: 4px 12px; 
+        border-radius: 20px; 
+        font-size: 12px; 
+        font-weight: bold; 
+        border: 1px solid #3f3f46; 
+        background: #1e1e2e; 
+        color: #94a3b8; 
+        text-decoration: none; 
+        transition: all 0.2s; 
+    }
+    .badge-filter-btn:hover { 
+        background: #2d2d3f; 
+        color: #fff; 
+    }
+    .badge-filter-btn.active { 
+        background: #2fa572; 
+        color: #fff; 
+        border-color: #2fa572; 
+    }
 </style>
 
 <div class="reports-workspace">
@@ -48,19 +70,25 @@
     </div>
     {% endif %}
 
-    <!-- 👑 HEADER FILTERS SELECTION STRIP -->
+    <!-- 👑 HEADER FILTERS SELECTION STRIP WITH CUSTOM DATE RANGE -->
     <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-center mb-4 gap-3">
         <div>
             <h3 class="m-0" style="font-weight: 800; text-transform: uppercase; color: #ffffff; letter-spacing: -0.5px;">Business Performance & Feasibility Hub</h3>
             <p class="text-muted m-0 small">Analyze financial statements, evaluate menu parameters, test break-even targets, and simulate new store concepts.</p>
         </div>
         
-        <form method="get" action="/portal/{{ username }}/reports" id="periodForm">
-            <select name="period" class="form-select text-white border-0 px-4 py-2" style="background: #1e1e24; font-weight: 600; border-radius: 8px;" onchange="document.getElementById('periodForm').submit()">
-                <option value="this_month" {% if current_period == 'this_month' %}selected{% endif %}>📅 This Current Month</option>
-                <option value="last_month" {% if current_period == 'last_month' %}selected{% endif %}>📅 Previous Month</option>
-                <option value="all_time" {% if current_period == 'all_time' %}selected{% endif %}>📅 All Historical Records</option>
-            </select>
+        <form method="get" action="/portal/{{ username }}/reports" id="dateControlFilterForm">
+            <div class="d-flex align-items-center gap-2 bg-dark p-2 border border-secondary rounded">
+                <input type="hidden" name="period" id="periodTrackingHiddenInput" value="{{ current_period }}">
+                <a href="/portal/{{ username }}/reports?period=today" class="badge-filter-btn {% if current_period == 'today' %}active{% endif %}">Today</a>
+                <a href="/portal/{{ username }}/reports?period=this_week" class="badge-filter-btn {% if current_period in ['this_week', 'week'] %}active{% endif %}">Week</a>
+                <a href="/portal/{{ username }}/reports?period=this_month" class="badge-filter-btn {% if current_period in ['this_month', 'month'] %}active{% endif %}">Month</a>
+                <a href="/portal/{{ username }}/reports?period=all_time" class="badge-filter-btn {% if current_period in ['all_time', 'all'] %}active{% endif %}">All</a>
+                
+                <input type="date" name="start_date" id="customStartDateInput" value="{{ start_date }}" class="form-control form-control-sm bg-secondary text-white border-0 font-monospace" style="width:115px; font-size:11px; color-scheme: dark;" onchange="document.getElementById('periodTrackingHiddenInput').value='custom';">
+                <input type="date" name="end_date" id="customEndDateInput" value="{{ end_date }}" class="form-control form-control-sm bg-secondary text-white border-0 font-monospace" style="width:115px; font-size:11px; color-scheme: dark;" onchange="document.getElementById('periodTrackingHiddenInput').value='custom';">
+                <button type="submit" class="btn btn-sm btn-success fw-bold text-white px-2 py-0.5" style="font-size:11px;">Apply</button>
+            </div>
         </form>
     </div>
 
@@ -302,7 +330,7 @@
             </div>
         </div>
 
-        <!-- PANEL 3: CONCEPT FEASIBILITY SANDBOX (NEW PANEL) -->
+        <!-- PANEL 3: CONCEPT FEASIBILITY SANDBOX -->
         <div class="tab-pane fade text-white" id="sandbox-panel" role="tabpanel">
             <div class="row g-4">
                 

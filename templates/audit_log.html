@@ -50,38 +50,53 @@
         word-wrap: break-word;
         white-space: normal;
     }
+
+    /* Unified Date Filter Preset Buttons */
+    .badge-filter-btn { 
+        padding: 4px 12px; 
+        border-radius: 20px; 
+        font-size: 12px; 
+        font-weight: bold; 
+        border: 1px solid #3f3f46; 
+        background: #1e1e2e; 
+        color: #94a3b8; 
+        text-decoration: none; 
+        transition: all 0.2s; 
+    }
+    .badge-filter-btn:hover { 
+        background: #2d2d3f; 
+        color: #fff; 
+    }
+    .badge-filter-btn.active { 
+        background: #2fa572; 
+        color: #fff; 
+        border-color: #2fa572; 
+    }
 </style>
 {% endblock %}
 
 {% block content %}
-<div class="d-flex justify-content-between align-items-center mb-4">
+<!-- HEADER FILTERS SELECTION STRIP -->
+<div class="d-flex flex-column flex-md-row justify-content-between align-items-md-center mb-4 gap-3">
     <div>
         <h2 class="fw-bold mb-1 text-white">Operational Audit Log</h2>
         <p class="text-light opacity-75 mb-0">System-wide inventory adjustments, stock movements, and audit history.</p>
     </div>
-</div>
 
-<!-- 📅 DATE FILTER TOOLBAR -->
-<div class="content-card mb-4">
-    <div class="d-flex flex-wrap justify-content-between align-items-center gap-3">
-        <!-- Quick Preset Buttons -->
-        <div class="btn-group" role="group" aria-label="Date presets">
-            <a href="/portal/{{ username }}/audit-log?period=today" class="btn btn-sm {{ 'btn-primary fw-bold' if current_period == 'today' else 'btn-outline-secondary text-white' }}">Today</a>
-            <a href="/portal/{{ username }}/audit-log?period=this_week" class="btn btn-sm {{ 'btn-primary fw-bold' if current_period == 'this_week' else 'btn-outline-secondary text-white' }}">This Week</a>
-            <a href="/portal/{{ username }}/audit-log?period=this_month" class="btn btn-sm {{ 'btn-primary fw-bold' if current_period == 'this_month' else 'btn-outline-secondary text-white' }}">This Month</a>
-            <a href="/portal/{{ username }}/audit-log?period=all" class="btn btn-sm {{ 'btn-primary fw-bold' if current_period == 'all' else 'btn-outline-secondary text-white' }}">All Time</a>
+    <!-- 📅 UNIFIED CUSTOM DATE RANGE CONTROLS -->
+    <form method="get" action="/portal/{{ username }}/audit-log" id="dateControlFilterForm">
+        <div class="d-flex align-items-center gap-2 bg-dark p-2 border border-secondary rounded">
+            <input type="hidden" name="period" id="periodTrackingHiddenInput" value="{{ current_period }}">
+            <a href="/portal/{{ username }}/audit-log?period=today" class="badge-filter-btn {% if current_period == 'today' %}active{% endif %}">Today</a>
+            <a href="/portal/{{ username }}/audit-log?period=this_week" class="badge-filter-btn {% if current_period in ['this_week', 'week'] %}active{% endif %}">Week</a>
+            <a href="/portal/{{ username }}/audit-log?period=this_month" class="badge-filter-btn {% if current_period in ['this_month', 'month'] %}active{% endif %}">Month</a>
+            <a href="/portal/{{ username }}/audit-log?period=all_time" class="badge-filter-btn {% if current_period in ['all_time', 'all'] %}active{% endif %}">All</a>
+            
+            <input type="date" name="start_date" id="customStartDateInput" value="{{ start_date }}" class="form-control form-control-sm bg-secondary text-white border-0 font-monospace" style="width:115px; font-size:11px; color-scheme: dark;" onchange="document.getElementById('periodTrackingHiddenInput').value='custom';">
+            <input type="date" name="end_date" id="customEndDateInput" value="{{ end_date }}" class="form-control form-control-sm bg-secondary text-white border-0 font-monospace" style="width:115px; font-size:11px; color-scheme: dark;" onchange="document.getElementById('periodTrackingHiddenInput').value='custom';">
+            <button type="submit" class="btn btn-sm btn-success fw-bold text-white px-2 py-0.5" style="font-size:11px;">Apply</button>
         </div>
-
-        <!-- Custom Date Range Controls -->
-        <form method="GET" action="/portal/{{ username }}/audit-log" class="d-flex align-items-center gap-2">
-            <input type="hidden" name="period" value="custom">
-            <small class="text-light opacity-75">Custom Range:</small>
-            <input type="date" name="start_date" class="form-control form-control-sm bg-dark text-white border-secondary" value="{{ start_date }}" style="color-scheme: dark;" required>
-            <small class="text-light opacity-75">to</small>
-            <input type="date" name="end_date" class="form-control form-control-sm bg-dark text-white border-secondary" value="{{ end_date }}" style="color-scheme: dark;" required>
-            <button type="submit" class="btn btn-sm btn-info text-white fw-bold px-3">Filter</button>
-        </form>
-    </div>
+    </form>
 </div>
 
 <div class="content-card">

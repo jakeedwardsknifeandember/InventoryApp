@@ -1,7 +1,7 @@
 # routes/reports.py - Enterprise Operational Command Center & Financial Ledger
 from flask import Blueprint, request, redirect, session, render_template, url_for
 from modules.database import InventoryDB
-from datetime import datetime
+from datetime import datetime, timedelta
 import pandas as pd
 import sqlite3
 import json
@@ -107,11 +107,6 @@ def web_reports_tab(username):
     audit_df = db.read_tab('Inventory_Audit_Log')  
     ingredients_df = db.read_tab('Ingredients')
 
-    selected_period = request.args.get('period', 'this_month')
-    now = datetime.now()
-    current_year = now.year
-    current_month = now.month
-
     # Clean and safely cast columns to appropriate numeric/date datatypes
     if not sales_df.empty:
         sales_df['Total_Amount'] = pd.to_numeric(sales_df['Total_Amount'], errors='coerce').fillna(0.0)
@@ -124,17 +119,62 @@ def web_reports_tab(username):
         audit_df['Variance'] = pd.to_numeric(audit_df['Variance'], errors='coerce').fillna(0.0)
         audit_df['Date'] = pd.to_datetime(audit_df['Date'], errors='coerce')
 
-    # Apply global timeframe masks across all data matrices
-    if selected_period == 'this_month':
-        if not sales_df.empty: sales_df = sales_df[(sales_df['Sale_Date'].dt.year == current_year) & (sales_df['Sale_Date'].dt.month == current_month)]
-        if not expenses_df.empty: expenses_df = expenses_df[(expenses_df['Expense_Date'].dt.year == current_year) & (expenses_df['Expense_Date'].dt.month == current_month)]
-        if not audit_df.empty: audit_df = audit_df[(audit_df['Date'].dt.year == current_year) & (audit_df['Date'].dt.month == current_month)]
+    # ==========================================
+    # 📅 DATE RANGE & ADVANCED FILTER ENGINE
+    # ==========================================
+    selected_period = request.args.get('period', 'this_month')
+    start_date_str = request.args.get('start_date', '')
+    end_date_str = request.args.get('end_date', '')
+
+    now = datetime.now()
+    today_start = now.date()
+    current_year = now.year
+    current_month = now.month
+
+    start_bound = None
+    end_bound = None
+
+    if selected_period == 'today':
+        start_bound = pd.to_datetime(today_start)
+        end_bound = pd.to_datetime(today_start) + pd.Timedelta(days=1) - pd.Timedelta(seconds=1)
+    elif selected_period in ['this_week', 'week']:
+        start_bound = pd.to_datetime(today_start - timedelta(days=today_start.weekday()))
+        end_bound = start_bound + pd.Timedelta(days=7) - pd.Timedelta(seconds=1)
+    elif selected_period in ['this_month', 'month']:
+        start_bound = pd.to_datetime(datetime(current_year, current_month, 1))
+        end_bound = start_bound + pd.offsets.MonthEnd(1) + pd.Timedelta(days=1) - pd.Timedelta(seconds=1)
     elif selected_period == 'last_month':
         last_month = 12 if current_month == 1 else current_month - 1
         last_year = current_year - 1 if current_month == 1 else current_year
-        if not sales_df.empty: sales_df = sales_df[(sales_df['Sale_Date'].dt.year == last_year) & (sales_df['Sale_Date'].dt.month == last_month)]
-        if not expenses_df.empty: expenses_df = expenses_df[(expenses_df['Expense_Date'].dt.year == last_year) & (expenses_df['Expense_Date'].dt.month == last_month)]
-        if not audit_df.empty: audit_df = audit_df[(audit_df['Date'].dt.year == last_year) & (audit_df['Date'].dt.month == last_month)]
+        start_bound = pd.to_datetime(datetime(last_year, last_month, 1))
+        end_bound = start_bound + pd.offsets.MonthEnd(1) + pd.Timedelta(days=1) - pd.Timedelta(seconds=1)
+    elif selected_period == 'custom' and start_date_str and end_date_str:
+        try:
+            start_bound = pd.to_datetime(start_date_str)
+            end_bound = pd.to_datetime(end_date_str) + pd.Timedelta(days=1) - pd.Timedelta(seconds=1)
+        except Exception:
+            selected_period = 'this_month'
+            start_bound = pd.to_datetime(datetime(current_year, current_month, 1))
+            end_bound = start_bound + pd.offsets.MonthEnd(1) + pd.Timedelta(days=1) - pd.Timedelta(seconds=1)
+    elif selected_period in ['all_time', 'all']:
+        start_bound = None
+        end_bound = None
+    else:
+        selected_period = 'this_month'
+        start_bound = pd.to_datetime(datetime(current_year, current_month, 1))
+        end_bound = start_bound + pd.offsets.MonthEnd(1) + pd.Timedelta(days=1) - pd.Timedelta(seconds=1)
+
+    formatted_start_str = start_bound.strftime("%Y-%m-%d") if start_bound is not None else ""
+    formatted_end_str = end_bound.strftime("%Y-%m-%d") if end_bound is not None else ""
+
+    # Apply global timeframe masks across all data matrices
+    if start_bound is not None and end_bound is not None:
+        if not sales_df.empty and 'Sale_Date' in sales_df.columns:
+            sales_df = sales_df[(sales_df['Sale_Date'] >= start_bound) & (sales_df['Sale_Date'] <= end_bound)]
+        if not expenses_df.empty and 'Expense_Date' in expenses_df.columns:
+            expenses_df = expenses_df[(expenses_df['Expense_Date'] >= start_bound) & (expenses_df['Expense_Date'] <= end_bound)]
+        if not audit_df.empty and 'Date' in audit_df.columns:
+            audit_df = audit_df[(audit_df['Date'] >= start_bound) & (audit_df['Date'] <= end_bound)]
 
     # 💰 CORE REVENUE & COST OF GOODS SOLD (COGS) CALCULATIONS
     total_revenue = 0.0
@@ -218,7 +258,6 @@ def web_reports_tab(username):
     if total_revenue > 0:
         gross_margin_pct = (gross_profit_margin / total_revenue) * 100.0
     elif not products_df.empty:
-        # Fallback to average menu item margin %
         p_temp = products_df.copy()
         p_temp['Selling_Price'] = pd.to_numeric(p_temp['Selling_Price'], errors='coerce').fillna(0.0)
         p_temp['Cost_Price'] = pd.to_numeric(p_temp['Cost_Price'], errors='coerce').fillna(0.0)
@@ -230,11 +269,9 @@ def web_reports_tab(username):
     else:
         gross_margin_pct = 65.0
 
-    # Ensure valid positive percent threshold
     if gross_margin_pct <= 0:
         gross_margin_pct = 65.0
 
-    # Period Break-Even Target Calculation
     if total_expenses > 0 and gross_margin_pct > 0:
         break_even_target = total_expenses / (gross_margin_pct / 100.0)
     else:
@@ -242,15 +279,13 @@ def web_reports_tab(username):
 
     daily_break_even = break_even_target / 30.0
 
-    # Average Order Value (AOV) & Ticket Calculations
     if total_sales_count > 0 and total_revenue > 0:
         aov = total_revenue / total_sales_count
     else:
-        aov = 150.0  # Standard F&B ticket fallback benchmark
+        aov = 150.0  
 
     daily_tickets_needed = int(round(daily_break_even / aov)) if aov > 0 else 0
 
-    # Status Zone & Progress Calculations
     if break_even_target > 0:
         bep_progress_pct = min(100.0, (total_revenue / break_even_target) * 100.0)
     else:
@@ -356,6 +391,8 @@ def web_reports_tab(username):
         recent_sales=recent_sales,
         incidents=incidents_list,
         current_period=selected_period,
+        start_date=start_date_str if start_date_str else formatted_start_str,
+        end_date=end_date_str if end_date_str else formatted_end_str,
         menu_data_json=menu_data_json,
         avg_qty=avg_qty_threshold,
         avg_margin=avg_margin_threshold,
@@ -364,7 +401,6 @@ def web_reports_tab(username):
         msg=feedback_msg,
         alert_type=alert_type,
         now=now,
-        # BREAK-EVEN ANALYTICS CONTEXT
         gross_margin_pct=gross_margin_pct,
         break_even_target=break_even_target,
         daily_break_even=daily_break_even,
