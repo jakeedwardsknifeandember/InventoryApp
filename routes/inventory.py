@@ -67,7 +67,10 @@ def web_inventory_tab(username):
                 for i_id, q_val, p_val in zip(ing_ids, quantities, purchase_prices):
                     if not q_val or float(q_val or 0) <= 0: continue
                     qty = float(q_val)
-                    incoming_unit_price = float(p_val or 0.0)
+                    
+                    # Modified Logic: Treat p_val as Total Receipt Amount, derive unit cost dynamically
+                    total_line_cost = float(p_val or 0.0)
+                    incoming_unit_price = total_line_cost / qty if qty > 0 else 0.0
                     
                     idx = ingredients_df[ingredients_df['Ingredient_ID'] == str(i_id)].index
                     if not idx.empty:
@@ -83,17 +86,15 @@ def web_inventory_tab(username):
                             new_weighted_cost = incoming_unit_price
                         else:
                             total_old_value = current_stock_bal * old_unit_cost
-                            total_new_value = qty * incoming_unit_price
-                            new_weighted_cost = (total_old_value + total_new_value) / (current_stock_bal + qty)
+                            new_weighted_cost = (total_old_value + total_line_cost) / (current_stock_bal + qty)
                         
                         ingredients_df.loc[idx[0], cost_price_col] = round(new_weighted_cost, 2)
                         ingredients_df.loc[idx[0], 'Current_Stock'] = current_stock_bal + qty
                         
-                        line_cost = qty * incoming_unit_price
-                        total_delivery_expense += line_cost
+                        total_delivery_expense += total_line_cost
                         
                         display_qty = int(qty) if qty % 1 == 0 else qty
-                        item_summaries.append(f"{display_qty:,}x {ing_name} @ P{incoming_unit_price:,.2f}")
+                        item_summaries.append(f"{display_qty:,}x {ing_name} (Total: P{total_line_cost:,.2f})")
                         
                         new_row = {
                             'Audit_ID': f"RCV{datetime.now().strftime('%M%S')}{logged_count}",
