@@ -64,44 +64,46 @@ def web_sales_tab(username):
                 continue
                 
             qty = float(qty_str)
-            prod_row = products_df[products_df['Product_ID'] == p_id]
             
-            if not prod_row.empty:
-                p_name = prod_row['Product_Name'].values[0]
-                unit_price = float(prod_row['Selling_Price'].values[0])
+            p_name = p_id
+            unit_price = 0.0
+            unit_cost = 0.0
+            
+            if not products_df.empty:
+                prod_row = products_df[products_df['Product_ID'] == p_id]
+                if not prod_row.empty:
+                    p_name = prod_row['Product_Name'].values[0]
+                    unit_price = float(prod_row['Selling_Price'].values[0] or 0.0)
+                    if 'Cost_Price' in prod_row.columns:
+                        try:
+                            unit_cost = float(prod_row['Cost_Price'].values[0] or 0.0)
+                        except (ValueError, TypeError):
+                            unit_cost = 0.0
                 
-                # Capture frozen cost at transaction time
-                unit_cost = 0.0
-                if 'Cost_Price' in prod_row.columns:
-                    try:
-                        unit_cost = float(prod_row['Cost_Price'].values[0])
-                    except (ValueError, TypeError):
-                        unit_cost = 0.0
-                
-                # Triggers inventory reduction
-                stock_ok, stock_msg = client_db.update_inventory_from_sale(p_id, qty)
-                if stock_ok:
-                    # Atomic Direct SQL Insert (Prevents Database Lock/Hang)
-                    try:
-                        conn = sqlite3.connect(db_path, timeout=20.0)
-                        cursor = conn.cursor()
-                        cursor.execute("SELECT COUNT(*) FROM Sales")
-                        sale_count = cursor.fetchone()[0]
-                        sale_id = f"SALE{sale_count + 1:04d}"
-                        total_amt = qty * unit_price
-                        sale_time = datetime.now().strftime("%H:%M:%S")
+            # Triggers inventory reduction
+            stock_ok, stock_msg = client_db.update_inventory_from_sale(p_id, qty)
+            if stock_ok:
+                # Atomic Direct SQL Insert (Prevents Database Lock/Hang)
+                try:
+                    conn = sqlite3.connect(db_path, timeout=20.0)
+                    cursor = conn.cursor()
+                    cursor.execute("SELECT COUNT(*) FROM Sales")
+                    sale_count = cursor.fetchone()[0]
+                    sale_id = f"SALE{sale_count + 1:04d}"
+                    total_amt = qty * unit_price
+                    sale_time = datetime.now().strftime("%H:%M:%S")
 
-                        cursor.execute("""
-                            INSERT INTO Sales (Sale_ID, Product_ID, Quantity, Sale_Date, Sale_Time, Total_Amount, Unit_Cost, Entry_Reason)
-                            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-                        """, (sale_id, p_id, qty, chosen_date, sale_time, total_amt, unit_cost, audit_note))
-                        conn.commit()
-                        conn.close()
-                        processed_count += 1
-                    except Exception as e:
-                        blocked_items.append(f"{p_name} (Database Error: {str(e)})")
-                else:
-                    blocked_items.append(f"{p_name} ({stock_msg.strip()})")
+                    cursor.execute("""
+                        INSERT INTO Sales (Sale_ID, Product_ID, Quantity, Sale_Date, Sale_Time, Total_Amount, Unit_Cost, Entry_Reason)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                    """, (sale_id, p_id, qty, chosen_date, sale_time, total_amt, unit_cost, audit_note))
+                    conn.commit()
+                    conn.close()
+                    processed_count += 1
+                except Exception as e:
+                    blocked_items.append(f"{p_name} (Database Error: {str(e)})")
+            else:
+                blocked_items.append(f"{p_name} ({stock_msg.strip()})")
 
         # Self-Healing Audit Log Re-tagger
         if processed_count > 0:
