@@ -323,7 +323,7 @@ class InventoryDB:
             return None
     
     def get_all_products(self):
-        """Get all active products"""
+        """Get all active products, filtering out soft-deleted items"""
         products_df = self.read_tab('Products')
         if products_df.empty:
             return pd.DataFrame()
@@ -336,8 +336,15 @@ class InventoryDB:
         return active_products
     
     def get_all_ingredients(self):
-        """Get all ingredients"""
+        """Get all active ingredients, filtering out soft-deleted items"""
         ingredients_df = self.read_tab('Ingredients')
+        if ingredients_df.empty:
+            return pd.DataFrame()
+            
+        if 'Active' in ingredients_df.columns:
+            active_ingredients = ingredients_df[ingredients_df['Active'].astype(str).str.upper() != 'NO']
+            return active_ingredients
+            
         return ingredients_df
     
     def get_product_recipes(self, product_id):
@@ -584,7 +591,7 @@ class InventoryDB:
             return False, f"Error updating inventory: {str(e)}"
     
     def delete_ingredient(self, ingredient_id, username="System"):
-        """Delete an ingredient safely if unlinked to any product formula"""
+        """Soft-deletes an ingredient by marking it inactive, preserving audit trails."""
         try:
             ingredients_df = self.read_tab('Ingredients')
             
@@ -600,28 +607,29 @@ class InventoryDB:
             prep_recipes_df = self.read_tab('Prep_Recipes')
             
             if not recipes_df.empty and not recipes_df[recipes_df['Ingredient_ID'] == ingredient_id].empty:
-                return False, f"Cannot delete! This ingredient is linked inside active product formulas."
+                return False, f"Cannot archive! This ingredient is linked inside active product formulas."
             if not prep_recipes_df.empty and (not prep_recipes_df[prep_recipes_df['Raw_Ingredient_ID'] == ingredient_id].empty or not prep_recipes_df[prep_recipes_df['Prepped_Ingredient_ID'] == ingredient_id].empty):
-                return False, "Cannot delete! This ingredient is linked inside active sub-recipe portion templates."
+                return False, "Cannot archive! This ingredient is linked inside active sub-recipe portion templates."
             
-            ingredients_df = ingredients_df.drop(idx).reset_index(drop=True)
+            # Soft Delete Modification
+            ingredients_df.at[idx, 'Active'] = 'No'
             
             self.save_tab('Ingredients', ingredients_df)
             
             # Record Audit Log
             self.log_user_action(
                 username=username,
-                action_type="DELETE_INGREDIENT",
+                action_type="ARCHIVE_INGREDIENT",
                 module="Ingredients",
-                details=f"Permanently deleted ingredient {ing_name} ({ingredient_id})"
+                details=f"Archived ingredient {ing_name} ({ingredient_id}) to preserve historical logs."
             )
             
-            print(f"Deleted ingredient: {ingredient_id}")
-            return True, f"Ingredient {ingredient_id} deleted successfully"
+            print(f"Archived ingredient: {ingredient_id}")
+            return True, f"Ingredient {ingredient_id} archived successfully"
             
         except Exception as e:
-            print(f"Error deleting ingredient: {e}")
-            return False, f"Error deleting ingredient: {str(e)}"
+            print(f"Error archiving ingredient: {e}")
+            return False, f"Error archiving ingredient: {str(e)}"
 
     def log_inventory_change(self, product_id, quantity_sold, deductions):
         """Log inventory changes to Inventory_Log tab"""
@@ -843,7 +851,7 @@ class InventoryDB:
             return False, f"Error updating product: {str(e)}"
     
     def delete_product(self, product_id, username="System"):
-        """Completely delete a product permanently from the database table (Hard Delete)"""
+        """Soft-deletes a product by marking it inactive, preserving historical sales ledgers."""
         try:
             products_df = self.read_tab('Products')
             
@@ -855,24 +863,24 @@ class InventoryDB:
             idx = product_idx[0]
             product_name = products_df.at[idx, 'Product_Name']
             
-            products_df = products_df.drop(idx).reset_index(drop=True)
-            self.delete_recipe(product_id, username=username)
+            # Soft Delete Modification
+            products_df.at[idx, 'Active'] = 'No'
             self.save_tab('Products', products_df)
             
             # Record Audit Log
             self.log_user_action(
                 username=username,
-                action_type="DELETE_PRODUCT",
+                action_type="ARCHIVE_PRODUCT",
                 module="Products",
-                details=f"Permanently deleted product {product_name} ({product_id}) and purged recipes"
+                details=f"Archived product {product_name} ({product_id}). Retained in database for historical reporting."
             )
             
-            print(f"Permanently erased product and recipe structures: {product_id}")
-            return True, f"Product {product_id} completely removed from system"
+            print(f"Archived product: {product_id}")
+            return True, f"Product {product_id} archived successfully"
             
         except Exception as e:
-            print(f"Error permanently deleting product: {e}")
-            return False, f"Error deleting product: {str(e)}"
+            print(f"Error archiving product: {e}")
+            return False, f"Error archiving product: {str(e)}"
     
     def add_ingredient(self, ingredient_data, username="System"):
         """Add a new ingredient to the database with unique name verification rules"""
