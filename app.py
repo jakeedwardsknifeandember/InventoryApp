@@ -183,10 +183,14 @@ def client_portal(username):
         avg_margin = products_df['Margin_Amt'].mean() if len(products_df) > 0 else 0.0
         
         item_sales_map = {}
+        avg_volume = 1.0
+        
         if not sales_df.empty and 'Product_ID' in sales_df.columns:
             item_sales_map = sales_df['Product_ID'].value_counts().to_dict()
+            if len(products_df) > 0:
+                avg_volume = max(sum(item_sales_map.values()) / len(products_df), 1.0)
             
-        for _, row in products_df.head(5).iterrows():
+        for _, row in products_df.iterrows():
             prod_id = row.get('Product_ID', '')
             prod_name = row.get('Product_Name', 'Unknown Item')
             margin_amt = float(row['Margin_Amt'])
@@ -194,15 +198,15 @@ def client_portal(username):
             # Use actual sales volume from map, default to 0 for clean accounts
             sales_volume = int(item_sales_map.get(prod_id, 0))
             
-            if margin_amt >= avg_margin and sales_volume >= 8:
+            if margin_amt >= avg_margin and sales_volume >= avg_volume:
                 classification = "Star"
                 strategy = "Core Pillar: Maintain Quality & Position"
                 badge_class = "success"
-            elif margin_amt >= avg_margin and sales_volume < 8:
+            elif margin_amt >= avg_margin and sales_volume < avg_volume:
                 classification = "Push More"
                 strategy = "Puzzle: Needs Staff Upselling & Promo"
                 badge_class = "info"
-            elif margin_amt < avg_margin and sales_volume >= 8:
+            elif margin_amt < avg_margin and sales_volume >= avg_volume:
                 classification = "Plowhorse"
                 strategy = "Volume Driver: Adjust Price or Portions"
                 badge_class = "warning"
@@ -221,7 +225,8 @@ def client_portal(username):
                 'price': float(row['Selling_Price'])
             })
             
-    menu_engineering_list = sorted(menu_engineering_list, key=lambda x: x['volume'], reverse=True)
+    # Sort the full catalog by volume, but only push the top 10 to the dashboard to keep it clean
+    menu_engineering_list = sorted(menu_engineering_list, key=lambda x: x['volume'], reverse=True)[:10]
 
     # 6. Real-Time Operational Activity Stream (The Shift Manager Logbook)
     logbook_stream = []
@@ -323,7 +328,7 @@ def client_portal(username):
         sales_count=sales_count
     )
 
-# 📋 AUDIT LOG ROUTE: View operational ledger with date filtering
+# 搭 AUDIT LOG ROUTE: View operational ledger with date filtering
 @app.route('/portal/<username>/audit-log')
 def audit_log(username):
     username = username.lower().strip()
@@ -331,7 +336,7 @@ def audit_log(username):
     if session.get('logged_in_user') != username: 
         return redirect('/login')
 
-    # 🔒 Access Control: Managers & Platform Admins only
+    # 白 Access Control: Managers & Platform Admins only
     if session.get('staff_role') not in ['Platform Owner Admin', 'Store Manager']:
         flash('Unauthorized access to Audit Logs.', 'danger')
         return redirect(f"/portal/{username}")
@@ -339,7 +344,7 @@ def audit_log(username):
     client_db_path = f"data/client_{username}.db"
     client_db = InventoryDB(client_db_path)
 
-    # 📅 Date Filter Parsing Controls
+    # 套 Date Filter Parsing Controls
     selected_period = request.args.get('period', 'this_month')
     start_date_str = request.args.get('start_date', '')
     end_date_str = request.args.get('end_date', '')
