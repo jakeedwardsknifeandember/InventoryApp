@@ -135,6 +135,9 @@
             <button class="nav-link" id="menu-tab" data-bs-toggle="tab" data-bs-target="#menu-panel" type="button" role="tab">🎯 Menu Engineering Matrix</button>
         </li>
         <li class="nav-item">
+            <button class="nav-link" id="inflation-tab" data-bs-toggle="tab" data-bs-target="#inflation-panel" type="button" role="tab">📉 Cost Variance Tracker</button>
+        </li>
+        <li class="nav-item">
             <button class="nav-link" id="incidents-tab" data-bs-toggle="tab" data-bs-target="#incidents-panel" type="button" role="tab">📋 HR & Operational Logs</button>
         </li>
     </ul>
@@ -346,7 +349,7 @@
                             <div class="row g-2 sandbox-input">
                                 <div class="col-6">
                                     <label>Equipment & Fit-out (₱):</label>
-                                    <input type="number" id="sbCapexEquip" class="form-control bg-dark text-white border-secondary" value="350000" oninput="runProFormaSandbox()">
+                                    <input type="number" id="sbCapexEquip" class="form-control bg-dark text-white border-secondary" value="35000" oninput="runProFormaSandbox()">
                                 </div>
                                 <div class="col-6">
                                     <label>Deposit & Permits (₱):</label>
@@ -493,7 +496,66 @@
             </div>
         </div>
 
-        <!-- PANEL 5: HR COMPLIANCE AND WORKSPACE EVENTS REGISTER -->
+        <!-- PANEL 5: COST VARIANCE & INFLATION TRACKER -->
+        <div class="tab-pane fade text-white" id="inflation-panel" role="tabpanel">
+            <div class="row g-4">
+                <div class="col-12 col-lg-8">
+                    <div class="p-4 h-100" style="background: #1e1e24; border: 1px solid #2d2d34; border-radius: 8px;">
+                        <h5 class="mb-1" style="font-weight: 700; color: #ef4444;">Top 5 Inflating Ingredients</h5>
+                        <p class="text-muted small mb-4">Tracks the highest price surges by comparing your latest delivery costs in this period against the historical baseline cost.</p>
+                        
+                        <div class="content-card p-0 overflow-hidden m-0" style="background: #1e1e24; border: 1px solid #2d2d34; border-radius: 8px;">
+                            <table class="table table-hover text-white m-0">
+                                <thead style="background: #151518;">
+                                    <tr>
+                                        <th class="ps-4 py-3">INGREDIENT</th>
+                                        <th class="py-3">BASELINE COST</th>
+                                        <th class="py-3">LATEST COST</th>
+                                        <th class="py-3">LAST DELIVERY</th>
+                                        <th class="pe-4 py-3 text-end">INFLATION SPIKE</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for item in inflation_data %}
+                                    <tr style="border-bottom: 1px solid #2d2d34;">
+                                        <td class="align-middle ps-4" style="font-weight: 600;">{{ item.name }}</td>
+                                        <td class="align-middle font-monospace text-muted">₱{{ "{:,.2f}".format(item.old_price) }}</td>
+                                        <td class="align-middle font-monospace text-warning" style="font-weight: 600;">₱{{ "{:,.2f}".format(item.new_price) }}</td>
+                                        <td class="align-middle font-monospace text-muted small">{{ item.last_date }}</td>
+                                        <td class="align-middle pe-4 text-end">
+                                            <span class="badge bg-danger px-2 py-1" style="font-size:12px;">+{{ "{:,.1f}".format(item.pct_change) }}%</span>
+                                        </td>
+                                    </tr>
+                                    {% else %}
+                                    <tr><td colspan="5" class="text-center py-5 text-muted">No significant cost inflation detected for received goods in this period.</td></tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="col-12 col-lg-4">
+                    <div class="p-4 d-flex flex-column h-100" style="background: #1e1e24; border: 1px solid #2d2d34; border-radius: 8px;">
+                        <h5 class="mb-1" style="font-weight: 700; color: #ffffff;">Consulting Strategy</h5>
+                        <p class="text-muted small mb-3">How to handle critical ingredient cost spikes.</p>
+                        <div class="flex-grow-1">
+                            <div class="p-3 mb-3 small text-white" style="background: #18181c; border-left:4px solid #ef4444; border-radius:4px;">
+                                <strong>1. Evaluate Menu Prices:</strong> If a core ingredient spikes by more than 10%, review the "Menu Engineering Matrix" to see if you can safely adjust the selling price of linked products to protect your margins.
+                            </div>
+                            <div class="p-3 mb-3 small text-white" style="background: #18181c; border-left:4px solid #f59e0b; border-radius:4px;">
+                                <strong>2. Renegotiate Sourcing:</strong> Use this data sheet as hard evidence when negotiating with your suppliers. If prices keep creeping up, source alternative vendors.
+                            </div>
+                            <div class="p-3 small text-white" style="background: #18181c; border-left:4px solid #3b82f6; border-radius:4px;">
+                                <strong>3. Adjust Prep Yields:</strong> Offset inflation by tightening kitchen portion controls and minimizing spoilage waste on these specific high-cost items.
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- PANEL 6: HR COMPLIANCE AND WORKSPACE EVENTS REGISTER -->
         <div class="tab-pane fade" id="incidents-panel" role="tabpanel">
             <div class="d-flex justify-content-between align-items-center mb-3">
                 <h5 class="m-0 text-white" style="font-weight: 700;">Operational Event Register & Customer Complaint Logs</h5>

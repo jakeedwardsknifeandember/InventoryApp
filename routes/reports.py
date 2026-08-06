@@ -184,14 +184,22 @@ def web_reports_tab(username):
     if not sales_df.empty:
         total_revenue = float(sales_df['Total_Amount'].sum())
         total_sales_count = len(sales_df)
-        if not products_df.empty:
-            for _, sale_row in sales_df.iterrows():
-                p_id = sale_row['Product_ID']
-                qty_sold = float(sale_row['Quantity'])
-                prod_match = products_df[products_df['Product_ID'] == p_id]
-                if not prod_match.empty:
-                    unit_cost = float(pd.to_numeric(prod_match['Cost_Price'], errors='coerce').fillna(0.0).iloc[0])
-                    total_cogs += (qty_sold * unit_cost)
+        
+        for _, sale_row in sales_df.iterrows():
+            qty_sold = float(sale_row.get('Quantity', 0.0))
+            
+            # Smart-Check: Prioritize the frozen historic unit cost if it exists, otherwise fall back to live cost
+            if 'Unit_Cost' in sale_row and pd.notnull(sale_row['Unit_Cost']):
+                unit_cost = float(sale_row['Unit_Cost'])
+            else:
+                unit_cost = 0.0
+                p_id = sale_row.get('Product_ID')
+                if not products_df.empty:
+                    prod_match = products_df[products_df['Product_ID'] == p_id]
+                    if not prod_match.empty:
+                        unit_cost = float(pd.to_numeric(prod_match['Cost_Price'], errors='coerce').fillna(0.0).iloc[0])
+            
+            total_cogs += (qty_sold * unit_cost)
 
     # 🏢 OPERATING EXPENSES (FIXED OVERHEAD)
     total_expenses = float(expenses_df['Amount'].sum()) if not expenses_df.empty else 0.0
@@ -255,6 +263,7 @@ def web_reports_tab(username):
     # ==========================================
     # 📈 BREAK-EVEN ANALYSIS CALCULATOR ENGINE
     # ==========================================
+    # Break-Even should always use LIVE CURRENT product costs to correctly forecast future performance targets.
     if total_revenue > 0:
         gross_margin_pct = (gross_profit_margin / total_revenue) * 100.0
     elif not products_df.empty:
@@ -350,6 +359,49 @@ def web_reports_tab(username):
                     
             menu_data_json = json.dumps(chart_points)
 
+    # 📉 COST VARIANCE & INFLATION TRACKER
+    inflation_data = []
+    full_audit_df = db.read_tab('Inventory_Audit_Log')
+    
+    if not full_audit_df.empty:
+        rcv_df = full_audit_df[full_audit_df['Audit_ID'].astype(str).str.startswith('RCV')].copy()
+        if not rcv_df.empty:
+            rcv_df['Date'] = pd.to_datetime(rcv_df['Date'], errors='coerce')
+            rcv_df['Extracted_Price'] = rcv_df['Notes'].astype(str).str.extract(r'Intake Cost: P([\d,\.]+)/unit')[0]
+            rcv_df['Extracted_Price'] = pd.to_numeric(rcv_df['Extracted_Price'].astype(str).str.replace(',', ''), errors='coerce')
+            rcv_df = rcv_df.dropna(subset=['Extracted_Price', 'Date'])
+            rcv_df = rcv_df.sort_values('Date')
+            
+            # Identify deliveries that happened in the currently selected timeframe
+            if start_bound is not None and end_bound is not None:
+                current_period_rcv = rcv_df[(rcv_df['Date'] >= start_bound) & (rcv_df['Date'] <= end_bound)]
+            else:
+                current_period_rcv = rcv_df
+                
+            active_ingredients = current_period_rcv['Ingredient_Name'].unique()
+            
+            for name in active_ingredients:
+                ing_all_time = rcv_df[rcv_df['Ingredient_Name'] == name]
+                ing_current = current_period_rcv[current_period_rcv['Ingredient_Name'] == name]
+                
+                if len(ing_all_time) > 1 and not ing_current.empty:
+                    # Oldest known price vs Newest price in the active period
+                    oldest_price = float(ing_all_time.iloc[0]['Extracted_Price'])
+                    newest_price = float(ing_current.iloc[-1]['Extracted_Price'])
+                    
+                    if oldest_price > 0 and newest_price > oldest_price:
+                        pct_change = ((newest_price - oldest_price) / oldest_price) * 100.0
+                        inflation_data.append({
+                            'name': name,
+                            'old_price': oldest_price,
+                            'new_price': newest_price,
+                            'pct_change': pct_change,
+                            'last_date': ing_current.iloc[-1]['Date'].strftime("%Y-%m-%d")
+                        })
+            
+            # Grab top 5 highest inflating materials
+            inflation_data = sorted(inflation_data, key=lambda x: x['pct_change'], reverse=True)[:5]
+
     # FETCH SALES DATA ACTIVITY LOG
     recent_sales = []
     if not sales_df.empty:
@@ -398,6 +450,7 @@ def web_reports_tab(username):
         avg_margin=avg_margin_threshold,
         quadrants=quadrant_counts,
         advice=action_notes[:4],
+        inflation_data=inflation_data,
         msg=feedback_msg,
         alert_type=alert_type,
         now=now,

@@ -39,6 +39,7 @@ def web_sales_tab(username):
         
         processed_count = 0
         blocked_items = []
+        processed_costs = []
         products_df = client_db.get_all_products()
         
         for p_id, qty_str in zip(product_ids, quantities):
@@ -52,11 +53,20 @@ def web_sales_tab(username):
                 p_name = prod_row['Product_Name'].values[0]
                 unit_price = float(prod_row['Selling_Price'].values[0])
                 
+                # 🔒 FINANCIAL AUDIT FIX: Extract and freeze the exact unit cost at the time of this transaction
+                unit_cost = 0.0
+                if 'Cost_Price' in prod_row.columns:
+                    try:
+                        unit_cost = float(prod_row['Cost_Price'].values[0])
+                    except (ValueError, TypeError):
+                        unit_cost = 0.0
+                
                 # Triggers the inventory reduction script
                 stock_ok, stock_msg = client_db.update_inventory_from_sale(p_id, qty)
                 if stock_ok:
                     client_db.add_sale(p_id, qty, unit_price)
                     processed_count += 1
+                    processed_costs.append(unit_cost)
                 else:
                     blocked_items.append(f"{p_name} ({stock_msg.strip()})")
 
@@ -66,7 +76,15 @@ def web_sales_tab(username):
                 if 'Entry_Reason' not in sales_df.columns:
                     sales_df['Entry_Reason'] = ""
                 
+                # 🔒 Ensure the new Unit_Cost ledger column exists
+                if 'Unit_Cost' not in sales_df.columns:
+                    sales_df['Unit_Cost'] = 0.0
+                
                 sales_df.iloc[-processed_count:, sales_df.columns.get_loc('Sale_Date')] = chosen_date
+                
+                # 🔒 Commit the frozen historical costs directly into the sales ledger
+                sales_df.iloc[-processed_count:, sales_df.columns.get_loc('Unit_Cost')] = processed_costs
+                
                 if audit_note:
                     sales_df.iloc[-processed_count:, sales_df.columns.get_loc('Entry_Reason')] = audit_note
                 
