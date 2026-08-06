@@ -68,7 +68,7 @@ def web_inventory_tab(username):
                     if not q_val or float(q_val or 0) <= 0: continue
                     qty = float(q_val)
                     
-                    # Modified Logic: Treat p_val as Total Receipt Amount, derive unit cost dynamically
+                    # TRUE RECEIPT LOGIC: Treat p_val as Total Receipt Amount, derive unit cost dynamically
                     total_line_cost = float(p_val or 0.0)
                     incoming_unit_price = total_line_cost / qty if qty > 0 else 0.0
                     
