@@ -2,6 +2,7 @@
 from flask import Blueprint, request, redirect, session, render_template
 from modules.database import InventoryDB
 import pandas as pd
+import sqlite3
 from datetime import datetime
 
 sales_bp = Blueprint('sales', __name__)
@@ -12,7 +13,8 @@ def web_sales_tab(username):
     if session.get('logged_in_user') != username: 
         return redirect('/login')
         
-    client_db = InventoryDB(f"data/client_{username}.db")
+    db_path = f"data/client_{username}.db"
+    client_db = InventoryDB(db_path)
     feedback_msg = None
     alert_type = "success"
     
@@ -39,9 +41,24 @@ def web_sales_tab(username):
         
         processed_count = 0
         blocked_items = []
-        processed_costs = []
         products_df = client_db.get_all_products()
         
+        # Ensure Unit_Cost and Entry_Reason columns exist in SQLite schema dynamically
+        try:
+            conn = sqlite3.connect(db_path, timeout=20.0)
+            cursor = conn.cursor()
+            cursor.execute("PRAGMA table_info(Sales);")
+            sales_cols = [row[1] for row in cursor.fetchall()]
+            if 'Unit_Cost' not in sales_cols:
+                cursor.execute("ALTER TABLE Sales ADD COLUMN Unit_Cost REAL DEFAULT 0.0;")
+            if 'Entry_Reason' not in sales_cols:
+                cursor.execute("ALTER TABLE Sales ADD COLUMN Entry_Reason TEXT DEFAULT '';")
+            conn.commit()
+            conn.close()
+        except Exception as e:
+            print(f"Schema check error: {e}")
+
+        # Process Each Sale Transaction
         for p_id, qty_str in zip(product_ids, quantities):
             if not qty_str or float(qty_str or 0) == 0:
                 continue
@@ -53,7 +70,7 @@ def web_sales_tab(username):
                 p_name = prod_row['Product_Name'].values[0]
                 unit_price = float(prod_row['Selling_Price'].values[0])
                 
-                # 🔒 FINANCIAL AUDIT FIX: Extract and freeze the exact unit cost at the time of this transaction
+                # Capture frozen cost at transaction time
                 unit_cost = 0.0
                 if 'Cost_Price' in prod_row.columns:
                     try:
@@ -61,56 +78,54 @@ def web_sales_tab(username):
                     except (ValueError, TypeError):
                         unit_cost = 0.0
                 
-                # Triggers the inventory reduction script
+                # Triggers inventory reduction
                 stock_ok, stock_msg = client_db.update_inventory_from_sale(p_id, qty)
                 if stock_ok:
-                    client_db.add_sale(p_id, qty, unit_price)
-                    processed_count += 1
-                    processed_costs.append(unit_cost)
+                    # Atomic Direct SQL Insert (Prevents Database Lock/Hang)
+                    try:
+                        conn = sqlite3.connect(db_path, timeout=20.0)
+                        cursor = conn.cursor()
+                        cursor.execute("SELECT COUNT(*) FROM Sales")
+                        sale_count = cursor.fetchone()[0]
+                        sale_id = f"SALE{sale_count + 1:04d}"
+                        total_amt = qty * unit_price
+                        sale_time = datetime.now().strftime("%H:%M:%S")
+
+                        cursor.execute("""
+                            INSERT INTO Sales (Sale_ID, Product_ID, Quantity, Sale_Date, Sale_Time, Total_Amount, Unit_Cost, Entry_Reason)
+                            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                        """, (sale_id, p_id, qty, chosen_date, sale_time, total_amt, unit_cost, audit_note))
+                        conn.commit()
+                        conn.close()
+                        processed_count += 1
+                    except Exception as e:
+                        blocked_items.append(f"{p_name} (Database Error: {str(e)})")
                 else:
                     blocked_items.append(f"{p_name} ({stock_msg.strip()})")
 
+        # Self-Healing Audit Log Re-tagger
         if processed_count > 0:
-            sales_df = client_db.read_tab('Sales')
-            if not sales_df.empty:
-                if 'Entry_Reason' not in sales_df.columns:
-                    sales_df['Entry_Reason'] = ""
-                
-                # 🔒 Ensure the new Unit_Cost ledger column exists
-                if 'Unit_Cost' not in sales_df.columns:
-                    sales_df['Unit_Cost'] = 0.0
-                
-                sales_df.iloc[-processed_count:, sales_df.columns.get_loc('Sale_Date')] = chosen_date
-                
-                # 🔒 Commit the frozen historical costs directly into the sales ledger
-                sales_df.iloc[-processed_count:, sales_df.columns.get_loc('Unit_Cost')] = processed_costs
-                
-                if audit_note:
-                    sales_df.iloc[-processed_count:, sales_df.columns.get_loc('Entry_Reason')] = audit_note
-                
-                client_db.save_tab('Sales', sales_df)
-
-            # 🛠️ SELF-HEALING AUDIT LOG RE-TAGGER
-            # Updates inventory audit log entries created during sales from generic PRD to explicit POS tags
-            audit_df = client_db.read_tab('Inventory_Audit_Log')
-            if audit_df is not None and not audit_df.empty:
-                time_stamp_code = datetime.now().strftime("%M%S")
-                for idx in reversed(audit_df.index):
-                    row_notes = str(audit_df.loc[idx, 'Notes'] or '')
-                    row_audit_id = str(audit_df.loc[idx, 'Audit_ID'] or '')
+            try:
+                audit_df = client_db.read_tab('Inventory_Audit_Log')
+                if audit_df is not None and not audit_df.empty:
+                    time_stamp_code = datetime.now().strftime("%M%S")
+                    for idx in reversed(audit_df.index):
+                        row_notes = str(audit_df.loc[idx, 'Notes'] or '')
+                        row_audit_id = str(audit_df.loc[idx, 'Audit_ID'] or '')
+                        
+                        if ("Product " in row_notes or row_audit_id.startswith('PRD')) and "Product Waste:" not in row_notes and "POS Sale" not in row_notes:
+                            audit_df.loc[idx, 'Audit_ID'] = f"POS{time_stamp_code}_{idx}"
+                            audit_df.loc[idx, 'Notes'] = f"POS Recipe Depletion: {row_notes}".strip()
                     
-                    # If this is a recent sales depletion row lacking explicit POS tagging
-                    if ("Product " in row_notes or row_audit_id.startswith('PRD')) and "Product Waste:" not in row_notes and "POS Sale" not in row_notes:
-                        audit_df.loc[idx, 'Audit_ID'] = f"POS{time_stamp_code}_{idx}"
-                        audit_df.loc[idx, 'Notes'] = f"POS Recipe Depletion: {row_notes}".strip()
-                
-                client_db.save_tab('Inventory_Audit_Log', audit_df)
+                    client_db.save_tab('Inventory_Audit_Log', audit_df)
+            except Exception as e:
+                print(f"Audit log retag error: {e}")
 
         if processed_count > 0 and not blocked_items:
             feedback_msg = f"📋 EOD Sync Complete! Successfully logged operations for {processed_count} items on accounting date: {chosen_date}."
             alert_type = "success"
         elif processed_count > 0 and blocked_items:
-            feedback_msg = f"⚠️ Partial Sync: Processed {processed_count} updates for {chosen_date}. Some entries skipped due to ingredient shortages:\n" + " | ".join(blocked_items)
+            feedback_msg = f"⚠️ Partial Sync: Processed {processed_count} updates for {chosen_date}. Some entries skipped:\n" + " | ".join(blocked_items)
             alert_type = "warning"
         elif len(blocked_items) > 0:
             feedback_msg = "❌ EOD Sync Failed! Insufficient ingredients stock metrics:\n" + " | ".join(blocked_items)
