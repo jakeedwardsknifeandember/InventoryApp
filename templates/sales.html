@@ -47,37 +47,38 @@
 {% endif %}
 
 <div class="content-card mb-3 p-3" style="background-color: #2b2b2b;">
-    <form method="GET" class="row gx-2 gy-2 align-items-center">
+    <!-- ⚡ UPGRADED: Replaced server-side form with a real-time client-side filter engine to prevent data wiping -->
+    <div class="row gx-2 gy-2 align-items-center">
         <div class="col-md-3">
-            <label class="text-light me-1 mb-1 small d-block">Search Worksheet:</label>
-            <input type="text" name="search" value="{{ current_search }}" class="form-control bg-dark text-white border-secondary" placeholder="ID or Product Name" autocomplete="off">
+            <label class="text-light me-1 mb-1 small d-block">Live Search:</label>
+            <input type="text" id="liveSearchInput" class="form-control bg-dark text-white border-secondary" placeholder="ID or Product Name" autocomplete="off">
         </div>
         <div class="col-md-3">
             <label class="text-light me-1 mb-1 small d-block">Filter Category:</label>
-            <select name="category" class="form-select bg-dark text-white border-secondary" onchange="this.form.submit()">
+            <select id="liveCategorySelect" class="form-select bg-dark text-white border-secondary">
                 <option value="All">All Categories</option>
                 {% for cat in categories %}
-                <option value="{{ cat }}" {% if current_category == cat %}selected{% endif %}>{{ cat }}</option>
+                <option value="{{ cat }}">{{ cat }}</option>
                 {% endfor %}
             </select>
         </div>
         <div class="col-md-4">
             <label class="text-light me-1 mb-1 small d-block">Sort Columns:</label>
             <div class="d-flex">
-                <select name="sort_by" class="form-select bg-dark text-white border-secondary me-2" onchange="this.form.submit()">
-                    <option value="name" {% if current_sort == 'name' %}selected{% endif %}>Product Name</option>
-                    <option value="price" {% if current_sort == 'price' %}selected{% endif %}>Selling Price</option>
+                <select id="liveSortSelect" class="form-select bg-dark text-white border-secondary me-2">
+                    <option value="name">Product Name</option>
+                    <option value="price">Selling Price</option>
                 </select>
-                <select name="order" class="form-select bg-dark text-white border-secondary" onchange="this.form.submit()">
-                    <option value="asc" {% if current_order == 'asc' %}selected{% endif %}>↑ Asc</option>
-                    <option value="desc" {% if current_order == 'desc' %}selected{% endif %}>↓ Desc</option>
+                <select id="liveOrderSelect" class="form-select bg-dark text-white border-secondary">
+                    <option value="asc">↑ Asc</option>
+                    <option value="desc">↓ Desc</option>
                 </select>
             </div>
         </div>
         <div class="col-md-2 text-end align-self-end">
-            <a href="/portal/{{ username }}/sales" class="btn btn-secondary fw-bold w-100">🗑️ Clear Filters</a>
+            <button type="button" onclick="clearLiveFilters()" class="btn btn-secondary fw-bold w-100">🗑️ Clear Filters</button>
         </div>
-    </form>
+    </div>
 </div>
 
 <div class="row g-3">
@@ -114,9 +115,10 @@
                                     <th class="text-end" style="width: 140px;">TOTAL UNITS SOLD</th>
                                 </tr>
                             </thead>
-                            <tbody>
+                            <tbody id="productTableBody">
+                                <!-- Added data attributes for the JavaScript filtering engine to read -->
                                 {% for prod in active_products %}
-                                <tr>
+                                <tr class="product-row" data-name="{{ prod.Product_Name }}" data-id="{{ prod.Product_ID }}" data-category="{{ prod.Category or 'General' }}" data-price="{{ prod.Selling_Price }}">
                                     <td>
                                         <input type="hidden" name="product_id[]" value="{{ prod.Product_ID }}">
                                         <span class="fw-bold text-white">{{ prod.Product_Name }}</span>
@@ -136,7 +138,7 @@
                                     </td>
                                 </tr>
                                 {% else %}
-                                <tr>
+                                <tr id="noResultsRow">
                                     <td colspan="4" class="text-center text-muted py-4">No product profiles found matching active search criteria.</td>
                                 </tr>
                                 {% endfor %}
@@ -234,6 +236,7 @@
 
 </div>
 
+<!-- Modals Remain Unchanged -->
 <div class="modal fade" id="confirmEodModal" tabindex="-1" aria-hidden="true">
     <div class="modal-dialog modal-dialog-centered">
         <div class="modal-content bg-dark text-white border border-secondary shadow-lg">
@@ -278,7 +281,6 @@
 </div>
 
 <script>
-// FIXED: Changed 'def' keyword to correct JavaScript 'function' keyword
 function getLocalTodayString() {
     const d = new Date();
     const year = d.getFullYear();
@@ -324,11 +326,81 @@ function triggerSecurityModalCheck() {
     confirmModal.show();
 }
 
+// ==========================================
+// ⚡ LIVE CLIENT-SIDE FILTER & SORT ENGINE
+// ==========================================
 document.addEventListener("DOMContentLoaded", function() {
     const picker = document.getElementById('eodClosingDatePicker');
     if (picker && !picker.value) {
         picker.value = getLocalTodayString();
     }
+
+    const searchInput = document.getElementById('liveSearchInput');
+    const categorySelect = document.getElementById('liveCategorySelect');
+    const sortSelect = document.getElementById('liveSortSelect');
+    const orderSelect = document.getElementById('liveOrderSelect');
+    const tbody = document.getElementById('productTableBody');
+    let rows = Array.from(document.querySelectorAll('.product-row'));
+
+    function applyFiltersAndSort() {
+        const searchTerm = searchInput.value.toLowerCase().trim();
+        const category = categorySelect.value.toLowerCase();
+        const sortBy = sortSelect.value;
+        const order = orderSelect.value;
+
+        // 1. Filter Logic
+        let visibleCount = 0;
+        rows.forEach(row => {
+            const name = row.getAttribute('data-name').toLowerCase();
+            const id = row.getAttribute('data-id').toLowerCase();
+            const rowCategory = row.getAttribute('data-category').toLowerCase();
+            
+            const matchesSearch = name.includes(searchTerm) || id.includes(searchTerm);
+            const matchesCategory = category === 'all' || rowCategory === category;
+
+            if (matchesSearch && matchesCategory) {
+                row.style.display = '';
+                visibleCount++;
+            } else {
+                row.style.display = 'none';
+            }
+        });
+
+        // 2. Sort Logic
+        const visibleRows = rows.filter(row => row.style.display !== 'none');
+        visibleRows.sort((a, b) => {
+            let valA, valB;
+            if (sortBy === 'name') {
+                valA = a.getAttribute('data-name').toLowerCase();
+                valB = b.getAttribute('data-name').toLowerCase();
+            } else {
+                valA = parseFloat(a.getAttribute('data-price'));
+                valB = parseFloat(b.getAttribute('data-price'));
+            }
+
+            if (valA < valB) return order === 'asc' ? -1 : 1;
+            if (valA > valB) return order === 'asc' ? 1 : -1;
+            return 0;
+        });
+
+        // Re-append to DOM in correct sorted order without breaking form values
+        visibleRows.forEach(row => tbody.appendChild(row));
+    }
+
+    // Bind event listeners to trigger live update
+    searchInput.addEventListener('keyup', applyFiltersAndSort);
+    categorySelect.addEventListener('change', applyFiltersAndSort);
+    sortSelect.addEventListener('change', applyFiltersAndSort);
+    orderSelect.addEventListener('change', applyFiltersAndSort);
 });
+
+// Helper function to clear filters without reloading
+function clearLiveFilters() {
+    document.getElementById('liveSearchInput').value = '';
+    document.getElementById('liveCategorySelect').value = 'All';
+    document.getElementById('liveSortSelect').value = 'name';
+    document.getElementById('liveOrderSelect').value = 'asc';
+    document.getElementById('liveSearchInput').dispatchEvent(new Event('keyup'));
+}
 </script>
 {% endblock %}
