@@ -13,7 +13,10 @@ class InventoryDB:
     # ===== CORE SQLITE ENGINE =====
     def get_connection(self):
         os.makedirs(os.path.dirname(self.db_file), exist_ok=True)
-        return sqlite3.connect(self.db_file)
+        # CONCURRENCY FIX: Added timeout and enabled WAL mode to prevent database locking during simultaneous staff use
+        conn = sqlite3.connect(self.db_file, timeout=20.0)
+        conn.execute("PRAGMA journal_mode=WAL;")
+        return conn
 
     def ensure_tables_exist(self):
         """Make sure all necessary tables exist in SQLite and run automated column migrations"""
