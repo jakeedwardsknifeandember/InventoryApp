@@ -54,10 +54,16 @@ def web_expenses_tab(username):
                 alert_type = "danger"
                 
         elif action == 'delete_expense':
-            expense_id = request.form.get('expense_id')
-            success, msg = db.delete_expense(expense_id)
-            feedback_msg = msg
-            alert_type = "success" if success else "danger"
+            # 🔒 SECURITY CHECKPOINT: Block unauthorized staff from erasing financial ledgers
+            staff_role = session.get('staff_role', 'Staff')
+            if staff_role not in ['Platform Owner Admin', 'Store Manager']:
+                feedback_msg = "❌ Security Error: You do not have authorization to delete financial records."
+                alert_type = "danger"
+            else:
+                expense_id = request.form.get('expense_id')
+                success, msg = db.delete_expense(expense_id)
+                feedback_msg = msg
+                alert_type = "success" if success else "danger"
             
         return redirect(f"/portal/{username}/expenses?msg={feedback_msg}&alert_type={alert_type}")
 

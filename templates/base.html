@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     
-    <!-- 🌐 DYNAMIC TITLE ENGINE: Automatically brands the browser tab relative to the tenant account name -->
+    <!-- DYNAMIC TITLE ENGINE: Automatically brands the browser tab relative to the tenant account name -->
     <title>{% block title %}{{ username|capitalize }} Hub | Operations Command Center{% endblock %}</title>
     
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
@@ -37,7 +37,7 @@
             white-space: nowrap; /* Prevents text breaking when shrinking */
         }
 
-        /* 📱 ICON-ONLY COLLAPSE STATE (Gemini Style) */
+        /* ICON-ONLY COLLAPSE STATE */
         .sidebar.collapsed {
             width: 65px;
         }
@@ -76,7 +76,7 @@
             letter-spacing: 1px; 
         }
         
-        /* 🎨 CONTRAST UPGRADE: Forced high scannability values on subtext labels */
+        /* CONTRAST UPGRADE: Forced high scannability values on subtext labels */
         .sidebar-subtitle { 
             font-size: 13px; 
             color: #cbd5e1; 
@@ -128,7 +128,7 @@
         }
 
         .sidebar.collapsed .nav-text {
-            display: none; /* Hides the text, leaving only the emoji */
+            display: none; /* Hides the text, leaving only the icon */
         }
 
         .sidebar.collapsed a {
@@ -166,7 +166,7 @@
             margin-bottom: 0; 
         }
         
-        /* 🎨 CONTRAST UPGRADE: Replaced dark #8a8a8a table headers with readable high contrast text */
+        /* CONTRAST UPGRADE: Replaced dark #8a8a8a table headers with readable high contrast text */
         .table thead th { 
             background-color: #3a3a3a; 
             color: #ffffff; 
@@ -188,7 +188,7 @@
 <body>
 
     <div class="sidebar">
-        <!-- 📱 ICON-ONLY TOGGLE BUTTON (Gemini Style) -->
+        <!-- ICON-ONLY TOGGLE BUTTON -->
         <div class="toggle-container">
             <button id="toggleSidebar" class="menu-toggle-btn" title="Expand/Collapse Menu">
                 ☰
@@ -197,15 +197,15 @@
 
         <div class="sidebar-title">INVENTORY</div>
         
-        <!-- 🌐 DYNAMIC SIDEBAR BRANDING -->
+        <!-- DYNAMIC SIDEBAR BRANDING -->
         <div class="sidebar-subtitle">{{ username|capitalize }} Operations</div>
         
-        <!-- 🟢 DASHBOARD: Viewable by ALL validated sessions -->
+        <!-- DASHBOARD: Viewable by ALL validated sessions -->
         <a href="/portal/{{ username }}" class="{{ 'active' if request.path == '/portal/' + username else '' }}" title="Dashboard">
             <span class="nav-icon">📊</span> <span class="nav-text">Dashboard</span>
         </a>
         
-        <!-- 🔴 PLATFORM OWNER ADMIN ONLY: Catalog Setup (Products, Ingredients, Recipes) -->
+        <!-- PLATFORM OWNER ADMIN ONLY: Catalog Setup (Products, Ingredients, Recipes) -->
         {% if session.get('staff_role') == 'Platform Owner Admin' %}
             <a href="/portal/{{ username }}/products" class="{{ 'active' if 'products' in request.path else '' }}" title="Products">
                 <span class="nav-icon">📦</span> <span class="nav-text">Products</span>
@@ -218,23 +218,25 @@
             </a>
         {% endif %}
 
-        <!-- 🟡 MANAGERS & ADMINS ONLY: Sales -->
+        <!-- MANAGERS & ADMINS ONLY: Sales -->
         {% if session.get('staff_role') in ['Platform Owner Admin', 'Store Manager'] %}
             <a href="/portal/{{ username }}/sales" class="{{ 'active' if 'sales' in request.path else '' }}" title="Sales">
                 <span class="nav-icon">💰</span> <span class="nav-text">Sales</span>
             </a>
         {% endif %}
         
-        <!-- 🟢 INVENTORY: Open to everyone (Owners, Managers, and Kitchen Crew) -->
+        <!-- INVENTORY: Open to everyone (Owners, Managers, and Kitchen Crew) -->
         <a href="/portal/{{ username }}/inventory" class="{{ 'active' if 'inventory' in request.path else '' }}" title="Inventory">
             <span class="nav-icon">📦</span> <span class="nav-text">Inventory</span>
         </a>
         
-        <!-- 🟡 MANAGERS & ADMINS ONLY: Expenses, Reports, Audit Logs -->
+        <!-- EXPENSES: Open to everyone for petty cash logging -->
+        <a href="/portal/{{ username }}/expenses" class="{{ 'active' if 'expenses' in request.path else '' }}" title="Expenses">
+            <span class="nav-icon">💸</span> <span class="nav-text">Expenses</span>
+        </a>
+        
+        <!-- MANAGERS & ADMINS ONLY: Reports, Audit Logs -->
         {% if session.get('staff_role') in ['Platform Owner Admin', 'Store Manager'] %}
-            <a href="/portal/{{ username }}/expenses" class="{{ 'active' if 'expenses' in request.path else '' }}" title="Expenses">
-                <span class="nav-icon">💸</span> <span class="nav-text">Expenses</span>
-            </a>
             <a href="/portal/{{ username }}/reports" class="{{ 'active' if 'reports' in request.path else '' }}" title="Reports">
                 <span class="nav-icon">📊</span> <span class="nav-text">Reports</span>
             </a>
@@ -243,7 +245,7 @@
             </a>
         {% endif %}
         
-        <!-- 🔴 PLATFORM OWNER ADMIN ONLY: Settings -->
+        <!-- PLATFORM OWNER ADMIN ONLY: Settings -->
         {% if session.get('staff_role') == 'Platform Owner Admin' %}
             <a href="/portal/{{ username }}/settings" class="{{ 'active' if 'settings' in request.path else '' }}" title="Settings">
                 <span class="nav-icon">⚙️</span> <span class="nav-text">Settings</span>
@@ -256,7 +258,7 @@
     </div>
 
     <div class="main-content">
-        <!-- ⚡ FLASH MESSAGES ENGINE -->
+        <!-- FLASH MESSAGES ENGINE -->
         {% with messages = get_flashed_messages(with_categories=true) %}
             {% if messages %}
                 {% for category, message in messages %}
@@ -274,7 +276,7 @@
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     
-    <!-- ⚙️ UI BEHAVIOR: Sidebar Toggle Script -->
+    <!-- UI BEHAVIOR: Sidebar Toggle Script -->
     <script>
         document.addEventListener("DOMContentLoaded", function() {
             const sidebar = document.querySelector('.sidebar');
