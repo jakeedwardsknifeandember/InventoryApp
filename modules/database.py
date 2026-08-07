@@ -1,4 +1,4 @@
-# modules/database.py - FULL, RESTORED WEB SQLITE VERSION WITH SUB-RECIPE INSIGHTS & AUDIT LOGGING
+# modules/database.py - FULL, RESTORED WEB SQLITE VERSION WITH CATEGORIES & MODIFIERS INTEGRATION
 import pandas as pd
 import sqlite3
 import os
@@ -29,6 +29,18 @@ class InventoryDB:
                     'Product_ID', 'Product_Name', 'Parent_Item', 'Variant_Name', 'Category', 
                     'Selling_Price', 'Active', 'Cost_Price',
                     'Profit_Margin', 'Margin_Percentage'
+                ]),
+                'Categories': pd.DataFrame(columns=[
+                    'Category_ID', 'Category_Name', 'Active'
+                ]),
+                'Modifiers': pd.DataFrame(columns=[
+                    'Modifier_ID', 'Modifier_Name', 'Price', 'Active'
+                ]),
+                'Modifier_Recipes': pd.DataFrame(columns=[
+                    'Modifier_ID', 'Ingredient_ID', 'Quantity_Required', 'Unit'
+                ]),
+                'Discounts': pd.DataFrame(columns=[
+                    'Discount_ID', 'Discount_Name', 'Discount_Type', 'Value', 'Active'
                 ]),
                 'Ingredients': pd.DataFrame(columns=[
                     'Ingredient_ID', 'Ingredient_Name', 'Unit', 
@@ -88,6 +100,17 @@ class InventoryDB:
             if 'Parent_Item' not in prod_columns:
                 cursor.execute("ALTER TABLE Products ADD COLUMN Parent_Item TEXT;")
                 cursor.execute("ALTER TABLE Products ADD COLUMN Variant_Name TEXT DEFAULT 'Regular';")
+                conn.commit()
+
+            # SCHEMA MIGRATION 4: Auto-seed Categories table using distinct product categories
+            cursor.execute("SELECT COUNT(*) FROM Categories;")
+            cat_count = cursor.fetchone()[0]
+            if cat_count == 0:
+                cursor.execute("SELECT DISTINCT Category FROM Products WHERE Category IS NOT NULL AND Category != '';")
+                existing_cats = [row[0] for row in cursor.fetchall()]
+                for idx, cat_name in enumerate(existing_cats, start=1):
+                    cat_id = f"CAT{idx:03d}"
+                    cursor.execute("INSERT INTO Categories (Category_ID, Category_Name, Active) VALUES (?, ?, 'Yes');", (cat_id, cat_name))
                 conn.commit()
 
             conn.close()
@@ -153,6 +176,77 @@ class InventoryDB:
         except Exception as e:
             print(f"Error reading audit logs: {e}")
             return pd.DataFrame()
+
+    # ===== CATEGORY MANAGEMENT ENGINE =====
+    def add_category(self, category_name, username="System"):
+        """Add a new category profile."""
+        try:
+            cats_df = self.read_tab('Categories')
+            category_name = category_name.strip()
+            
+            if not cats_df.empty and 'Category_Name' in cats_df.columns:
+                existing = [str(n).lower().strip() for n in cats_df['Category_Name'].dropna()]
+                if category_name.lower() in existing:
+                    return False, f"Category '{category_name}' already exists."
+
+            cat_id = f"CAT{len(cats_df) + 1:03d}"
+            new_row = {'Category_ID': cat_id, 'Category_Name': category_name, 'Active': 'Yes'}
+            cats_df = pd.concat([cats_df, pd.DataFrame([new_row])], ignore_index=True)
+            self.save_tab('Categories', cats_df)
+            
+            self.log_user_action(username, "ADD_CATEGORY", "Categories", f"Added category '{category_name}' ({cat_id})")
+            return True, f"Category '{category_name}' created successfully."
+        except Exception as e:
+            return False, f"Error adding category: {str(e)}"
+
+    def update_category(self, category_id, new_name, username="System"):
+        """Update category name and sync all linked products."""
+        try:
+            cats_df = self.read_tab('Categories')
+            prods_df = self.read_tab('Products')
+            new_name = new_name.strip()
+            
+            idx = cats_df[cats_df['Category_ID'] == category_id].index
+            if len(idx) == 0:
+                return False, "Category not found."
+            
+            old_name = cats_df.at[idx[0], 'Category_Name']
+            cats_df.at[idx[0], 'Category_Name'] = new_name
+            self.save_tab('Categories', cats_df)
+            
+            # Sync product category labels automatically
+            if not prods_df.empty and 'Category' in prods_df.columns:
+                prods_df.loc[prods_df['Category'] == old_name, 'Category'] = new_name
+                self.save_tab('Products', prods_df)
+
+            self.log_user_action(username, "EDIT_CATEGORY", "Categories", f"Renamed category '{old_name}' to '{new_name}'")
+            return True, "Category updated successfully."
+        except Exception as e:
+            return False, f"Error updating category: {str(e)}"
+
+    def delete_category(self, category_id, username="System"):
+        """Delete a category and reassign all assigned products to Uncategorized."""
+        try:
+            cats_df = self.read_tab('Categories')
+            prods_df = self.read_tab('Products')
+            
+            idx = cats_df[cats_df['Category_ID'] == category_id].index
+            if len(idx) == 0:
+                return False, "Category not found."
+            
+            cat_name = cats_df.at[idx[0], 'Category_Name']
+            
+            if not prods_df.empty and 'Category' in prods_df.columns:
+                prods_df.loc[prods_df['Category'] == cat_name, 'Category'] = 'Uncategorized'
+                self.save_tab('Products', prods_df)
+
+            cats_df = cats_df[cats_df['Category_ID'] != category_id]
+            self.save_tab('Categories', cats_df)
+
+            self.log_user_action(username, "DELETE_CATEGORY", "Categories", f"Deleted category '{cat_name}'. Products reassigned to Uncategorized.")
+            return True, f"Category '{cat_name}' deleted. Linked products moved to Uncategorized."
+        except Exception as e:
+            return False, f"Error deleting category: {str(e)}"
 
     # ===== BUSINESS LOGIC WITH INTEGRATED AUDIT LOGGING =====
     def add_expense(self, expense_data, username="System"):

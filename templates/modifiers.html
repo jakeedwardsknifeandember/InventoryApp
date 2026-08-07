@@ -1,0 +1,113 @@
+{% extends 'base.html' %}
+{% block content %}
+
+<style>
+    .loyverse-table {
+        border-collapse: separate;
+        border-spacing: 0;
+        width: 100%;
+    }
+    .loyverse-table thead th {
+        background-color: #151518 !important;
+        color: #cbd5e1 !important;
+        font-size: 11px;
+        font-weight: 700;
+        text-transform: uppercase;
+        padding: 12px 16px;
+        border-bottom: 2px solid #2d2d34;
+    }
+    .loyverse-table tbody tr {
+        background-color: #18181c !important;
+        transition: background-color 0.15s ease;
+    }
+    .loyverse-table tbody tr:hover {
+        background-color: #22222a !important;
+    }
+    .loyverse-table tbody td {
+        padding: 14px 16px;
+        font-size: 14px;
+        color: #e2e8f0 !important;
+        border-bottom: 1px solid #27272c;
+    }
+    .modal-content label {
+        color: #ffffff !important;
+        font-weight: 700 !important;
+        font-size: 12px !important;
+        margin-bottom: 6px;
+    }
+    .modal-content .form-control {
+        color: #ffffff !important;
+        background-color: #27272c !important;
+        border: 1px solid #4a4a58 !important;
+    }
+</style>
+
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <div>
+        <h3 class="m-0 text-white" style="font-weight: 800; text-transform: uppercase;">Modifiers Management</h3>
+        <small style="color: #cbd5e1;">Configure paid add-ons, milk options, and extra shots.</small>
+    </div>
+    <button class="btn btn-primary fw-bold px-4 py-2" data-bs-toggle="modal" data-bs-target="#addModifierModal">+ Add Modifier</button>
+</div>
+
+<div class="content-card p-0 overflow-hidden" style="background: #1e1e24; border: 1px solid #2d2d34; border-radius: 8px;">
+    <div class="table-responsive">
+        <table class="loyverse-table align-middle m-0">
+            <thead>
+                <tr>
+                    <th style="width: 20%;">ID</th>
+                    <th style="width: 45%;">MODIFIER NAME</th>
+                    <th style="width: 20%;">ADD-ON PRICE</th>
+                    <th class="text-end pe-4" style="width: 15%;">ACTIONS</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for m in modifiers %}
+                <tr>
+                    <td class="font-monospace text-info ps-3">{{ m.Modifier_ID }}</td>
+                    <td class="fw-bold text-white">{{ m.Modifier_Name }}</td>
+                    <td class="font-monospace text-white fw-bold">PHP {{ "%.2f"|format(m.Price) }}</td>
+                    <td class="text-end pe-4">
+                        <form method="post" style="display: inline;" onsubmit="return confirm('Are you sure you want to delete this modifier?');">
+                            <input type="hidden" name="action_type" value="delete_modifier">
+                            <input type="hidden" name="modifier_id" value="{{ m.Modifier_ID }}">
+                            <button type="submit" class="btn btn-sm btn-danger fw-bold px-2 py-0" style="font-size: 11px;">Delete</button>
+                        </form>
+                    </td>
+                </tr>
+                {% else %}
+                <tr>
+                    <td colspan="4" class="text-center py-5 text-muted">No modifiers created yet. Click + Add Modifier to start.</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<!-- ADD MODIFIER MODAL -->
+<div class="modal fade" id="addModifierModal" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content bg-dark text-white border-secondary shadow-lg" style="background-color: #1e1e24 !important;">
+            <form method="post">
+                <input type="hidden" name="action_type" value="add_modifier">
+                <div class="modal-header border-secondary" style="background-color: #151518;">
+                    <h5 class="modal-title fw-bold text-white">Add New Modifier</h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body p-4">
+                    <label class="form-label">MODIFIER NAME:</label>
+                    <input type="text" name="modifier_name" class="form-control text-white border-secondary mb-3" required placeholder="e.g., Oat Milk Upgrade, Extra Espresso Shot" autocomplete="off">
+                    
+                    <label class="form-label">ADD-ON PRICE (PHP):</label>
+                    <input type="number" step="0.01" name="price" class="form-control text-white border-secondary font-monospace" required placeholder="30.00">
+                </div>
+                <div class="modal-footer border-secondary" style="background-color: #151518;">
+                    <button type="submit" class="btn btn-success fw-bold w-100 py-2">Save Modifier</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+{% endblock %}

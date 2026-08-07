@@ -1,0 +1,142 @@
+{% extends 'base.html' %}
+{% block content %}
+
+<style>
+    .loyverse-table {
+        border-collapse: separate;
+        border-spacing: 0;
+        width: 100%;
+    }
+    .loyverse-table thead th {
+        background-color: #151518 !important;
+        color: #cbd5e1 !important;
+        font-size: 11px;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        padding: 12px 16px;
+        border-bottom: 2px solid #2d2d34;
+    }
+    .loyverse-table tbody tr {
+        background-color: #18181c !important;
+        transition: background-color 0.15s ease;
+    }
+    .loyverse-table tbody tr:hover {
+        background-color: #22222a !important;
+    }
+    .loyverse-table tbody td {
+        padding: 14px 16px;
+        font-size: 14px;
+        color: #e2e8f0 !important;
+        border-bottom: 1px solid #27272c;
+    }
+    .modal-content label {
+        color: #ffffff !important;
+        font-weight: 700 !important;
+        font-size: 12px !important;
+        margin-bottom: 6px;
+    }
+    .modal-content .form-control {
+        color: #ffffff !important;
+        background-color: #27272c !important;
+        border: 1px solid #4a4a58 !important;
+    }
+</style>
+
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <div>
+        <h3 class="m-0 text-white" style="font-weight: 800; text-transform: uppercase;">Categories Management</h3>
+        <small style="color: #cbd5e1;">Organize menu items into scannable store sections.</small>
+    </div>
+    <button class="btn btn-primary fw-bold px-4 py-2" data-bs-toggle="modal" data-bs-target="#addCategoryModal">+ Add Category</button>
+</div>
+
+<div class="content-card p-0 overflow-hidden" style="background: #1e1e24; border: 1px solid #2d2d34; border-radius: 8px;">
+    <div class="table-responsive">
+        <table class="loyverse-table align-middle m-0">
+            <thead>
+                <tr>
+                    <th style="width: 20%;">ID</th>
+                    <th style="width: 45%;">CATEGORY NAME</th>
+                    <th style="width: 20%;">LINKED PRODUCTS</th>
+                    <th class="text-end pe-4" style="width: 15%;">ACTIONS</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for c in categories %}
+                <tr>
+                    <td class="font-monospace text-info ps-3">{{ c.Category_ID }}</td>
+                    <td class="fw-bold text-white">{{ c.Category_Name }}</td>
+                    <td>
+                        <span class="badge bg-dark border border-secondary text-info font-monospace" style="font-size: 11px;">
+                            {{ c.Product_Count }} Item{% if c.Product_Count != 1 %}s{% endif %}
+                        </span>
+                    </td>
+                    <td class="text-end pe-4">
+                        <button class="btn btn-sm btn-primary fw-bold px-2 py-0 me-1" style="font-size: 11px;" data-bs-toggle="modal" data-bs-target="#editCatModal{{ c.Category_ID }}">Edit</button>
+                        
+                        <form method="post" style="display: inline;" onsubmit="return confirm('Deleting this category will reassign all linked items to Uncategorized. Continue?');">
+                            <input type="hidden" name="action_type" value="delete_category">
+                            <input type="hidden" name="category_id" value="{{ c.Category_ID }}">
+                            <button type="submit" class="btn btn-sm btn-danger fw-bold px-2 py-0" style="font-size: 11px;">Delete</button>
+                        </form>
+                    </td>
+                </tr>
+                {% else %}
+                <tr>
+                    <td colspan="4" class="text-center py-5 text-muted">No categories created yet. Click + Add Category to start.</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<!-- ADD CATEGORY MODAL -->
+<div class="modal fade" id="addCategoryModal" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content bg-dark text-white border-secondary shadow-lg" style="background-color: #1e1e24 !important;">
+            <form method="post">
+                <input type="hidden" name="action_type" value="add_category">
+                <div class="modal-header border-secondary" style="background-color: #151518;">
+                    <h5 class="modal-title fw-bold text-white">Add New Category</h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body p-4">
+                    <label class="form-label">CATEGORY NAME:</label>
+                    <input type="text" name="category_name" class="form-control text-white border-secondary" required placeholder="e.g., Espresso Drinks, Pastries, Add-ons" autocomplete="off">
+                </div>
+                <div class="modal-footer border-secondary" style="background-color: #151518;">
+                    <button type="submit" class="btn btn-success fw-bold w-100 py-2">Save Category</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- EDIT CATEGORY MODALS -->
+{% for c in categories %}
+<div class="modal fade" id="editCatModal{{ c.Category_ID }}" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content bg-dark text-white border-secondary shadow-lg" style="background-color: #1e1e24 !important;">
+            <form method="post">
+                <input type="hidden" name="action_type" value="edit_category">
+                <input type="hidden" name="category_id" value="{{ c.Category_ID }}">
+                <div class="modal-header border-secondary" style="background-color: #151518;">
+                    <h5 class="modal-title fw-bold text-white">Edit Category: {{ c.Category_Name }}</h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body p-4">
+                    <label class="form-label">CATEGORY NAME:</label>
+                    <input type="text" name="category_name" class="form-control text-white border-secondary" value="{{ c.Category_Name }}" required autocomplete="off">
+                </div>
+                <div class="modal-footer border-secondary" style="background-color: #151518;">
+                    <button type="submit" class="btn btn-success fw-bold w-100 py-2">Update Category</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endfor %}
+
+{% endblock %}

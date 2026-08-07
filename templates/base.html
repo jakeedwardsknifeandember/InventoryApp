@@ -114,6 +114,50 @@
             font-weight: bold; 
         }
 
+        /* SUBMENU ACCORDION STYLING */
+        .submenu-container {
+            background-color: #1e1e1e;
+            border-radius: 4px;
+            margin-left: 10px;
+            margin-right: 2px;
+            margin-top: 2px;
+            margin-bottom: 5px;
+            padding: 4px 0;
+            border-left: 1px solid #3f3f46;
+        }
+
+        .sidebar.collapsed .submenu-container {
+            margin-left: 0;
+            margin-right: 0;
+            border-left: none;
+        }
+
+        .submenu-item {
+            font-size: 13px !important;
+            padding: 8px 12px 8px 15px !important;
+            color: #cbd5e1 !important;
+        }
+
+        .submenu-item:hover {
+            color: #ffffff !important;
+            background-color: #2b2b2b !important;
+        }
+
+        .submenu-item.active {
+            color: #60a5fa !important;
+            background-color: #2b2b2b !important;
+            border-left: 3px solid #3b8ed0 !important;
+            font-weight: bold;
+        }
+
+        .dropdown-caret {
+            transition: transform 0.2s ease;
+        }
+
+        .sidebar.collapsed .dropdown-caret {
+            display: none;
+        }
+
         .nav-icon {
             display: inline-block;
             width: 24px;
@@ -205,11 +249,37 @@
             <span class="nav-icon">📊</span> <span class="nav-text">Dashboard</span>
         </a>
         
-        <!-- PLATFORM OWNER ADMIN ONLY: Catalog Setup (Products, Ingredients, Recipes) -->
+        <!-- PLATFORM OWNER ADMIN ONLY: Items Accordion Module (Item List, Categories, Modifiers, Discounts) -->
         {% if session.get('staff_role') == 'Platform Owner Admin' %}
-            <a href="/portal/{{ username }}/products" class="{{ 'active' if 'products' in request.path else '' }}" title="Products">
-                <span class="nav-icon">📦</span> <span class="nav-text">Products</span>
+            {% set is_items_active = ('products' in request.path or 'categories' in request.path or 'modifiers' in request.path or 'discounts' in request.path) %}
+            
+            <a href="#itemsSubmenu" 
+               data-bs-toggle="collapse" 
+               aria-expanded="{{ 'true' if is_items_active else 'false' }}" 
+               class="d-flex justify-content-between align-items-center {{ 'active' if is_items_active else '' }}" 
+               title="Items">
+                <div>
+                    <span class="nav-icon">🛍️</span> 
+                    <span class="nav-text">Items</span>
+                </div>
+                <span class="dropdown-caret nav-text font-monospace" style="font-size: 10px;">{{ '▲' if is_items_active else '▼' }}</span>
             </a>
+
+            <div class="collapse {{ 'show' if is_items_active else '' }} submenu-container" id="itemsSubmenu">
+                <a href="/portal/{{ username }}/products" class="submenu-item {{ 'active' if 'products' in request.path else '' }}" title="Item List">
+                    <span class="nav-icon" style="font-size: 10px;">•</span> <span class="nav-text">Item List</span>
+                </a>
+                <a href="/portal/{{ username }}/categories" class="submenu-item {{ 'active' if 'categories' in request.path else '' }}" title="Categories">
+                    <span class="nav-icon" style="font-size: 10px;">•</span> <span class="nav-text">Categories</span>
+                </a>
+                <a href="/portal/{{ username }}/modifiers" class="submenu-item {{ 'active' if 'modifiers' in request.path else '' }}" title="Modifiers">
+                    <span class="nav-icon" style="font-size: 10px;">•</span> <span class="nav-text">Modifiers</span>
+                </a>
+                <a href="/portal/{{ username }}/discounts" class="submenu-item {{ 'active' if 'discounts' in request.path else '' }}" title="Discounts">
+                    <span class="nav-icon" style="font-size: 10px;">•</span> <span class="nav-text">Discounts</span>
+                </a>
+            </div>
+
             <a href="/portal/{{ username }}/ingredients" class="{{ 'active' if 'ingredients' in request.path else '' }}" title="Ingredients">
                 <span class="nav-icon">🍎</span> <span class="nav-text">Ingredients</span>
             </a>
@@ -280,15 +350,27 @@
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     
-    <!-- UI BEHAVIOR: Sidebar Toggle Script -->
+    <!-- UI BEHAVIOR: Sidebar Toggle & Submenu Caret Script -->
     <script>
         document.addEventListener("DOMContentLoaded", function() {
             const sidebar = document.querySelector('.sidebar');
             const toggleBtn = document.getElementById('toggleSidebar');
+            const itemsSubmenu = document.getElementById('itemsSubmenu');
 
             if (toggleBtn) {
                 toggleBtn.addEventListener('click', function() {
                     sidebar.classList.toggle('collapsed');
+                });
+            }
+
+            if (itemsSubmenu) {
+                itemsSubmenu.addEventListener('show.bs.collapse', function () {
+                    const caret = document.querySelector('a[href="#itemsSubmenu"] .dropdown-caret');
+                    if (caret) caret.textContent = '▲';
+                });
+                itemsSubmenu.addEventListener('hide.bs.collapse', function () {
+                    const caret = document.querySelector('a[href="#itemsSubmenu"] .dropdown-caret');
+                    if (caret) caret.textContent = '▼';
                 });
             }
         });

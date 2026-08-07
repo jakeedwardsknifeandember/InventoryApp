@@ -10,6 +10,9 @@ import datetime
 from routes.auth import auth_bp
 from routes.ingredients import ingredients_bp
 from routes.products import products_bp
+from routes.categories import categories_bp
+from routes.modifiers import modifiers_bp
+from routes.discounts import discounts_bp
 from routes.recipes import recipes_bp
 from routes.sales import sales_bp
 from routes.inventory import inventory_bp
@@ -26,6 +29,9 @@ app.secret_key = 'knife-and-ember-secret-saas-key'
 app.register_blueprint(auth_bp)
 app.register_blueprint(ingredients_bp)
 app.register_blueprint(products_bp)
+app.register_blueprint(categories_bp)
+app.register_blueprint(modifiers_bp)
+app.register_blueprint(discounts_bp)
 app.register_blueprint(recipes_bp)
 app.register_blueprint(sales_bp)
 app.register_blueprint(inventory_bp)
@@ -330,7 +336,7 @@ def client_portal(username):
         sales_count=sales_count
     )
 
-# 搭 AUDIT LOG ROUTE: View operational ledger with date filtering
+# AUDIT LOG ROUTE: View operational ledger with date filtering
 @app.route('/portal/<username>/audit-log')
 def audit_log(username):
     username = username.lower().strip()
@@ -338,7 +344,7 @@ def audit_log(username):
     if session.get('logged_in_user') != username: 
         return redirect('/login')
 
-    # 白 Access Control: Managers & Platform Admins only
+    # Access Control: Managers & Platform Admins only
     if session.get('staff_role') not in ['Platform Owner Admin', 'Store Manager']:
         flash('Unauthorized access to Audit Logs.', 'danger')
         return redirect(f"/portal/{username}")
@@ -346,7 +352,7 @@ def audit_log(username):
     client_db_path = f"data/client_{username}.db"
     client_db = InventoryDB(client_db_path)
 
-    # 套 Date Filter Parsing Controls
+    # Date Filter Parsing Controls
     selected_period = request.args.get('period', 'this_month')
     start_date_str = request.args.get('start_date', '')
     end_date_str = request.args.get('end_date', '')
@@ -414,4 +420,4 @@ def audit_log(username):
     )
 
 if __name__ == '__main__':
-    app.run(debug=True)
+    app.run(host='127.0.0.1', port=5000, debug=True, use_reloader=False)

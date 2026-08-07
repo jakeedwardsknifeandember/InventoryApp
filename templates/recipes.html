@@ -17,13 +17,40 @@
         border: 1px solid #3f3f46 !important;
     }
     .modal-content .form-control::placeholder {
-        color: #71717a !important;
+        color: #94a3b8 !important;
     }
     
     /* NAVIGATION PILLS AND BUTTON OVERRIDES */
-    .nav-tabs .nav-link { color: #94a3b8; border: none; font-weight: 600; padding: 12px 20px; transition: all 0.2s ease; }
-    .nav-tabs .nav-link:hover { color: #cbd5e1; background: #222226; border-radius: 6px 6px 0 0; }
+    .nav-tabs .nav-link { color: #cbd5e1; border: none; font-weight: 600; padding: 12px 20px; transition: all 0.2s ease; }
+    .nav-tabs .nav-link:hover { color: #ffffff; background: #222226; border-radius: 6px 6px 0 0; }
     .nav-tabs .nav-link.active { color: #3b82f6 !important; background: #2b2b2b !important; border-bottom: 3px solid #3b82f6 !important; border-radius: 6px 6px 0 0; }
+
+    .recipe-parent-row {
+        background-color: #1e1e24 !important;
+        transition: background-color 0.15s ease;
+    }
+    .recipe-parent-row:hover {
+        background-color: #262630 !important;
+    }
+    .recipe-variant-row {
+        background-color: #18181c !important;
+        transition: background-color 0.15s ease;
+    }
+    .recipe-variant-row:hover {
+        background-color: #22222a !important;
+    }
+    .variant-indent-tree {
+        color: #94a3b8;
+        font-family: monospace;
+        margin-right: 6px;
+        font-weight: bold;
+    }
+    
+    /* HIGH-CONTRAST SUBTEXT OVERRIDES FOR SCANNABILITY */
+    .high-contrast-subtext {
+        color: #cbd5e1 !important;
+        font-weight: 500;
+    }
 </style>
 
 <div class="container-fluid mt-3">
@@ -34,7 +61,6 @@
         </button>
     </div>
 
-    <!-- TOP-LEVEL FUNCTIONAL SUB-TABS STRIP NAVIGATION -->
     <ul class="nav nav-tabs border-bottom border-secondary mb-3">
         <li class="nav-item">
             <a class="nav-link {% if current_tab == 'product' %}active{% endif %}" href="?tab=product">Product Recipes (Menu Items → Portions)</a>
@@ -64,40 +90,108 @@
     </div>
 
     <div class="row g-3">
-        <!-- LEFT DIRECTORY SIDEBAR SECTION -->
+        <!-- LEFT DIRECTORY SIDEBAR -->
         <div class="col-md-4">
             <div class="card border-secondary bg-dark text-white" style="max-height: 65vh; overflow-y: auto;">
                 <div class="card-header bg-secondary text-white fw-bold">
                     {% if current_tab == 'product' %}Menu Item Folders{% else %}Kitchen Line Portions{% endif %}
                 </div>
                 <div class="list-group list-group-flush" id="leftProductListGroup">
-                    {% for r in recipe_data %}
-                    <button type="button" 
-                            id="btn-nav-{{ r['Product_ID'] }}"
-                            class="list-group-item list-group-item-action bg-dark text-white border-secondary py-3 item-nav-action-block" 
-                            data-target-id="detail-card-{{ r['Product_ID'] }}"
-                            data-product-name="{{ r['Product_Name']|lower }}" 
-                            data-product-id="{{ r['Product_ID']|lower }}" 
-                            data-product-category="{{ r['Category'] }}"
-                            onclick="switchActiveRecipeDisplay('{{ r['Product_ID'] }}')">
-                        <div class="d-flex justify-content-between align-items-center">
-                            <div>
-                                <h6 class="m-0 fw-bold">{{ r['Product_Name'] }}</h6>
-                                <small class="text-muted">{{ r['Product_ID'] }} • {{ r['Category'] }}</small>
-                            </div>
-                            <span class="badge {% if current_tab == 'product' %}bg-primary{% else %}bg-info text-dark{% endif %}">
-                                {% if current_tab == 'product' %}₱{{ "%.2f"|format(r['Selling_Price']) }}{% else %}Prepped Stock Component{% endif %}
-                            </span>
-                        </div>
-                    </button>
+                    {% if current_tab == 'product' %}
+                        {% for parent_name, variants in (grouped_recipes | default({})).items() %}
+                            {% set parent_index = loop.index %}
+                            {% set has_multiple_variants = (variants|length > 1) or (variants|length == 1 and variants[0].Variant_Name != 'Regular') %}
+
+                            {% if has_multiple_variants %}
+                                <div class="list-group-item bg-dark text-white border-secondary py-3 px-3 recipe-parent-row" 
+                                     style="cursor: pointer;"
+                                     onclick="toggleRecipeParentVariants({{ parent_index }})"
+                                     data-parent-index="{{ parent_index }}"
+                                     data-parent-name="{{ parent_name|lower }}">
+                                    <div class="d-flex justify-content-between align-items-center">
+                                        <div>
+                                            <span id="caret-{{ parent_index }}" class="font-monospace text-info me-2 fw-bold" style="display: inline-block; width: 14px;">v</span>
+                                            <span class="text-white fw-bold">{{ parent_name }}</span>
+                                            <span class="badge bg-dark border border-secondary text-info ms-2 font-monospace" style="font-size: 11px;">{{ variants|length }} variants</span>
+                                        </div>
+                                        <span class="badge bg-secondary text-white">{{ variants[0].Category }}</span>
+                                    </div>
+                                </div>
+
+                                {% for r in variants %}
+                                <button type="button" 
+                                        id="btn-nav-{{ r['Product_ID'] }}"
+                                        class="list-group-item list-group-item-action bg-dark text-white border-secondary py-2 ps-4 pe-3 item-nav-action-block recipe-variant-row child-group-{{ parent_index }}" 
+                                        style="display: none;"
+                                        data-target-id="detail-card-{{ r['Product_ID'] }}"
+                                        data-parent-index="{{ parent_index }}"
+                                        data-product-name="{{ r['Variant_Name']|lower }}" 
+                                        data-product-fullname="{{ r['Product_Name']|lower }}" 
+                                        data-product-id="{{ r['Product_ID']|lower }}" 
+                                        data-product-category="{{ r['Category'] }}"
+                                        onclick="switchActiveRecipeDisplay('{{ r['Product_ID'] }}')">
+                                    <div class="d-flex justify-content-between align-items-center">
+                                        <div>
+                                            <span class="variant-indent-tree">|-</span>
+                                            <strong class="text-white">{{ r['Variant_Name'] }}</strong>
+                                            <small class="text-info font-monospace ms-1">({{ r['Product_ID'] }})</small>
+                                        </div>
+                                        <span class="badge bg-primary font-monospace">₱{{ "%.2f"|format(r['Selling_Price']) }}</span>
+                                    </div>
+                                </button>
+                                {% endfor %}
+
+                            {% else %}
+                                {% set r = variants[0] %}
+                                <button type="button" 
+                                        id="btn-nav-{{ r['Product_ID'] }}"
+                                        class="list-group-item list-group-item-action bg-dark text-white border-secondary py-3 item-nav-action-block recipe-variant-row" 
+                                        data-target-id="detail-card-{{ r['Product_ID'] }}"
+                                        data-product-name="{{ parent_name|lower }}" 
+                                        data-product-fullname="{{ r['Product_Name']|lower }}" 
+                                        data-product-id="{{ r['Product_ID']|lower }}" 
+                                        data-product-category="{{ r['Category'] }}"
+                                        onclick="switchActiveRecipeDisplay('{{ r['Product_ID'] }}')">
+                                    <div class="d-flex justify-content-between align-items-center">
+                                        <div>
+                                            <h6 class="m-0 fw-bold">{{ parent_name }}</h6>
+                                            <small class="high-contrast-subtext font-monospace" style="font-size: 11px;">{{ r['Product_ID'] }} • {{ r['Category'] }}</small>
+                                        </div>
+                                        <span class="badge bg-primary font-monospace">₱{{ "%.2f"|format(r['Selling_Price']) }}</span>
+                                    </div>
+                                </button>
+                            {% endif %}
+                        {% else %}
+                            <div class="text-center text-muted py-4">No active directory nodes logged for this workspace selection view.</div>
+                        {% endfor %}
+
                     {% else %}
-                    <div class="text-center text-muted py-4">No active directory nodes logged for this workspace selection view.</div>
-                    {% endfor %}
+                        {% for r in recipe_data %}
+                        <button type="button" 
+                                id="btn-nav-{{ r['Product_ID'] }}"
+                                class="list-group-item list-group-item-action bg-dark text-white border-secondary py-3 item-nav-action-block recipe-variant-row" 
+                                data-target-id="detail-card-{{ r['Product_ID'] }}"
+                                data-product-name="{{ r['Product_Name']|lower }}" 
+                                data-product-id="{{ r['Product_ID']|lower }}" 
+                                data-product-category="{{ r['Category'] }}"
+                                onclick="switchActiveRecipeDisplay('{{ r['Product_ID'] }}')">
+                            <div class="d-flex justify-content-between align-items-center">
+                                <div>
+                                    <h6 class="m-0 fw-bold">{{ r['Product_Name'] }}</h6>
+                                    <small class="high-contrast-subtext font-monospace" style="font-size: 11px;">{{ r['Product_ID'] }} • {{ r['Category'] }}</small>
+                                </div>
+                                <span class="badge bg-info text-dark">Prepped Stock Component</span>
+                            </div>
+                        </button>
+                        {% else %}
+                        <div class="text-center text-muted py-4">No active directory nodes logged for this workspace selection view.</div>
+                        {% endfor %}
+                    {% endif %}
                 </div>
             </div>
         </div>
 
-        <!-- RIGHT DATA VIEWER BLOCK SECTION -->
+        <!-- RIGHT DATA VIEWER -->
         <div class="col-md-8">
             <div class="card border-secondary bg-dark text-white h-100" style="min-height: 45vh;">
                 <div class="card-header bg-secondary text-white fw-bold">Recipe Specifications Summary Report</div>
@@ -136,7 +230,7 @@
                             <tbody>
                                 {% for item in r['Items'] %}
                                 <tr>
-                                    <td class="text-white fw-bold">{{ item['Name'] }} <small class="text-muted font-monospace">({{ item['ID'] }})</small></td>
+                                    <td class="text-white fw-bold">{{ item['Name'] }} <small class="high-contrast-subtext font-monospace">({{ item['ID'] }})</small></td>
                                     <td class="text-light">{{ item['Qty'] }}</td>
                                     <td><span class="badge bg-secondary">{{ item['Unit'] }}</span></td>
                                     <td class="text-light">₱{{ "%.2f"|format(item['Cost']) }} / {{ item['Base_Unit'] }}</td>
@@ -197,7 +291,7 @@
     </div>
 </div>
 
-<!-- ENTRY DIALOG WINDOW: BUILD FORMULAS -->
+<!-- ENTRY DIALOG WINDOW -->
 <div class="modal fade" id="createRecipeModal" tabindex="-1">
     <div class="modal-dialog modal-lg">
         <div class="modal-content bg-dark text-white border border-secondary">
@@ -227,12 +321,11 @@
                         {% endif %}
                     </select>
 
-                    <!-- FIELD ADDITION: DYNAMIC PROPORTIONAL DIVISOR FACTOR FOR SUB-BATCHES -->
                     {% if current_tab == 'prep' %}
                     <div class="p-3 mb-4 rounded border border-info" style="background-color: #172554;">
                         <label class="form-label fw-bold text-info" style="font-size:13px !important;">TOTAL BATCH OUTPUT YIELD VOLUME:</label>
                         <input type="number" step="any" name="batch_yield" class="form-control text-white fw-bold mb-1" style="background:#1e1e24;" value="1.0" min="0.001" required>
-                        <small class="text-muted text-white-50 d-block" style="font-size:11px;">Type in how many single portions, servings, or mL this entire ingredient combination yields. The system automatically divides your total raw expense costs over this index to get your true per-unit cost.</small>
+                        <small class="high-contrast-subtext d-block" style="font-size:11px;">Type in how many single portions, servings, or mL this entire ingredient combination yields. The system automatically divides your total raw expense costs over this index to get your true per-unit cost.</small>
                     </div>
                     {% endif %}
 
@@ -254,7 +347,7 @@
     </div>
 </div>
 
-<!-- POPUP WORKSPACE MODAL: MANAGE AND UPDATE SPECIFICATION MATRIX ROWS -->
+<!-- POPUP WORKSPACE MODAL -->
 {% for r in recipe_data %}
 <div class="modal fade" id="editModal{{ r['Product_ID'] }}" tabindex="-1">
     <div class="modal-dialog modal-lg">
@@ -269,12 +362,11 @@
                 </div>
                 <div class="modal-body">
                     
-                    <!-- FIELD ADDITION: DYNAMIC PROPORTIONAL DIVISOR FACTOR FOR EDITING SUB-BATCHES -->
                     {% if current_tab == 'prep' %}
                     <div class="p-3 mb-4 rounded border border-info" style="background-color: #172554;">
                         <label class="form-label fw-bold text-info" style="font-size:13px !important;">TOTAL BATCH OUTPUT YIELD VOLUME:</label>
                         <input type="number" step="any" name="batch_yield" class="form-control text-white fw-bold mb-1" style="background:#1e1e24;" value="{{ r['Batch_Yield'] }}" min="0.001" required>
-                        <small class="text-muted text-white-50 d-block" style="font-size:11px;">Update how many portions, servings, or mL this recipe yields. Amortization formulas recalculate margins live upon submission.</small>
+                        <small class="high-contrast-subtext d-block" style="font-size:11px;">Update how many portions, servings, or mL this recipe yields. Amortization formulas recalculate margins live upon submission.</small>
                     </div>
                     {% endif %}
 
@@ -320,6 +412,23 @@
 {% endfor %}
 
 <script>
+function toggleRecipeParentVariants(index) {
+    const childRows = document.querySelectorAll('.child-group-' + index);
+    const caret = document.getElementById('caret-' + index);
+    
+    childRows.forEach(row => {
+        if (row.style.display === 'none' || row.style.display === '') {
+            row.style.display = 'block';
+        } else {
+            row.style.display = 'none';
+        }
+    });
+    
+    if (caret) {
+        caret.textContent = (caret.textContent.trim() === 'v') ? '^' : 'v';
+    }
+}
+
 function synchronizeRowMeasurementUnitOptions(selectElement) {
     const row = selectElement.parentElement.parentElement;
     const activeOption = selectElement.options[selectElement.selectedIndex];
@@ -386,23 +495,99 @@ function switchActiveRecipeDisplay(productIdCode) {
 
 function runSplitDashboardFilters() {
     const query = document.getElementById('recipeSearchInput').value.toLowerCase().trim();
-    const chosenCategory = document.getElementById('recipeCategorySelect').value;
+    const chosenCategory = document.getElementById('recipeCategorySelect').value.toLowerCase();
+    
+    const parentHeaderRows = document.querySelectorAll('.recipe-parent-row');
     const navButtons = document.querySelectorAll('.item-nav-action-block');
 
-    navButtons.forEach(btn => {
-        const pName = btn.getAttribute('data-product-name');
-        const pId = btn.getAttribute('data-product-id');
-        const pCat = btn.getAttribute('data-product-category');
+    if (query !== "") {
+        parentHeaderRows.forEach(parentRow => {
+            const pIndex = parentRow.getAttribute('data-parent-index');
+            const parentName = parentRow.getAttribute('data-parent-name') || '';
+            const childButtons = document.querySelectorAll('.child-group-' + pIndex);
+            
+            let parentMatches = parentName.includes(query);
+            let childMatches = false;
 
-        const matchesSearch = pName.includes(query) || pId.includes(query);
-        const matchesCategory = (chosenCategory === 'All' || pCat === chosenCategory);
+            childButtons.forEach(btn => {
+                const pName = btn.getAttribute('data-product-name') || '';
+                const pFullName = btn.getAttribute('data-product-fullname') || '';
+                const pId = btn.getAttribute('data-product-id') || '';
+                const pCat = (btn.getAttribute('data-product-category') || '').toLowerCase();
 
-        if (matchesSearch && matchesCategory) {
-            btn.style.setProperty('display', 'block', 'important');
-        } else {
-            btn.style.setProperty('display', 'none', 'important');
-        }
-    });
+                const matchesSearch = pName.includes(query) || pFullName.includes(query) || pId.includes(query) || parentName.includes(query);
+                const matchesCategory = (chosenCategory === 'all' || pCat === chosenCategory);
+
+                if (matchesSearch && matchesCategory) {
+                    btn.style.setProperty('display', 'block', 'important');
+                    childMatches = true;
+                } else {
+                    btn.style.setProperty('display', 'none', 'important');
+                }
+            });
+
+            if (parentMatches || childMatches) {
+                parentRow.style.setProperty('display', 'block', 'important');
+                const caret = document.getElementById('caret-' + pIndex);
+                if (caret) caret.textContent = '^';
+            } else {
+                parentRow.style.setProperty('display', 'none', 'important');
+            }
+        });
+
+        navButtons.forEach(btn => {
+            if (!btn.getAttribute('data-parent-index')) {
+                const pName = btn.getAttribute('data-product-name') || '';
+                const pFullName = btn.getAttribute('data-product-fullname') || '';
+                const pId = btn.getAttribute('data-product-id') || '';
+                const pCat = (btn.getAttribute('data-product-category') || '').toLowerCase();
+
+                const matchesSearch = pName.includes(query) || pFullName.includes(query) || pId.includes(query);
+                const matchesCategory = (chosenCategory === 'all' || pCat === chosenCategory);
+
+                if (matchesSearch && matchesCategory) {
+                    btn.style.setProperty('display', 'block', 'important');
+                } else {
+                    btn.style.setProperty('display', 'none', 'important');
+                }
+            }
+        });
+
+    } else {
+        parentHeaderRows.forEach(parentRow => {
+            const pIndex = parentRow.getAttribute('data-parent-index');
+            const childButtons = document.querySelectorAll('.child-group-' + pIndex);
+            
+            let hasVisibleChildInCategory = false;
+            childButtons.forEach(btn => {
+                btn.style.setProperty('display', 'none', 'important');
+                const pCat = (btn.getAttribute('data-product-category') || '').toLowerCase();
+                if (chosenCategory === 'all' || pCat === chosenCategory) {
+                    hasVisibleChildInCategory = true;
+                }
+            });
+
+            const caret = document.getElementById('caret-' + pIndex);
+            if (caret) caret.textContent = 'v';
+
+            if (hasVisibleChildInCategory) {
+                parentRow.style.setProperty('display', 'block', 'important');
+            } else {
+                parentRow.style.setProperty('display', 'none', 'important');
+            }
+        });
+
+        navButtons.forEach(btn => {
+            if (!btn.getAttribute('data-parent-index')) {
+                const pCat = (btn.getAttribute('data-product-category') || '').toLowerCase();
+                if (chosenCategory === 'all' || pCat === chosenCategory) {
+                    btn.style.setProperty('display', 'block', 'important');
+                } else {
+                    btn.style.setProperty('display', 'none', 'important');
+                }
+            }
+        });
+    }
 }
 
 function clearRecipeDashboardFilters() {
@@ -419,7 +604,6 @@ document.addEventListener("DOMContentLoaded", function() {
         if(sel.value !== "") synchronizeRowMeasurementUnitOptions(sel);
     });
     
-    // Core Logic for URL Parameter Deep-Linking Handoff
     const urlParams = new URLSearchParams(window.location.search);
     const targetProductId = urlParams.get('product_id');
 
@@ -427,10 +611,22 @@ document.addEventListener("DOMContentLoaded", function() {
 
     if (targetProductId) {
         buttonToClick = document.getElementById('btn-nav-' + targetProductId);
+        if (buttonToClick) {
+            const pIndex = buttonToClick.getAttribute('data-parent-index');
+            if (pIndex) {
+                toggleRecipeParentVariants(pIndex);
+            }
+        }
     }
 
     if (!buttonToClick) {
         buttonToClick = document.querySelector('.item-nav-action-block');
+        if (buttonToClick) {
+            const pIndex = buttonToClick.getAttribute('data-parent-index');
+            if (pIndex) {
+                toggleRecipeParentVariants(pIndex);
+            }
+        }
     }
 
     if (buttonToClick) {

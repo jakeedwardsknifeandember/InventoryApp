@@ -33,11 +33,31 @@
         color: #ff5555 !important;
         text-shadow: 0 0 2px rgba(255, 85, 85, 0.2);
     }
+    .eod-parent-row {
+        background-color: #1e1e24 !important;
+        transition: background-color 0.15s ease;
+    }
+    .eod-parent-row:hover {
+        background-color: #262630 !important;
+    }
+    .eod-variant-row {
+        background-color: #18181c !important;
+        transition: background-color 0.15s ease;
+    }
+    .eod-variant-row:hover {
+        background-color: #22222a !important;
+    }
+    .variant-indent-tree {
+        color: #64748b;
+        font-family: monospace;
+        margin-right: 6px;
+        font-weight: bold;
+    }
 </style>
 
 <div class="d-flex justify-content-between align-items-center mb-3">
     <h3 class="m-0 text-white" style="font-weight: bold;">End-of-Day (EOD) Sales Entry</h3>
-    <span class="badge bg-primary p-2 font-monospace" style="font-size: 13px;">📊 Back-of-House Ledger</span>
+    <span class="badge bg-primary p-2 font-monospace" style="font-size: 13px;">Back-of-House Ledger</span>
 </div>
 
 {% if msg %}
@@ -47,7 +67,6 @@
 {% endif %}
 
 <div class="content-card mb-3 p-3" style="background-color: #2b2b2b;">
-    <!-- ⚡ UPGRADED: Replaced server-side form with a real-time client-side filter engine to prevent data wiping -->
     <div class="row gx-2 gy-2 align-items-center">
         <div class="col-md-3">
             <label class="text-light me-1 mb-1 small d-block">Live Search:</label>
@@ -76,7 +95,7 @@
             </div>
         </div>
         <div class="col-md-2 text-end align-self-end">
-            <button type="button" onclick="clearLiveFilters()" class="btn btn-secondary fw-bold w-100">🗑️ Clear Filters</button>
+            <button type="button" onclick="clearLiveFilters()" class="btn btn-secondary fw-bold w-100">Clear Filters</button>
         </div>
     </div>
 </div>
@@ -86,7 +105,7 @@
     <div class="col-md-6">
         <div class="card border-secondary bg-dark text-white shadow-sm">
             <div class="card-header bg-secondary text-white fw-bold d-flex justify-content-between align-items-center">
-                <span>📝 Closing Sales Entry Worksheet</span>
+                <span>Closing Sales Entry Worksheet</span>
                 <small class="text-white-50">Match counts to your physical POS report</small>
             </div>
             <div class="card-body p-0">
@@ -95,11 +114,11 @@
                     <div class="p-3 border-bottom border-secondary" style="background-color: #1e1e1e;">
                         <div class="row g-2">
                             <div class="col-md-5">
-                                <label class="form-label small text-info fw-bold mb-1">📅 Target Accounting Date:</label>
+                                <label class="form-label small text-info fw-bold mb-1">Target Accounting Date:</label>
                                 <input type="date" id="eodClosingDatePicker" name="sale_date" class="form-control bg-dark text-white border-secondary fw-bold" required>
                             </div>
                             <div class="col-md-7">
-                                <label class="form-label small text-info fw-bold mb-1">✍️ Audit Entry Notes / Correction Reason:</label>
+                                <label class="form-label small text-info fw-bold mb-1">Audit Entry Notes / Correction Reason:</label>
                                 <input type="text" id="eodAuditNoteInput" name="audit_note" class="form-control bg-dark text-white border-secondary" placeholder="Mandatory for adjustments or backdating" autocomplete="off">
                             </div>
                         </div>
@@ -109,34 +128,91 @@
                         <table class="table table-dark table-hover align-middle mb-0">
                             <thead>
                                 <tr class="text-secondary font-monospace" style="font-size: 11px; letter-spacing: 0.5px;">
-                                    <th>PRODUCT NAME</th>
-                                    <th>CATEGORY</th>
-                                    <th>PRICE</th>
-                                    <th class="text-end" style="width: 140px;">TOTAL UNITS SOLD</th>
+                                    <th style="width: 45%;">PRODUCT / VARIANT NAME</th>
+                                    <th style="width: 20%;">CATEGORY</th>
+                                    <th style="width: 15%;">PRICE</th>
+                                    <th class="text-end pe-3" style="width: 20%;">UNITS SOLD</th>
                                 </tr>
                             </thead>
                             <tbody id="productTableBody">
-                                <!-- Added data attributes for the JavaScript filtering engine to read -->
-                                {% for prod in active_products %}
-                                <tr class="product-row" data-name="{{ prod.Product_Name }}" data-id="{{ prod.Product_ID }}" data-category="{{ prod.Category or 'General' }}" data-price="{{ prod.Selling_Price }}">
-                                    <td>
-                                        <input type="hidden" name="product_id[]" value="{{ prod.Product_ID }}">
-                                        <span class="fw-bold text-white">{{ prod.Product_Name }}</span>
-                                        <small class="d-block high-contrast-id" style="font-size: 11px;">ID: {{ prod.Product_ID }}</small>
-                                    </td>
-                                    <td><span class="badge bg-secondary" style="font-size: 11px;">{{ prod.Category or 'General' }}</span></td>
-                                    <td class="text-light">₱{{ "%.2f"|format(prod.Selling_Price) }}</td>
-                                    <td class="text-end">
-                                        <input type="number" 
-                                               name="quantity[]" 
-                                               step="any"
-                                               value="0" 
-                                               class="form-control bg-light text-dark text-center fw-bold border-0 mx-auto font-monospace ingredient-qty-input" 
-                                               style="max-width: 100px; font-size: 15px; border-radius: 4px;"
-                                               onfocus="if(this.value=='0') this.value='';" 
-                                               onblur="if(this.value=='') this.value='0';">
-                                    </td>
-                                </tr>
+                                {% for parent, variants in grouped_products.items() %}
+                                    {% set parent_index = loop.index %}
+                                    {% set has_multiple_variants = (variants|length > 1) or (variants|length == 1 and variants[0].Variant_Name != 'Regular') %}
+
+                                    {% if has_multiple_variants %}
+                                        <!-- PARENT ITEM HEADER ROW -->
+                                        <tr class="eod-parent-row" style="cursor: pointer;" onclick="toggleParentVariants({{ parent_index }})" data-parent-index="{{ parent_index }}" data-parent-name="{{ parent|lower }}">
+                                            <td class="ps-3">
+                                                <span id="caret-{{ parent_index }}" class="font-monospace text-info me-2 fw-bold" style="display: inline-block; width: 14px;">v</span>
+                                                <span class="text-white fw-bold">{{ parent }}</span>
+                                                <span class="badge bg-dark border border-secondary text-info ms-2 font-monospace" style="font-size: 11px;">{{ variants|length }} variants</span>
+                                            </td>
+                                            <td>
+                                                <span class="badge bg-secondary text-white">{{ variants[0].Category or 'General' }}</span>
+                                            </td>
+                                            <td colspan="2"></td>
+                                        </tr>
+
+                                        <!-- CHILD VARIANT INPUT ROWS -->
+                                        {% for prod in variants %}
+                                        <tr class="product-row eod-variant-row child-group-{{ parent_index }}" 
+                                            style="display: none;" 
+                                            data-parent-index="{{ parent_index }}"
+                                            data-parent-name="{{ parent|lower }}"
+                                            data-name="{{ prod.Variant_Name|lower }}" 
+                                            data-full-name="{{ prod.Product_Name|lower }}"
+                                            data-id="{{ prod.Product_ID|lower }}" 
+                                            data-category="{{ (prod.Category or 'General')|lower }}" 
+                                            data-price="{{ prod.Selling_Price }}">
+                                            <td class="ps-4">
+                                                <input type="hidden" name="product_id[]" value="{{ prod.Product_ID }}">
+                                                <span class="variant-indent-tree">|-</span>
+                                                <strong class="text-white">{{ prod.Variant_Name }}</strong>
+                                                <small class="d-inline-block text-info font-monospace ms-1" style="font-size: 11px;">({{ prod.Product_ID }})</small>
+                                            </td>
+                                            <td><span class="badge bg-secondary" style="font-size: 11px;">{{ prod.Category or 'General' }}</span></td>
+                                            <td class="text-light font-monospace">₱{{ "%.2f"|format(prod.Selling_Price) }}</td>
+                                            <td class="text-end pe-3">
+                                                <input type="number" 
+                                                       name="quantity[]" 
+                                                       step="any"
+                                                       value="0" 
+                                                       class="form-control bg-light text-dark text-center fw-bold border-0 ms-auto font-monospace ingredient-qty-input" 
+                                                       style="max-width: 90px; font-size: 14px; border-radius: 4px;"
+                                                       onfocus="if(this.value=='0') this.value='';" 
+                                                       onblur="if(this.value=='') this.value='0';">
+                                            </td>
+                                        </tr>
+                                        {% endfor %}
+
+                                    {% else %}
+                                        <!-- STANDALONE SINGLE PRODUCT ROW -->
+                                        {% set prod = variants[0] %}
+                                        <tr class="product-row eod-variant-row" 
+                                            data-name="{{ parent|lower }}" 
+                                            data-full-name="{{ prod.Product_Name|lower }}"
+                                            data-id="{{ prod.Product_ID|lower }}" 
+                                            data-category="{{ (prod.Category or 'General')|lower }}" 
+                                            data-price="{{ prod.Selling_Price }}">
+                                            <td class="ps-3">
+                                                <input type="hidden" name="product_id[]" value="{{ prod.Product_ID }}">
+                                                <span class="fw-bold text-white fs-6">{{ parent }}</span>
+                                                <small class="d-inline-block text-info font-monospace ms-1" style="font-size: 11px;">({{ prod.Product_ID }})</small>
+                                            </td>
+                                            <td><span class="badge bg-secondary" style="font-size: 11px;">{{ prod.Category or 'General' }}</span></td>
+                                            <td class="text-light font-monospace">₱{{ "%.2f"|format(prod.Selling_Price) }}</td>
+                                            <td class="text-end pe-3">
+                                                <input type="number" 
+                                                       name="quantity[]" 
+                                                       step="any"
+                                                       value="0" 
+                                                       class="form-control bg-light text-dark text-center fw-bold border-0 ms-auto font-monospace ingredient-qty-input" 
+                                                       style="max-width: 90px; font-size: 14px; border-radius: 4px;"
+                                                       onfocus="if(this.value=='0') this.value='';" 
+                                                       onblur="if(this.value=='') this.value='0';">
+                                            </td>
+                                        </tr>
+                                    {% endif %}
                                 {% else %}
                                 <tr id="noResultsRow">
                                     <td colspan="4" class="text-center text-muted py-4">No product profiles found matching active search criteria.</td>
@@ -149,7 +225,7 @@
                     <div class="p-3 bg-secondary border-top border-secondary text-end rounded-bottom">
                         <button type="button" class="btn btn-outline-light fw-bold me-2" onclick="resetClosingFormMatrixFields()">Clear Inputs</button>
                         <button type="button" class="btn btn-success fw-bold px-4" onclick="triggerSecurityModalCheck()">
-                            💰 Sync & Deduct Inventory
+                            Sync & Deduct Inventory
                         </button>
                     </div>
                 </form>
@@ -159,7 +235,7 @@
 
     <div class="col-md-6">
         <div class="card border-secondary bg-dark text-white shadow-sm">
-            <div class="card-header bg-secondary text-white fw-bold">📋 Historical Sales Audit Ledger</div>
+            <div class="card-header bg-secondary text-white fw-bold">Historical Sales Audit Ledger</div>
             <div class="card-body p-2" style="max-height: 65vh; overflow-y: auto;">
                 
                 <div class="accordion" id="ledgerMasterAccordion">
@@ -173,7 +249,7 @@
                                     data-bs-target="#ledgerCollapse{{ loop.index }}" 
                                     style="box-shadow: none;">
                                 <div class="d-flex justify-content-between w-100 pe-3 align-items-center">
-                                    <span class="text-white fw-bold font-monospace" style="font-size: 14px;">📅 Entry Date: {{ day.date }}</span>
+                                    <span class="text-white fw-bold font-monospace" style="font-size: 14px;">Entry Date: {{ day.date }}</span>
                                     <div>
                                         <span class="badge bg-dark border border-secondary text-light px-2 py-1 me-2 font-monospace" style="font-size: 11px;">
                                             {{ day.total_qty|int if day.total_qty % 1 == 0 else day.total_qty }} pcs
@@ -213,7 +289,7 @@
                                             </td>
                                             <td class="pe-3">
                                                 {% if sale.Reason %}
-                                                    <span class="text-warning small d-block" style="font-style: italic; line-height: 1.2;">💬 {{ sale.Reason }}</span>
+                                                    <span class="text-warning small d-block" style="font-style: italic; line-height: 1.2;">{{ sale.Reason }}</span>
                                                 {% else %}
                                                     <span class="text-muted small">—</span>
                                                 {% endif %}
@@ -236,12 +312,12 @@
 
 </div>
 
-<!-- Modals Remain Unchanged -->
+<!-- SECURITY & CONFIRMATION MODALS -->
 <div class="modal fade" id="confirmEodModal" tabindex="-1" aria-hidden="true">
     <div class="modal-dialog modal-dialog-centered">
         <div class="modal-content bg-dark text-white border border-secondary shadow-lg">
             <div class="modal-header border-secondary">
-                <h5 class="modal-title fw-bold text-warning">⚠️ Verify Inventory Synchronization</h5>
+                <h5 class="modal-title fw-bold text-warning">Verify Inventory Synchronization</h5>
                 <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
             <div class="modal-body p-3" style="background-color: #1e1e1e; font-size: 14px;">
@@ -263,11 +339,10 @@
     <div class="modal-dialog modal-dialog-centered">
         <div class="modal-content bg-dark text-white border border-danger shadow-lg">
             <div class="modal-header border-danger" style="background: linear-gradient(180deg, #dc3545 0%, #bd2130 100%);">
-                <h5 class="modal-title fw-bold text-white">🛑 SYSTEM SECURITY POLICY BLOCK</h5>
+                <h5 class="modal-title fw-bold text-white">SYSTEM SECURITY POLICY BLOCK</h5>
                 <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
             <div class="modal-body p-4 text-center" style="background-color: #1a1a1a;">
-                <div class="text-danger mb-2" style="font-size: 45px;">⚠️</div>
                 <h5 class="fw-bold text-white mb-2">Audit Explanation Notes Required</h5>
                 <p class="text-light mb-0" style="font-size: 14px; line-height: 1.5; color: #e0e0e0 !important;">
                     Audit entry correction notes are <strong class="text-danger">strictly mandatory</strong> whenever attempting backdated ledger submissions or applying negative quantity balancing updates.
@@ -295,6 +370,23 @@ function resetClosingFormMatrixFields() {
         input.value = '0';
     });
     document.getElementById('eodAuditNoteInput').style.border = "1px solid #3d3d3d";
+}
+
+function toggleParentVariants(index) {
+    const childRows = document.querySelectorAll('.child-group-' + index);
+    const caret = document.getElementById('caret-' + index);
+    
+    childRows.forEach(row => {
+        if (row.style.display === 'none' || row.style.display === '') {
+            row.style.display = 'table-row';
+        } else {
+            row.style.display = 'none';
+        }
+    });
+    
+    if (caret) {
+        caret.textContent = (caret.textContent.trim() === 'v') ? '^' : 'v';
+    }
 }
 
 function triggerSecurityModalCheck() {
@@ -327,7 +419,7 @@ function triggerSecurityModalCheck() {
 }
 
 // ==========================================
-// ⚡ LIVE CLIENT-SIDE FILTER & SORT ENGINE
+// LIVE CLIENT-SIDE FILTER & SORT ENGINE
 // ==========================================
 document.addEventListener("DOMContentLoaded", function() {
     const picker = document.getElementById('eodClosingDatePicker');
@@ -339,62 +431,110 @@ document.addEventListener("DOMContentLoaded", function() {
     const categorySelect = document.getElementById('liveCategorySelect');
     const sortSelect = document.getElementById('liveSortSelect');
     const orderSelect = document.getElementById('liveOrderSelect');
-    const tbody = document.getElementById('productTableBody');
-    let rows = Array.from(document.querySelectorAll('.product-row'));
 
     function applyFiltersAndSort() {
         const searchTerm = searchInput.value.toLowerCase().trim();
-        const category = categorySelect.value.toLowerCase();
-        const sortBy = sortSelect.value;
-        const order = orderSelect.value;
+        const selectedCategory = categorySelect.value.toLowerCase();
+        
+        const parentHeaderRows = document.querySelectorAll('.eod-parent-row');
+        const productRows = document.querySelectorAll('.product-row');
 
-        // 1. Filter Logic
-        let visibleCount = 0;
-        rows.forEach(row => {
-            const name = row.getAttribute('data-name').toLowerCase();
-            const id = row.getAttribute('data-id').toLowerCase();
-            const rowCategory = row.getAttribute('data-category').toLowerCase();
-            
-            const matchesSearch = name.includes(searchTerm) || id.includes(searchTerm);
-            const matchesCategory = category === 'all' || rowCategory === category;
+        if (searchTerm !== "") {
+            parentHeaderRows.forEach(parentRow => {
+                const pIndex = parentRow.getAttribute('data-parent-index');
+                const parentName = parentRow.getAttribute('data-parent-name') || '';
+                const childRows = document.querySelectorAll('.child-group-' + pIndex);
+                
+                let parentMatches = parentName.includes(searchTerm);
+                let childMatches = false;
 
-            if (matchesSearch && matchesCategory) {
-                row.style.display = '';
-                visibleCount++;
-            } else {
-                row.style.display = 'none';
-            }
-        });
+                childRows.forEach(child => {
+                    const cName = child.getAttribute('data-name') || '';
+                    const cFullName = child.getAttribute('data-full-name') || '';
+                    const cId = child.getAttribute('data-id') || '';
+                    const cCat = child.getAttribute('data-category') || '';
 
-        // 2. Sort Logic
-        const visibleRows = rows.filter(row => row.style.display !== 'none');
-        visibleRows.sort((a, b) => {
-            let valA, valB;
-            if (sortBy === 'name') {
-                valA = a.getAttribute('data-name').toLowerCase();
-                valB = b.getAttribute('data-name').toLowerCase();
-            } else {
-                valA = parseFloat(a.getAttribute('data-price'));
-                valB = parseFloat(b.getAttribute('data-price'));
-            }
+                    const matchesSearch = cName.includes(searchTerm) || cFullName.includes(searchTerm) || cId.includes(searchTerm) || parentName.includes(searchTerm);
+                    const matchesCategory = (selectedCategory === 'all' || cCat === selectedCategory);
 
-            if (valA < valB) return order === 'asc' ? -1 : 1;
-            if (valA > valB) return order === 'asc' ? 1 : -1;
-            return 0;
-        });
+                    if (matchesSearch && matchesCategory) {
+                        child.style.display = 'table-row';
+                        childMatches = true;
+                    } else {
+                        child.style.display = 'none';
+                    }
+                });
 
-        // Re-append to DOM in correct sorted order without breaking form values
-        visibleRows.forEach(row => tbody.appendChild(row));
+                if (parentMatches || childMatches) {
+                    parentRow.style.display = 'table-row';
+                    const caret = document.getElementById('caret-' + pIndex);
+                    if (caret) caret.textContent = '^';
+                } else {
+                    parentRow.style.display = 'none';
+                }
+            });
+
+            productRows.forEach(row => {
+                if (!row.getAttribute('data-parent-index')) {
+                    const name = row.getAttribute('data-name') || '';
+                    const fullName = row.getAttribute('data-full-name') || '';
+                    const id = row.getAttribute('data-id') || '';
+                    const cat = row.getAttribute('data-category') || '';
+
+                    const matchesSearch = name.includes(searchTerm) || fullName.includes(searchTerm) || id.includes(searchTerm);
+                    const matchesCategory = (selectedCategory === 'all' || cat === selectedCategory);
+
+                    if (matchesSearch && matchesCategory) {
+                        row.style.display = 'table-row';
+                    } else {
+                        row.style.display = 'none';
+                    }
+                }
+            });
+
+        } else {
+            parentHeaderRows.forEach(parentRow => {
+                const pIndex = parentRow.getAttribute('data-parent-index');
+                const childRows = document.querySelectorAll('.child-group-' + pIndex);
+                
+                let hasVisibleChildInCategory = false;
+                childRows.forEach(child => {
+                    child.style.display = 'none';
+                    const cCat = child.getAttribute('data-category') || '';
+                    if (selectedCategory === 'all' || cCat === selectedCategory) {
+                        hasVisibleChildInCategory = true;
+                    }
+                });
+
+                const caret = document.getElementById('caret-' + pIndex);
+                if (caret) caret.textContent = 'v';
+
+                if (hasVisibleChildInCategory) {
+                    parentRow.style.display = 'table-row';
+                } else {
+                    parentRow.style.display = 'none';
+                }
+            });
+
+            productRows.forEach(row => {
+                if (!row.getAttribute('data-parent-index')) {
+                    const cat = row.getAttribute('data-category') || '';
+                    if (selectedCategory === 'all' || cat === selectedCategory) {
+                        row.style.display = 'table-row';
+                    } else {
+                        row.style.display = 'none';
+                    }
+                }
+            });
+        }
     }
 
-    // Bind event listeners to trigger live update
     searchInput.addEventListener('keyup', applyFiltersAndSort);
     categorySelect.addEventListener('change', applyFiltersAndSort);
     sortSelect.addEventListener('change', applyFiltersAndSort);
     orderSelect.addEventListener('change', applyFiltersAndSort);
 });
 
-// Helper function to clear filters without reloading
 function clearLiveFilters() {
     document.getElementById('liveSearchInput').value = '';
     document.getElementById('liveCategorySelect').value = 'All';

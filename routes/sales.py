@@ -25,7 +25,7 @@ def web_sales_tab(username):
         chosen_date = request.form.get('sale_date', datetime.now().strftime("%Y-%m-%d")).strip()
         audit_note = request.form.get('audit_note', '').strip()
         
-        # ===== IRONCLAD BACKEND SECURITY ENFORCEMENT =====
+        # ===== BACKEND SECURITY ENFORCEMENT =====
         today_str = datetime.now().strftime("%Y-%m-%d")
         staff_role = session.get('staff_role', 'Staff')
         is_backdated = (chosen_date != today_str)
@@ -42,7 +42,7 @@ def web_sales_tab(username):
         for qty_str in quantities:
             if qty_str and float(qty_str) < 0:
                 return redirect(f"/portal/{username}/sales?error=Security Block: Negative quantities are not allowed on the standard EOD sheet. Voids must be processed through the Corrections module.")
-        # =================================================
+        # =========================================
         
         processed_count = 0
         blocked_items = []
@@ -90,7 +90,6 @@ def web_sales_tab(username):
             # Triggers inventory reduction
             stock_ok, stock_msg = client_db.update_inventory_from_sale(p_id, qty)
             if stock_ok:
-                # Atomic Direct SQL Insert (Prevents Database Lock/Hang)
                 try:
                     conn = sqlite3.connect(db_path, timeout=20.0)
                     cursor = conn.cursor()
@@ -154,7 +153,7 @@ def web_sales_tab(username):
     order = request.args.get('order', 'asc')
 
     categories = []
-    active_products_list = []
+    grouped_products = {}
     
     filtered_products_df = master_products_df.copy() if not master_products_df.empty else pd.DataFrame()
     
@@ -163,8 +162,11 @@ def web_sales_tab(username):
             categories = sorted([c for c in master_products_df['Category'].dropna().unique() if c])
             
         if search:
-            filtered_products_df = filtered_products_df[filtered_products_df['Product_Name'].str.lower().str.contains(search) | 
-                                                        filtered_products_df['Product_ID'].str.lower().str.contains(search)]
+            filtered_products_df = filtered_products_df[
+                filtered_products_df['Product_Name'].str.lower().str.contains(search) | 
+                filtered_products_df['Product_ID'].str.lower().str.contains(search) |
+                (filtered_products_df['Parent_Item'].fillna('').str.lower().str.contains(search) if 'Parent_Item' in filtered_products_df.columns else False)
+            ]
         if category != 'All':
             filtered_products_df = filtered_products_df[filtered_products_df['Category'] == category]
             
@@ -174,7 +176,21 @@ def web_sales_tab(username):
         elif sort_by == 'price':
             filtered_products_df = filtered_products_df.sort_values('Selling_Price', ascending=ascending)
 
-        active_products_list = filtered_products_df.to_dict(orient='records')
+        # Ensure Parent_Item and Variant_Name exist in the dataframe
+        if 'Parent_Item' not in filtered_products_df.columns:
+            filtered_products_df['Parent_Item'] = filtered_products_df['Product_Name']
+        if 'Variant_Name' not in filtered_products_df.columns:
+            filtered_products_df['Variant_Name'] = 'Regular'
+
+        for _, row in filtered_products_df.iterrows():
+            p_dict = row.to_dict()
+            parent_name = str(p_dict.get('Parent_Item') or p_dict.get('Product_Name') or 'Uncategorized').strip()
+            if not parent_name:
+                parent_name = str(p_dict.get('Product_Name', 'Unknown Product')).strip()
+            
+            if parent_name not in grouped_products:
+                grouped_products[parent_name] = []
+            grouped_products[parent_name].append(p_dict)
 
     grouped_history_list = []
     if not sales_df.empty:
@@ -226,7 +242,7 @@ def web_sales_tab(username):
     return render_template(
         'sales.html',
         username=username,
-        active_products=active_products_list,
+        grouped_products=grouped_products,
         categories=categories,
         sales_history=grouped_history_list,
         msg=feedback_msg,
