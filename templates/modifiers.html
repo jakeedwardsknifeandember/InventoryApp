@@ -35,17 +35,22 @@
         font-size: 12px !important;
         margin-bottom: 6px;
     }
-    .modal-content .form-control {
+    .modal-content .form-control,
+    .modal-content .form-select {
         color: #ffffff !important;
         background-color: #27272c !important;
         border: 1px solid #4a4a58 !important;
+    }
+    .modal-content .form-select option {
+        background-color: #27272c !important;
+        color: #ffffff !important;
     }
 </style>
 
 <div class="d-flex justify-content-between align-items-center mb-3">
     <div>
         <h3 class="m-0 text-white" style="font-weight: 800; text-transform: uppercase;">Modifiers Management</h3>
-        <small style="color: #cbd5e1;">Configure paid add-ons, milk options, and extra shots.</small>
+        <small style="color: #cbd5e1;">Configure paid add-ons, milk upgrades, extra shots, and map raw ingredient depletions.</small>
     </div>
     <button class="btn btn-primary fw-bold px-4 py-2" data-bs-toggle="modal" data-bs-target="#addModifierModal">+ Add Modifier</button>
 </div>
@@ -55,9 +60,10 @@
         <table class="loyverse-table align-middle m-0">
             <thead>
                 <tr>
-                    <th style="width: 20%;">ID</th>
-                    <th style="width: 45%;">MODIFIER NAME</th>
-                    <th style="width: 20%;">ADD-ON PRICE</th>
+                    <th style="width: 15%;">ID</th>
+                    <th style="width: 30%;">MODIFIER NAME</th>
+                    <th style="width: 25%;">RAW INGREDIENTS MAPPED</th>
+                    <th style="width: 15%;">ADD-ON PRICE</th>
                     <th class="text-end pe-4" style="width: 15%;">ACTIONS</th>
                 </tr>
             </thead>
@@ -66,18 +72,32 @@
                 <tr>
                     <td class="font-monospace text-info ps-3">{{ m.Modifier_ID }}</td>
                     <td class="fw-bold text-white">{{ m.Modifier_Name }}</td>
+                    <td>
+                        {% if m.Items %}
+                            <div class="d-flex flex-wrap gap-1">
+                                {% for item in m.Items %}
+                                    <span class="badge bg-dark border border-secondary text-light font-monospace" style="font-size: 11px;">
+                                        {{ item.Ingredient_Name }}: {{ item.Quantity }}{{ item.Unit }}
+                                    </span>
+                                {% endfor %}
+                            </div>
+                        {% else %}
+                            <span class="text-muted small" style="font-style: italic;">No ingredients mapped</span>
+                        {% endif %}
+                    </td>
                     <td class="font-monospace text-white fw-bold">PHP {{ "%.2f"|format(m.Price) }}</td>
                     <td class="text-end pe-4">
+                        <button class="btn btn-sm btn-info fw-bold me-1 px-2 py-1" style="font-size: 11px;" data-bs-toggle="modal" data-bs-target="#recipeModal{{ m.Modifier_ID }}">Recipe</button>
                         <form method="post" style="display: inline;" onsubmit="return confirm('Are you sure you want to delete this modifier?');">
                             <input type="hidden" name="action_type" value="delete_modifier">
                             <input type="hidden" name="modifier_id" value="{{ m.Modifier_ID }}">
-                            <button type="submit" class="btn btn-sm btn-danger fw-bold px-2 py-0" style="font-size: 11px;">Delete</button>
+                            <button type="submit" class="btn btn-sm btn-danger fw-bold px-2 py-1" style="font-size: 11px;">Delete</button>
                         </form>
                     </td>
                 </tr>
                 {% else %}
                 <tr>
-                    <td colspan="4" class="text-center py-5 text-muted">No modifiers created yet. Click + Add Modifier to start.</td>
+                    <td colspan="5" class="text-center py-5 text-muted">No modifiers created yet. Click + Add Modifier to start.</td>
                 </tr>
                 {% endfor %}
             </tbody>
@@ -109,5 +129,133 @@
         </div>
     </div>
 </div>
+
+<!-- EDIT MODIFIER INGREDIENT RECIPE MODALS -->
+{% for m in modifiers %}
+<div class="modal fade" id="recipeModal{{ m.Modifier_ID }}" tabindex="-1">
+    <div class="modal-dialog modal-lg modal-dialog-centered">
+        <div class="modal-content bg-dark text-white border-secondary shadow-lg" style="background-color: #1e1e24 !important;">
+            <form method="post">
+                <input type="hidden" name="action_type" value="save_modifier_recipe">
+                <input type="hidden" name="modifier_id" value="{{ m.Modifier_ID }}">
+                <div class="modal-header border-secondary" style="background-color: #151518;">
+                    <h5 class="modal-title fw-bold text-white">Map Ingredients for {{ m.Modifier_Name }}</h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body p-4">
+                    <p class="text-secondary small mb-3">Define the raw inventory depletions triggered every time this modifier is selected on the EOD sales worksheet.</p>
+
+                    {% if not ingredients %}
+                    <div class="alert alert-warning border-0 fw-bold mb-3" style="border-radius: 6px; font-size: 13px;">
+                        No raw ingredients found in inventory. Please add raw materials under the Ingredients tab first.
+                    </div>
+                    {% endif %}
+
+                    <div class="row text-secondary fw-bold mb-2 font-monospace" style="font-size: 11px;">
+                        <div class="col-5">RAW INGREDIENT</div>
+                        <div class="col-3">QTY REQUIRED</div>
+                        <div class="col-3">MEASUREMENT UNIT</div>
+                        <div class="col-1"></div>
+                    </div>
+
+                    <div id="modifierRecipeRows{{ m.Modifier_ID }}">
+                        {% for item in m.Items %}
+                        <div class="row mb-2 align-items-center">
+                            <div class="col-5">
+                                <select name="ingredient_id[]" class="form-select text-white border-secondary ingredient-selector-node" onchange="synchronizeRowMeasurementUnitOptions(this)" required>
+                                    <option value="" disabled>Select raw ingredient...</option>
+                                    {% for i in ingredients %}
+                                        <option value="{{ i.Ingredient_ID }}" data-native-unit="{{ i.Unit }}" {% if i.Ingredient_ID == item.Ingredient_ID %}selected{% endif %}>{{ i.Ingredient_Name }}</option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                            <div class="col-3">
+                                <input type="number" step="any" name="quantity[]" class="form-control text-white border-secondary fw-bold font-monospace" value="{{ item.Quantity }}" required>
+                            </div>
+                            <div class="col-3">
+                                <select name="unit[]" class="form-select text-white border-secondary unit-selector-node" required>
+                                    <option value="{{ item.Unit }}" selected>{{ item.Unit }}</option>
+                                </select>
+                            </div>
+                            <div class="col-1 text-center">
+                                <button type="button" class="btn btn-sm btn-danger fw-bold" onclick="this.parentElement.parentElement.remove()">X</button>
+                            </div>
+                        </div>
+                        {% endfor %}
+                    </div>
+                </div>
+                <div class="modal-footer border-secondary justify-content-between" style="background-color: #151518;">
+                    <button type="button" class="btn btn-info fw-bold" onclick="appendModifierIngredientInputRow('modifierRecipeRows{{ m.Modifier_ID }}')">+ Add Ingredient</button>
+                    <button type="submit" class="btn btn-success fw-bold px-4" {% if not ingredients %}disabled{% endif %}>Save Formula</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endfor %}
+
+<script>
+function synchronizeRowMeasurementUnitOptions(selectElement) {
+    const row = selectElement.parentElement.parentElement;
+    const activeOption = selectElement.options[selectElement.selectedIndex];
+    const nativeUnit = activeOption.getAttribute('data-native-unit') || 'pcs';
+    const unitDropdown = row.querySelector('.unit-selector-node');
+    
+    const previousSelectionValue = unitDropdown.value;
+    unitDropdown.innerHTML = '';
+    
+    if (nativeUnit === 'kg' || nativeUnit === 'g') {
+        unitDropdown.innerHTML = `<option value="kg">kg</option><option value="g">g</option>`;
+        unitDropdown.value = (previousSelectionValue === 'g' || previousSelectionValue === 'kg') ? previousSelectionValue : 'kg';
+    } else if (nativeUnit === 'L' || nativeUnit === 'ml') {
+        unitDropdown.innerHTML = `<option value="L">L</option><option value="ml">ml</option>`;
+        unitDropdown.value = (previousSelectionValue === 'ml' || previousSelectionValue === 'L') ? previousSelectionValue : 'L';
+    } else {
+        unitDropdown.innerHTML = `<option value="${nativeUnit}">${nativeUnit}</option>`;
+        unitDropdown.value = nativeUnit;
+    }
+}
+
+function appendModifierIngredientInputRow(containerElementId) {
+    const container = document.getElementById(containerElementId);
+    container.insertAdjacentHTML('beforeend', `
+        <div class="row mb-2 align-items-center">
+            <div class="col-5">
+                <select name="ingredient_id[]" class="form-select text-white border-secondary ingredient-selector-node" onchange="synchronizeRowMeasurementUnitOptions(this)" required>
+                    <option value="" disabled selected>Select raw ingredient...</option>
+                    {% for i in ingredients %}
+                    <option value="{{ i.Ingredient_ID }}" data-native-unit="{{ i.Unit }}">{{ i.Ingredient_Name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-3">
+                <input type="number" step="any" name="quantity[]" class="form-control text-white border-secondary fw-bold font-monospace" placeholder="0.00" required>
+            </div>
+            <div class="col-3">
+                <select name="unit[]" class="form-select text-white border-secondary unit-selector-node" required>
+                    <option value="" disabled selected>Unit...</option>
+                </select>
+            </div>
+            <div class="col-1 text-center">
+                <button type="button" class="btn btn-sm btn-danger fw-bold" onclick="this.parentElement.parentElement.remove()">X</button>
+            </div>
+        </div>`);
+}
+
+document.addEventListener("DOMContentLoaded", function() {
+    const selectors = document.querySelectorAll('.ingredient-selector-node');
+    selectors.forEach(sel => {
+        if (sel.value !== "") synchronizeRowMeasurementUnitOptions(sel);
+    });
+
+    {% for m in modifiers %}
+        {% if not m.Items %}
+            if (document.getElementById('modifierRecipeRows{{ m.Modifier_ID }}')) {
+                appendModifierIngredientInputRow('modifierRecipeRows{{ m.Modifier_ID }}');
+            }
+        {% endif %}
+    {% endfor %}
+});
+</script>
 
 {% endblock %}

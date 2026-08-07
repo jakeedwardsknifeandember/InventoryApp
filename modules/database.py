@@ -1,4 +1,4 @@
-# modules/database.py - FULL, RESTORED WEB SQLITE VERSION WITH CATEGORIES & MODIFIERS INTEGRATION
+# modules/database.py - FULL, RESTORED WEB SQLITE VERSION WITH CATEGORIES, MODIFIERS & MODIFIER RECIPES
 import pandas as pd
 import sqlite3
 import os
@@ -78,23 +78,20 @@ class InventoryDB:
             for tab_name, df in default_tabs.items():
                 if tab_name not in existing_tables:
                     df.to_sql(tab_name, conn, index=False, if_exists='replace')
-                    print(f"Added missing table: {tab_name}")
             
-            # SCHEMA MIGRATION 1: Ensure 'Ingredient_Type' exists inside existing databases safely
+            # SCHEMA MIGRATIONS
             cursor.execute("PRAGMA table_info(Ingredients);")
             columns = [row[1] for row in cursor.fetchall()]
             if 'Ingredient_Type' not in columns:
                 cursor.execute("ALTER TABLE Ingredients ADD COLUMN Ingredient_Type TEXT DEFAULT 'RAW';")
                 conn.commit()
 
-            # SCHEMA MIGRATION 2: Ensure 'Batch_Yield' column exists inside Prep_Recipes safely
             cursor.execute("PRAGMA table_info(Prep_Recipes);")
             prep_columns = [row[1] for row in cursor.fetchall()]
             if 'Batch_Yield' not in prep_columns:
                 cursor.execute("ALTER TABLE Prep_Recipes ADD COLUMN Batch_Yield REAL DEFAULT 1.0;")
                 conn.commit()
 
-            # SCHEMA MIGRATION 3: Ensure Parent-Child variant structure exists in Products safely
             cursor.execute("PRAGMA table_info(Products);")
             prod_columns = [row[1] for row in cursor.fetchall()]
             if 'Parent_Item' not in prod_columns:
@@ -102,7 +99,6 @@ class InventoryDB:
                 cursor.execute("ALTER TABLE Products ADD COLUMN Variant_Name TEXT DEFAULT 'Regular';")
                 conn.commit()
 
-            # SCHEMA MIGRATION 4: Auto-seed Categories table using distinct product categories
             cursor.execute("SELECT COUNT(*) FROM Categories;")
             cat_count = cursor.fetchone()[0]
             if cat_count == 0:
@@ -177,9 +173,114 @@ class InventoryDB:
             print(f"Error reading audit logs: {e}")
             return pd.DataFrame()
 
+    # ===== MODIFIER RECIPES ENGINE =====
+    def get_modifier_recipes(self, modifier_id):
+        mod_recipes_df = self.read_tab('Modifier_Recipes')
+        ingredients_df = self.read_tab('Ingredients')
+        
+        if mod_recipes_df.empty:
+            return pd.DataFrame()
+        
+        mod_items = mod_recipes_df[mod_recipes_df['Modifier_ID'] == modifier_id].copy()
+        if mod_items.empty:
+            return pd.DataFrame()
+            
+        if not ingredients_df.empty:
+            merged = pd.merge(mod_items, ingredients_df, left_on='Ingredient_ID', right_on='Ingredient_ID', how='left')
+            cols_to_return = ['Ingredient_ID', 'Ingredient_Name', 'Quantity_Required', 'Cost_Per_Unit']
+            if 'Unit_x' in merged.columns and 'Unit_y' in merged.columns:
+                merged['Unit'] = merged['Unit_x'].fillna(merged['Unit_y'])
+                cols_to_return.append('Unit')
+            elif 'Unit' in merged.columns:
+                cols_to_return.append('Unit')
+            return merged[cols_to_return]
+        return mod_items
+
+    def save_modifier_recipe(self, modifier_id, recipe_items, username="System"):
+        try:
+            mod_recipes_df = self.read_tab('Modifier_Recipes')
+            if not mod_recipes_df.empty:
+                mod_recipes_df = mod_recipes_df[mod_recipes_df['Modifier_ID'] != modifier_id]
+            
+            new_records = []
+            for item in recipe_items:
+                new_records.append({
+                    'Modifier_ID': modifier_id,
+                    'Ingredient_ID': item['ingredient_id'],
+                    'Quantity_Required': item['quantity'],
+                    'Unit': item.get('unit', '')
+                })
+            
+            new_df = pd.DataFrame(new_records)
+            mod_recipes_df = pd.concat([mod_recipes_df, new_df], ignore_index=True)
+            success = self.save_tab('Modifier_Recipes', mod_recipes_df)
+            
+            if success:
+                self.log_user_action(
+                    username=username,
+                    action_type="SAVE_MODIFIER_RECIPE",
+                    module="Modifiers",
+                    details=f"Saved recipe matrix for Modifier {modifier_id} ({len(recipe_items)} line components)"
+                )
+            return success
+        except Exception as e:
+            return False
+
+    def update_inventory_from_modifier_sale(self, modifier_id, quantity_sold, username="System"):
+        try:
+            mod_recipes = self.get_modifier_recipes(modifier_id)
+            if mod_recipes.empty:
+                return True, f"No ingredients mapped to modifier {modifier_id}"
+
+            inventory_df = self.read_tab('Ingredients')
+            if inventory_df.empty:
+                return False, "No ingredients in inventory"
+
+            deductions = []
+            insufficient_stock = []
+
+            for _, recipe_item in mod_recipes.iterrows():
+                ingredient_id = recipe_item['Ingredient_ID']
+                quantity_needed = float(recipe_item['Quantity_Required'] or 0.0)
+                total_needed = quantity_needed * float(quantity_sold)
+
+                ingredient_idx = inventory_df[inventory_df['Ingredient_ID'] == ingredient_id].index
+                if len(ingredient_idx) == 0:
+                    insufficient_stock.append(f"{recipe_item.get('Ingredient_Name', ingredient_id)}: not in inventory")
+                    continue
+
+                idx = ingredient_idx[0]
+                current_stock = float(inventory_df.at[idx, 'Current_Stock'] or 0.0)
+
+                if current_stock < total_needed:
+                    insufficient_stock.append(
+                        f"{recipe_item.get('Ingredient_Name', ingredient_id)}: need {total_needed}, have {current_stock}"
+                    )
+                else:
+                    deductions.append({
+                        'ingredient_id': ingredient_id,
+                        'ingredient_name': recipe_item.get('Ingredient_Name', ingredient_id),
+                        'deduction': total_needed,
+                        'old_stock': current_stock,
+                        'new_stock': current_stock - total_needed,
+                        'index': idx
+                    })
+
+            if insufficient_stock:
+                return False, f"Insufficient stock:\n" + "\n".join(insufficient_stock)
+
+            for deduction in deductions:
+                idx = deduction['index']
+                inventory_df.at[idx, 'Current_Stock'] = deduction['new_stock']
+
+            self.save_tab('Ingredients', inventory_df)
+            self.log_inventory_change(product_id=f"MOD:{modifier_id}", quantity_sold=quantity_sold, deductions=deductions)
+            return True, "Deducted modifier ingredients successfully"
+        except Exception as e:
+            return False, f"Error updating modifier inventory: {str(e)}"
+
     # ===== CATEGORY MANAGEMENT ENGINE =====
     def add_category(self, category_name, username="System"):
-        """Add a new category profile."""
         try:
             cats_df = self.read_tab('Categories')
             category_name = category_name.strip()
@@ -200,7 +301,6 @@ class InventoryDB:
             return False, f"Error adding category: {str(e)}"
 
     def update_category(self, category_id, new_name, username="System"):
-        """Update category name and sync all linked products."""
         try:
             cats_df = self.read_tab('Categories')
             prods_df = self.read_tab('Products')
@@ -214,7 +314,6 @@ class InventoryDB:
             cats_df.at[idx[0], 'Category_Name'] = new_name
             self.save_tab('Categories', cats_df)
             
-            # Sync product category labels automatically
             if not prods_df.empty and 'Category' in prods_df.columns:
                 prods_df.loc[prods_df['Category'] == old_name, 'Category'] = new_name
                 self.save_tab('Products', prods_df)
@@ -225,7 +324,6 @@ class InventoryDB:
             return False, f"Error updating category: {str(e)}"
 
     def delete_category(self, category_id, username="System"):
-        """Delete a category and reassign all assigned products to Uncategorized."""
         try:
             cats_df = self.read_tab('Categories')
             prods_df = self.read_tab('Products')
