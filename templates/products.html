@@ -10,7 +10,7 @@
 
 {% if error_msg %}
 <div class="alert alert-danger border-0 text-white fw-bold mb-3 shadow-sm" style="background-color: #dc3545; border-radius: 6px;">
-    ⚠️ Safety Notice: {{ error_msg }}
+    [NOTICE]: {{ error_msg }}
 </div>
 {% endif %}
 
@@ -57,13 +57,13 @@
         </div>
 
         <div class="col-md-auto ms-auto d-flex align-items-end">
-            <a href="/portal/{{ username }}/products" class="btn btn-secondary fw-bold px-4">🗑️ Clear Filters</a>
+            <a href="/portal/{{ username }}/products" class="btn btn-secondary fw-bold px-4">Clear Filters</a>
         </div>
     </form>
 </div>
 
 <div class="bg-light text-dark rounded px-3 py-2 mb-3 text-end" style="font-size: 14px; font-weight: bold;">
-    📊 Showing {{ total_count }} products • Sort: {{ current_sort|title }} ({{ current_order|title }})
+    Showing {{ total_count }} products • Sort: {{ current_sort|title }} ({{ current_order|title }})
 </div>
 
 <div class="content-card">
@@ -98,11 +98,11 @@
                     {% if p.Selling_Price <= 0 or p.Cost_Price <= 0 %}
                         <span class="badge bg-secondary px-2 py-1">No Recipe Set</span>
                     {% elif p.Food_Cost_Pct <= 30.0 %}
-                        <span class="badge bg-success px-2 py-1">🟢 {{ "%.1f"|format(p.Food_Cost_Pct) }}% (Healthy)</span>
+                        <span class="badge bg-success px-2 py-1">{{ "%.1f"|format(p.Food_Cost_Pct) }}% (Healthy)</span>
                     {% elif p.Food_Cost_Pct <= 35.0 %}
-                        <span class="badge bg-warning text-dark px-2 py-1">🟡 {{ "%.1f"|format(p.Food_Cost_Pct) }}% (Caution)</span>
+                        <span class="badge bg-warning text-dark px-2 py-1">{{ "%.1f"|format(p.Food_Cost_Pct) }}% (Caution)</span>
                     {% else %}
-                        <span class="badge bg-danger px-2 py-1">🔴 {{ "%.1f"|format(p.Food_Cost_Pct) }}% (High Risk)</span>
+                        <span class="badge bg-danger px-2 py-1">{{ "%.1f"|format(p.Food_Cost_Pct) }}% (High Risk)</span>
                     {% endif %}
                 </td>
                 <td class="text-center">
@@ -113,13 +113,13 @@
                     {% endif %}
                 </td>
                 <td class="text-end">
-                    <a href="/portal/{{ username }}/recipes?product_id={{ p.Product_ID }}" class="btn btn-sm btn-info text-white fw-bold me-1">📝 Recipe</a>
-                    <button class="btn btn-sm btn-primary fw-bold me-1" data-bs-toggle="modal" data-bs-target="#editModal{{ p.Product_ID }}">✏️ Edit</button>
+                    <a href="/portal/{{ username }}/recipes?product_id={{ p.Product_ID }}" class="btn btn-sm btn-info text-white fw-bold me-1">Recipe</a>
+                    <button class="btn btn-sm btn-primary fw-bold me-1" data-bs-toggle="modal" data-bs-target="#editModal{{ p.Product_ID }}">Edit</button>
                     
                     <form method="post" style="display: inline;" onsubmit="return confirm('Are you sure you want to completely delete {{ p.Product_Name }}? This action cannot be undone.');">
                         <input type="hidden" name="action_type" value="delete_product">
                         <input type="hidden" name="product_id" value="{{ p.Product_ID }}">
-                        <button type="submit" class="btn btn-sm btn-danger fw-bold">🗑️ Delete</button>
+                        <button type="submit" class="btn btn-sm btn-danger fw-bold">Delete</button>
                     </form>
                 </td>
             </tr>
@@ -145,7 +145,7 @@
                         <div class="col-md-6 border-end border-secondary pe-3">
                             <label class="form-label">Name:</label>
                             <input type="text" id="addProductNameInput" name="name" class="form-control bg-secondary text-white border-0 mb-1" oninput="checkDuplicateProductNameAdd(this)" required autocomplete="off">
-                            <div id="addProductNameErrorMsg" class="mb-3" style="display: none; color: #ff4d4d; font-size: 13px; font-weight: bold;">⚠️ This product name already exists in your system.</div>
+                            <div id="addProductNameErrorMsg" class="mb-3" style="display: none; color: #ff4d4d; font-size: 13px; font-weight: bold;">[ERROR] This product name already exists in your system.</div>
                             
                             <label class="form-label">Category:</label>
                             <div class="input-group mb-2">
@@ -155,13 +155,13 @@
                                     <option value="{{ c }}">{{ c }}</option>
                                     {% endfor %}
                                 </select>
-                                <button class="btn btn-primary fw-bold px-3" type="button" title="Add New Category" onclick="showInlineCategoryInput('addInlineCategoryDiv')">＋</button>
+                                <button class="btn btn-primary fw-bold px-3" type="button" title="Add New Category" onclick="showInlineCategoryInput('addInlineCategoryDiv')">+</button>
                             </div>
                             
                             <div id="addInlineCategoryDiv" class="input-group mb-3 px-2 py-2 rounded shadow-sm" style="display: none; background-color: #1e1e1e; border: 1px solid #3d3d3d;">
                                 <input type="text" id="addInlineCategoryInput" class="form-control bg-dark text-white border-secondary" placeholder="Enter new category name..." autocomplete="off">
-                                <button class="btn btn-success fw-bold px-3" type="button" onclick="confirmInlineCategory('addCategorySelect', 'addInlineCategoryInput', 'addInlineCategoryDiv')">✔ Save</button>
-                                <button class="btn btn-secondary fw-bold px-2" type="button" onclick="hideInlineCategoryInput('addInlineCategoryDiv', 'addInlineCategoryInput')">✖</button>
+                                <button class="btn btn-success fw-bold px-3" type="button" onclick="confirmInlineCategory('addCategorySelect', 'addInlineCategoryInput', 'addInlineCategoryDiv')">Save</button>
+                                <button class="btn btn-secondary fw-bold px-2" type="button" onclick="hideInlineCategoryInput('addInlineCategoryDiv', 'addInlineCategoryInput')">X</button>
                             </div>
                             
                             <label class="form-label">Selling Price (₱):</label>
@@ -177,7 +177,7 @@
                         <!-- SIMULATOR WIDGET: ADD MODAL -->
                         <div class="col-md-6 ps-3">
                             <div class="p-3 rounded" style="background-color: #1a1a24; border: 1px solid #313244;">
-                                <h6 style="color: #60a5fa; font-weight: bold;" class="mb-2">💡 Target Pricing Calculator</h6>
+                                <h6 style="color: #60a5fa; font-weight: bold;" class="mb-2">Target Pricing Calculator</h6>
                                 <p style="font-size: 12px; color: #cbd5e1;" class="mb-3">Test selling prices based on estimated BOM cost and target food cost percentage before saving.</p>
 
                                 <label class="form-label" style="font-size: 12px; color: #cbd5e1;">Est. BOM Cost (₱):</label>
@@ -191,7 +191,7 @@
                                     <span id="addCalcResultPrice" style="font-size: 18px; font-weight: bold; color: #a6e3a1;">₱0.00</span>
                                 </div>
 
-                                <button type="button" class="btn btn-sm btn-outline-info w-100 fw-bold" onclick="applyAddSuggestedPrice()">✔ Apply Suggested Price</button>
+                                <button type="button" class="btn btn-sm btn-outline-info w-100 fw-bold" onclick="applyAddSuggestedPrice()">Apply Suggested Price</button>
                             </div>
                         </div>
                     </div>
@@ -221,7 +221,7 @@
                         <div class="col-md-6 border-end border-secondary pe-3">
                             <label class="form-label">Name:</label>
                             <input type="text" id="editProductNameInput{{ p.Product_ID }}" name="name" class="form-control bg-secondary text-white border-0 mb-1" value="{{ p.Product_Name }}" oninput="checkDuplicateProductNameEdit(this, '{{ p.Product_ID }}')" required autocomplete="off">
-                            <div id="editProductNameErrorMsg{{ p.Product_ID }}" class="mb-3" style="display: none; color: #ff4d4d; font-size: 13px; font-weight: bold;">⚠️ This name is already used on another active product profile.</div>
+                            <div id="editProductNameErrorMsg{{ p.Product_ID }}" class="mb-3" style="display: none; color: #ff4d4d; font-size: 13px; font-weight: bold;">[ERROR] This name is already used on another active product profile.</div>
                             
                             <label class="form-label">Category:</label>
                             <div class="input-group mb-2">
@@ -233,13 +233,13 @@
                                     <option value="{{ p.Category }}" selected>{{ p.Category }}</option>
                                     {% endif %}
                                 </select>
-                                <button class="btn btn-primary fw-bold px-3" type="button" title="Add New Category" onclick="showInlineCategoryInput('editInlineCategoryDiv{{ p.Product_ID }}')">＋</button>
+                                <button class="btn btn-primary fw-bold px-3" type="button" title="Add New Category" onclick="showInlineCategoryInput('editInlineCategoryDiv{{ p.Product_ID }}')">+</button>
                             </div>
                             
                             <div id="editInlineCategoryDiv{{ p.Product_ID }}" class="input-group mb-3 px-2 py-2 rounded shadow-sm" style="display: none; background-color: #1e1e1e; border: 1px solid #3d3d3d;">
                                 <input type="text" id="editInlineCategoryInput{{ p.Product_ID }}" class="form-control bg-dark text-white border-secondary" placeholder="Enter new category name..." autocomplete="off">
-                                <button class="btn btn-success fw-bold px-3" type="button" onclick="confirmInlineCategory('editCategorySelect{{ p.Product_ID }}', 'editInlineCategoryInput{{ p.Product_ID }}', 'editInlineCategoryDiv{{ p.Product_ID }}')">✔ Save</button>
-                                <button class="btn btn-secondary fw-bold px-2" type="button" onclick="hideInlineCategoryInput('editInlineCategoryDiv{{ p.Product_ID }}', 'editInlineCategoryInput{{ p.Product_ID }}')">✖</button>
+                                <button class="btn btn-success fw-bold px-3" type="button" onclick="confirmInlineCategory('editCategorySelect{{ p.Product_ID }}', 'editInlineCategoryInput{{ p.Product_ID }}', 'editInlineCategoryDiv{{ p.Product_ID }}')">Save</button>
+                                <button class="btn btn-secondary fw-bold px-2" type="button" onclick="hideInlineCategoryInput('editInlineCategoryDiv{{ p.Product_ID }}', 'editInlineCategoryInput{{ p.Product_ID }}')">X</button>
                             </div>
 
                             <label class="form-label">Selling Price (₱):</label>
@@ -255,7 +255,7 @@
                         <!-- SIMULATOR WIDGET: EDIT MODAL -->
                         <div class="col-md-6 ps-3">
                             <div class="p-3 rounded" style="background-color: #1a1a24; border: 1px solid #313244;">
-                                <h6 style="color: #60a5fa; font-weight: bold;" class="mb-2">💡 Target Pricing Calculator</h6>
+                                <h6 style="color: #60a5fa; font-weight: bold;" class="mb-2">Target Pricing Calculator</h6>
                                 <p style="font-size: 12px; color: #cbd5e1;" class="mb-2">Calculates recommended selling price using this product's live Recipe BOM cost.</p>
 
                                 <div class="p-2 rounded mb-3" style="background-color: #111118; border: 1px solid #313244;">
@@ -277,7 +277,7 @@
                                     </span>
                                 </div>
 
-                                <button type="button" class="btn btn-sm btn-outline-info w-100 fw-bold" onclick="applyEditSuggestedPrice('{{ p.Product_ID }}', {{ p.Cost_Price }})">✔ Apply Suggested Price</button>
+                                <button type="button" class="btn btn-sm btn-outline-info w-100 fw-bold" onclick="applyEditSuggestedPrice('{{ p.Product_ID }}', {{ p.Cost_Price }})">Apply Suggested Price</button>
                             </div>
                         </div>
                     </div>
@@ -372,7 +372,6 @@ function confirmInlineCategory(selectId, inputId, divId) {
     hideInlineCategoryInput(divId, inputId);
 }
 
-// ===== SMART PRICING CALCULATOR LOGIC =====
 function calcAddTargetPrice() {
     const bom = parseFloat(document.getElementById('addCalcBom').value) || 0;
     const targetPct = parseFloat(document.getElementById('addCalcTargetPct').value) || 0;
@@ -416,5 +415,4 @@ function applyEditSuggestedPrice(productId, bomCost) {
     }
 }
 </script>
-
 {% endblock %}

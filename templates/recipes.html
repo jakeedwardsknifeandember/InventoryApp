@@ -2,7 +2,7 @@
 
 {% block content %}
 <style>
-    /* 🔥 EXECUTIVE DARK-MODE MODAL FORMS CONTRAST RE-ENGINEERING */
+    /* EXECUTIVE DARK-MODE MODAL FORMS CONTRAST RE-ENGINEERING */
     .modal-content label {
         color: #e2e8f0 !important;
         font-weight: 700 !important;
@@ -20,7 +20,7 @@
         color: #71717a !important;
     }
     
-    /* 📋 NAVIGATION PILLS AND BUTTON OVERRIDES */
+    /* NAVIGATION PILLS AND BUTTON OVERRIDES */
     .nav-tabs .nav-link { color: #94a3b8; border: none; font-weight: 600; padding: 12px 20px; transition: all 0.2s ease; }
     .nav-tabs .nav-link:hover { color: #cbd5e1; background: #222226; border-radius: 6px 6px 0 0; }
     .nav-tabs .nav-link.active { color: #3b82f6 !important; background: #2b2b2b !important; border-bottom: 3px solid #3b82f6 !important; border-radius: 6px 6px 0 0; }
@@ -34,13 +34,13 @@
         </button>
     </div>
 
-    <!-- 🌟 TOP-LEVEL FUNCTIONAL SUB-TABS STRIP NAVIGATION -->
+    <!-- TOP-LEVEL FUNCTIONAL SUB-TABS STRIP NAVIGATION -->
     <ul class="nav nav-tabs border-bottom border-secondary mb-3">
         <li class="nav-item">
-            <a class="nav-link {% if current_tab == 'product' %}active{% endif %}" href="?tab=product">🍕 Product Recipes (Menu Items → Portions)</a>
+            <a class="nav-link {% if current_tab == 'product' %}active{% endif %}" href="?tab=product">Product Recipes (Menu Items → Portions)</a>
         </li>
         <li class="nav-item">
-            <a class="nav-link {% if current_tab == 'prep' %}active{% endif %}" href="?tab=prep">🍳 Kitchen Prep Recipes (Portions → Raw Materials)</a>
+            <a class="nav-link {% if current_tab == 'prep' %}active{% endif %}" href="?tab=prep">Kitchen Prep Recipes (Portions → Raw Materials)</a>
         </li>
     </ul>
 
@@ -111,14 +111,14 @@
                     {% for r in recipe_data %}
                     <div id="detail-card-{{ r['Product_ID'] }}" class="recipe-detail-summary-block" style="display: none;">
                         <div class="p-3 border-bottom border-secondary bg-secondary d-flex justify-content-between align-items-center">
-                            <h5 class="m-0 fw-bold">📊 Formula Overview: {{ r['Product_Name'] }}</h5>
+                            <h5 class="m-0 fw-bold">Formula Overview: {{ r['Product_Name'] }}</h5>
                             <div class="d-flex gap-2">
-                                <button class="btn btn-sm btn-primary fw-bold px-3" data-bs-toggle="modal" data-bs-target="#editModal{{ r['Product_ID'] }}">✏️ Edit Formula</button>
+                                <button class="btn btn-sm btn-primary fw-bold px-3" data-bs-toggle="modal" data-bs-target="#editModal{{ r['Product_ID'] }}">Edit Formula</button>
                                 <form method="post" class="d-inline" onsubmit="return confirm('Completely purge this recipe compilation matrix?');">
                                     <input type="hidden" name="action_type" value="delete_recipe">
                                     <input type="hidden" name="recipe_type" value="{{ current_tab }}">
                                     <input type="hidden" name="product_id" value="{{ r['Product_ID'] }}">
-                                    <button type="submit" class="btn btn-sm btn-danger fw-bold px-3">🗑️ Delete</button>
+                                    <button type="submit" class="btn btn-sm btn-danger fw-bold px-3">Delete</button>
                                 </form>
                             </div>
                         </div>
@@ -197,7 +197,7 @@
     </div>
 </div>
 
-<!-- 📦 ENTRY DIALOG WINDOW: BUILD FORMULAS -->
+<!-- ENTRY DIALOG WINDOW: BUILD FORMULAS -->
 <div class="modal fade" id="createRecipeModal" tabindex="-1">
     <div class="modal-dialog modal-lg">
         <div class="modal-content bg-dark text-white border border-secondary">
@@ -227,10 +227,10 @@
                         {% endif %}
                     </select>
 
-                    <!-- 🍳 FIELD ADDITION: DYNAMIC PROPORTIONAL DIVISOR FACTOR FOR SUB-BATCHES -->
+                    <!-- FIELD ADDITION: DYNAMIC PROPORTIONAL DIVISOR FACTOR FOR SUB-BATCHES -->
                     {% if current_tab == 'prep' %}
                     <div class="p-3 mb-4 rounded border border-info" style="background-color: #172554;">
-                        <label class="form-label fw-bold text-info" style="font-size:13px !important;">🎯 TOTAL BATCH OUTPUT YIELD VOLUME:</label>
+                        <label class="form-label fw-bold text-info" style="font-size:13px !important;">TOTAL BATCH OUTPUT YIELD VOLUME:</label>
                         <input type="number" step="any" name="batch_yield" class="form-control text-white fw-bold mb-1" style="background:#1e1e24;" value="1.0" min="0.001" required>
                         <small class="text-muted text-white-50 d-block" style="font-size:11px;">Type in how many single portions, servings, or mL this entire ingredient combination yields. The system automatically divides your total raw expense costs over this index to get your true per-unit cost.</small>
                     </div>
@@ -246,15 +246,15 @@
                     <div id="creationRecipeRowsDiv"></div>
                 </div>
                 <div class="modal-footer border-secondary justify-content-between">
-                    <button type="button" class="btn btn-info fw-bold" onclick="appendDynamicIngredientInputRow('creationRecipeRowsDiv')">＋ Add Ingredient Line</button>
-                    <button type="submit" class="btn btn-success fw-bold px-4">✔ Confirm Formula Data Entry</button>
+                    <button type="button" class="btn btn-info fw-bold" onclick="appendDynamicIngredientInputRow('creationRecipeRowsDiv')">+ Add Ingredient Line</button>
+                    <button type="submit" class="btn btn-success fw-bold px-4">Confirm Formula Data Entry</button>
                 </div>
             </form>
         </div>
     </div>
 </div>
 
-<!-- 📦 POPUP WORKSPACE MODAL: MANAGE AND UPDATE SPECIFICATION MATRIX ROWS -->
+<!-- POPUP WORKSPACE MODAL: MANAGE AND UPDATE SPECIFICATION MATRIX ROWS -->
 {% for r in recipe_data %}
 <div class="modal fade" id="editModal{{ r['Product_ID'] }}" tabindex="-1">
     <div class="modal-dialog modal-lg">
@@ -269,10 +269,10 @@
                 </div>
                 <div class="modal-body">
                     
-                    <!-- 🍳 FIELD ADDITION: DYNAMIC PROPORTIONAL DIVISOR FACTOR FOR EDITING SUB-BATCHES -->
+                    <!-- FIELD ADDITION: DYNAMIC PROPORTIONAL DIVISOR FACTOR FOR EDITING SUB-BATCHES -->
                     {% if current_tab == 'prep' %}
                     <div class="p-3 mb-4 rounded border border-info" style="background-color: #172554;">
-                        <label class="form-label fw-bold text-info" style="font-size:13px !important;">🎯 TOTAL BATCH OUTPUT YIELD VOLUME:</label>
+                        <label class="form-label fw-bold text-info" style="font-size:13px !important;">TOTAL BATCH OUTPUT YIELD VOLUME:</label>
                         <input type="number" step="any" name="batch_yield" class="form-control text-white fw-bold mb-1" style="background:#1e1e24;" value="{{ r['Batch_Yield'] }}" min="0.001" required>
                         <small class="text-muted text-white-50 d-block" style="font-size:11px;">Update how many portions, servings, or mL this recipe yields. Amortization formulas recalculate margins live upon submission.</small>
                     </div>
@@ -303,15 +303,15 @@
                                 </select>
                             </div>
                             <div class="col-1 text-center">
-                                <button type="button" class="btn btn-sm btn-danger fw-bold" onclick="this.parentElement.parentElement.remove()">✖</button>
+                                <button type="button" class="btn btn-sm btn-danger fw-bold" onclick="this.parentElement.parentElement.remove()">X</button>
                             </div>
                         </div>
                         {% endfor %}
                     </div>
                 </div>
                 <div class="modal-footer border-secondary justify-content-between">
-                    <button type="button" class="btn btn-info fw-bold" onclick="appendDynamicIngredientInputRow('recipeRows{{ r['Product_ID'] }}')">＋ Add Component Line</button>
-                    <button type="submit" class="btn btn-success fw-bold px-4">✔ Update Specification Changes</button>
+                    <button type="button" class="btn btn-info fw-bold" onclick="appendDynamicIngredientInputRow('recipeRows{{ r['Product_ID'] }}')">+ Add Component Line</button>
+                    <button type="submit" class="btn btn-success fw-bold px-4">Update Specification Changes</button>
                 </div>
             </form>
         </div>
@@ -361,7 +361,7 @@ function appendDynamicIngredientInputRow(containerElementId) {
                 </select>
             </div>
             <div class="col-1 text-center">
-                <button type="button" class="btn btn-sm btn-danger fw-bold" onclick="this.parentElement.parentElement.remove()">✖</button>
+                <button type="button" class="btn btn-sm btn-danger fw-bold" onclick="this.parentElement.parentElement.remove()">X</button>
             </div>
         </div>`);
 }
@@ -419,9 +419,23 @@ document.addEventListener("DOMContentLoaded", function() {
         if(sel.value !== "") synchronizeRowMeasurementUnitOptions(sel);
     });
     
-    const firstButton = document.querySelector('.item-nav-action-block');
-    if (firstButton) {
-        firstButton.click();
+    // Core Logic for URL Parameter Deep-Linking Handoff
+    const urlParams = new URLSearchParams(window.location.search);
+    const targetProductId = urlParams.get('product_id');
+
+    let buttonToClick = null;
+
+    if (targetProductId) {
+        buttonToClick = document.getElementById('btn-nav-' + targetProductId);
+    }
+
+    if (!buttonToClick) {
+        buttonToClick = document.querySelector('.item-nav-action-block');
+    }
+
+    if (buttonToClick) {
+        buttonToClick.click();
+        buttonToClick.scrollIntoView({ behavior: 'smooth', block: 'center' });
     }
 });
 </script>
