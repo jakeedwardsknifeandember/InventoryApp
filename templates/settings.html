@@ -2,7 +2,6 @@
 {% block content %}
 
 <style>
-    /* Specific Page Styles for Account Security & Provisioning Matrix */
     .module-headline { font-size: 26px; font-weight: bold; margin-bottom: 5px; text-align: left; color: #fff; }
     .module-subtitle { font-size: 13px; color: #a1a1aa; margin-bottom: 25px; text-align: left; }
     
@@ -60,7 +59,7 @@
 
 <div class="settings-grid">
     <div class="settings-card">
-        <h3 class="card-title" style="color:#3b8ed0;">📋 SaaS Profile Parameters</h3>
+        <h3 class="card-title" style="color:#3b8ed0;">SaaS Profile Parameters</h3>
         <p style="font-size:14px; margin:12px 0; color:#aaa;">Active Tenant Account: <b style="color:#fff;">{{ username|capitalize }}</b></p>
         <p style="font-size:14px; margin:12px 0; color:#aaa;">System Deployment: <b style="color:#fff;">Knife & Ember Web SaaS v1.2</b></p>
         <p style="font-size:14px; margin:12px 0; color:#aaa;">Assigned Database Driver: <b style="color:#a6e3a1;">data/client_{{ username }}.db</b></p>
@@ -68,7 +67,7 @@
     </div>
     
     <div class="settings-card">
-        <h3 class="card-title" style="color:#ff6b6b;">🔒 Change Portal Password</h3>
+        <h3 class="card-title" style="color:#ff6b6b;">Change Portal Password</h3>
         <form method="post">
             <input type="hidden" name="action_type" value="change_password">
             <label>Current Master Password:</label>
@@ -77,14 +76,14 @@
             <label>New Secure Password:</label>
             <input type="password" name="new_password" required placeholder="Minimum 8 characters recommended...">
             
-            <input type="submit" value="🔒 Commit Security Update" class="action-btn btn-blue" style="width:100%;">
+            <input type="submit" value="Commit Security Update" class="action-btn btn-blue" style="width:100%;">
         </form>
     </div>
 </div>
 
 <div class="settings-card" style="max-width:100%; margin-bottom:30px;">
     <div style="display:flex; justify-content:between; align-items:center; border-bottom:1px solid #313244; padding-bottom:15px; margin-bottom:15px;">
-        <h3 class="card-title" style="color:#a6e3a1; margin:0;">👥 Team Access Directory (RBAC)</h3>
+        <h3 class="card-title" style="color:#a6e3a1; margin:0;">Team Access Directory (RBAC)</h3>
         <div style="margin-left:auto; font-size:13px; color:#aaa;">Isolated Security Enclave Active</div>
     </div>
 
@@ -107,7 +106,7 @@
                     <option value="Platform Owner Admin">Platform Owner (Full Access Override)</option>
                 </select>
                 
-                <input type="submit" value="✔ Generate Team Token" class="action-btn btn-green" style="width:100%;">
+                <input type="submit" value="Generate Team Token" class="action-btn btn-green" style="width:100%;">
             </form>
         </div>
 
@@ -147,7 +146,7 @@
                     </tr>
                     {% else %}
                     <tr>
-                        <td colspan="4" style="text-align:center; color:#666; padding:30px 0;">No team sub-accounts provisioned for this cafe location yet. Create an account on the left.</td>
+                        <td colspan="4" style="text-align:center; color:#666; padding:30px 0;">No team sub-accounts provisioned for this location yet. Create an account on the left.</td>
                     </tr>
                     {% endfor %}
                 </tbody>
@@ -157,28 +156,79 @@
 </div>
 
 <div class="settings-grid">
+    <div class="settings-card" style="border-color: #3b8ed0;">
+        <h3 class="card-title" style="color:#3b8ed0;">Bulk CSV Data Sync</h3>
+        <p style="font-size:13px; color:#a1a1aa; line-height:1.5; margin-bottom:15px;">Download perfectly mapped templates, export current records, or upload a formatted CSV to rapidly onboard or mass-edit your catalogs.</p>
+        
+        <div style="display:flex; gap:10px; margin-bottom: 15px;">
+            <form method="post" style="flex:1;">
+                <input type="hidden" name="action_type" value="download_template">
+                <input type="hidden" name="template_type" value="ingredients">
+                <button type="submit" class="action-btn" style="width:100%; font-size:11px; background:#4b5563;">Ingredient Template</button>
+            </form>
+            <form method="post" style="flex:1;">
+                <input type="hidden" name="action_type" value="download_template">
+                <input type="hidden" name="template_type" value="products">
+                <button type="submit" class="action-btn" style="width:100%; font-size:11px; background:#4b5563;">Product Template</button>
+            </form>
+        </div>
+        
+        <div style="display:flex; gap:10px; margin-bottom: 20px; border-bottom: 1px dashed #3f3f46; padding-bottom: 15px;">
+            <form method="post" style="flex:1;">
+                <input type="hidden" name="action_type" value="export_csv">
+                <input type="hidden" name="export_target" value="ingredients">
+                <button type="submit" class="action-btn btn-blue" style="width:100%; font-size:11px;">Export Ingredients</button>
+            </form>
+            <form method="post" style="flex:1;">
+                <input type="hidden" name="action_type" value="export_csv">
+                <input type="hidden" name="export_target" value="products">
+                <button type="submit" class="action-btn btn-blue" style="width:100%; font-size:11px;">Export Products</button>
+            </form>
+        </div>
+
+        <form method="post" enctype="multipart/form-data">
+            <input type="hidden" name="action_type" value="bulk_import">
+            
+            <label>Select Destination Table to Import:</label>
+            <select name="import_target" required style="margin-bottom: 12px;">
+                <option value="ingredients">Ingredients Database</option>
+                <option value="products">Products & Menu Items</option>
+            </select>
+            
+            <label>Attach Completed CSV File:</label>
+            <input type="file" name="csv_file" accept=".csv" required style="background: #161622; border: 1px solid #3f3f46; color: #fff; padding: 8px; width: 100%; border-radius: 4px; margin-bottom: 15px; font-size: 12.5px;">
+            
+            <button type="submit" class="action-btn btn-green" style="width:100%;">Execute Bulk Import</button>
+        </form>
+        
+        <div style="margin-top: 15px; padding-top: 15px; border-top: 1px dashed #3f3f46;">
+            <p style="font-size: 12px; color: #cbd5e1; font-weight: bold; margin-bottom: 5px;">Formatting Instructions:</p>
+            <p style="font-size: 11px; color: #a1a1aa; margin-bottom: 5px;">Use the templates provided above to guarantee column alignment. To add entirely new items, leave the ID column blank. To bulk update existing items, keep the ID intact in your spreadsheet.</p>
+        </div>
+    </div>
+
     <div class="settings-card" style="border-color: #22c55e;">
-        <h3 class="card-title" style="color:#22c55e;">📥 Core Data Portability Vault</h3>
-        <p style="font-size:13px; color:#a1a1aa; line-height:1.5; margin-bottom:15px;">Export structural snapshots to your desktop or re-upload a previous `.db` file to completely roll back records.</p>
+        <h3 class="card-title" style="color:#22c55e;">Core Data Portability Vault</h3>
+        <p style="font-size:13px; color:#a1a1aa; line-height:1.5; margin-bottom:15px;">Export structural snapshots to your desktop or re-upload a previous .db file to completely roll back records.</p>
         
         <form method="post" style="margin-bottom: 20px; border-bottom: 1px dashed #3f3f46; padding-bottom: 15px;">
             <input type="hidden" name="action_type" value="backup_database">
-            <button type="submit" class="action-btn btn-green" style="width:100%;">📥 Download Active Database Backup (.db)</button>
+            <button type="submit" class="action-btn btn-green" style="width:100%;">Download Active Database Backup (.db)</button>
         </form>
 
-        <form method="post" enctype="multipart/form-data" onsubmit="return confirm('CRITICAL Restoration Notice: Uploading a file will completely overwrite your store\'s active configuration state. This action cannot be reversed! Proceed?');">
+        <form method="post" enctype="multipart/form-data" onsubmit="return confirm('CRITICAL Restoration Notice: Uploading a file will completely overwrite your store active configuration state. This action cannot be reversed. Proceed?');">
             <input type="hidden" name="action_type" value="restore_database">
             <label>Select a previously saved backup file:</label>
             <input type="file" name="backup_file" accept=".db" required style="background: #161622; border: 1px solid #3f3f46; color: #fff; padding: 8px; width: 100%; border-radius: 4px; margin-bottom: 12px; font-size: 12.5px;">
-            <button type="submit" class="action-btn btn-blue" style="width:100%;">♻️ Upload & Hot-Swap Active Database</button>
+            <button type="submit" class="action-btn btn-green" style="width:100%;">Upload & Hot-Swap Active Database</button>
         </form>
     </div>
 
     <div class="settings-card" style="border-color: #ef4444;">
-        <h3 class="card-title" style="color:#ef4444;">⚠️ Selective Targeted System Reset</h3>
+        <h3 class="card-title" style="color:#ef4444;">Selective Targeted System Reset</h3>
         <p style="font-size:13px; color:#a1a1aa; line-height:1.5; margin-bottom:15px;">Configure your maintenance footprint below. Select exactly which historical structures to truncate. Unchecked modules will remain safely preserved in the database.</p>
         
-        <form method="post" onsubmit="return confirm('CRITICAL MAINTENANCE CONFIRMATION: You are about to permanently delete rows inside all checked categories below. This action completely flushes raw data files and cannot be undone! Proceed?');">
+        <form method="post" onsubmit="return confirm('CRITICAL MAINTENANCE CONFIRMATION: You are about to permanently delete rows inside all checked categories below. This action completely flushes raw data files and cannot be undone. Proceed?');">
             <input type="hidden" name="action_type" value="reset_database">
             
             <div style="margin-bottom: 20px;">
@@ -203,7 +253,7 @@
             <label style="color:#f87171; margin-top:15px;">Type 'RESET' inside the confirmation field below to execute:</label>
             <input type="text" name="secure_reset_token" required placeholder="Type RESET in all caps..." autocomplete="off" style="border-color:#ef444444; background:#181824;">
             
-            <button type="submit" class="action-btn btn-danger" style="width:100%; padding:12px; letter-spacing:0.3px;">💥 Execute Selected Maintenance Sweep</button>
+            <button type="submit" class="action-btn btn-danger" style="width:100%; padding:12px; letter-spacing:0.3px;">Execute Selected Maintenance Sweep</button>
         </form>
     </div>
 </div>

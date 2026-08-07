@@ -27,23 +27,28 @@ def web_sales_tab(username):
         
         # ===== IRONCLAD BACKEND SECURITY ENFORCEMENT =====
         today_str = datetime.now().strftime("%Y-%m-%d")
+        staff_role = session.get('staff_role', 'Staff')
         is_backdated = (chosen_date != today_str)
         
-        has_negative = False
+        # 1. Role-Based Date Locking
+        if is_backdated and staff_role not in ['Platform Owner Admin', 'Store Manager']:
+            return redirect(f"/portal/{username}/sales?error=Security Block: Only Managers and Admins are authorized to submit backdated ledger entries.")
+            
+        # 2. Enforce Audit Notes for Backdating
+        if is_backdated and not audit_note:
+            return redirect(f"/portal/{username}/sales?error=Security Policy Violation: Audit entry notes are strictly mandatory for backdated adjustments.")
+            
+        # 3. Strict Positivity (No Negative Inputs Allowed)
         for qty_str in quantities:
             if qty_str and float(qty_str) < 0:
-                has_negative = True
-                break
-                
-        if (is_backdated or has_negative) and not audit_note:
-            return redirect(f"/portal/{username}/sales?error=Security Policy Violation: Audit entry notes are strictly mandatory for backdated adjustments or negative entries.")
+                return redirect(f"/portal/{username}/sales?error=Security Block: Negative quantities are not allowed on the standard EOD sheet. Voids must be processed through the Corrections module.")
         # =================================================
         
         processed_count = 0
         blocked_items = []
         products_df = client_db.get_all_products()
         
-        # Ensure Unit_Cost and Entry_Reason columns exist in SQLite schema dynamically
+        # Ensure Unit_Cost, Entry_Reason, and System_Timestamp columns exist in SQLite schema dynamically
         try:
             conn = sqlite3.connect(db_path, timeout=20.0)
             cursor = conn.cursor()
@@ -53,6 +58,8 @@ def web_sales_tab(username):
                 cursor.execute("ALTER TABLE Sales ADD COLUMN Unit_Cost REAL DEFAULT 0.0;")
             if 'Entry_Reason' not in sales_cols:
                 cursor.execute("ALTER TABLE Sales ADD COLUMN Entry_Reason TEXT DEFAULT '';")
+            if 'System_Timestamp' not in sales_cols:
+                cursor.execute("ALTER TABLE Sales ADD COLUMN System_Timestamp TEXT DEFAULT '';")
             conn.commit()
             conn.close()
         except Exception as e:
@@ -92,11 +99,12 @@ def web_sales_tab(username):
                     sale_id = f"SALE{sale_count + 1:04d}"
                     total_amt = qty * unit_price
                     sale_time = datetime.now().strftime("%H:%M:%S")
+                    system_time_exact = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
                     cursor.execute("""
-                        INSERT INTO Sales (Sale_ID, Product_ID, Quantity, Sale_Date, Sale_Time, Total_Amount, Unit_Cost, Entry_Reason)
-                        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-                    """, (sale_id, p_id, qty, chosen_date, sale_time, total_amt, unit_cost, audit_note))
+                        INSERT INTO Sales (Sale_ID, Product_ID, Quantity, Sale_Date, Sale_Time, Total_Amount, Unit_Cost, Entry_Reason, System_Timestamp)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """, (sale_id, p_id, qty, chosen_date, sale_time, total_amt, unit_cost, audit_note, system_time_exact))
                     conn.commit()
                     conn.close()
                     processed_count += 1

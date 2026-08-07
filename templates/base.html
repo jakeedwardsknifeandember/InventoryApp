@@ -223,6 +223,10 @@
             <a href="/portal/{{ username }}/sales" class="{{ 'active' if 'sales' in request.path else '' }}" title="Sales">
                 <span class="nav-icon">💰</span> <span class="nav-text">Sales</span>
             </a>
+            <!-- NEW: Corrections & Voids Tab -->
+            <a href="/portal/{{ username }}/corrections" class="{{ 'active' if 'corrections' in request.path else '' }}" title="Corrections">
+                <span class="nav-icon">🛑</span> <span class="nav-text">Corrections</span>
+            </a>
         {% endif %}
         
         <!-- INVENTORY: Open to everyone (Owners, Managers, and Kitchen Crew) -->
