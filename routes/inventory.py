@@ -37,7 +37,7 @@ def web_inventory_tab(username):
             ingredients_df['Ingredient_ID'] = ingredients_df['Ingredient_ID'].astype(str)
             ingredients_df['Current_Stock'] = pd.to_numeric(ingredients_df['Current_Stock'], errors='coerce').fillna(0.0)
 
-            # 1. PROCESS SUPPLY DELIVERIES (WITH WEIGHTED AVERAGE COSTING)
+            # 1. PROCESS SUPPLY DELIVERIES
             if action == 'receive_stock':
                 ing_ids = request.form.getlist('ingredient_id[]')
                 quantities = request.form.getlist('quantity[]')
@@ -68,7 +68,6 @@ def web_inventory_tab(username):
                     if not q_val or float(q_val or 0) <= 0: continue
                     qty = float(q_val)
                     
-                    # TRUE RECEIPT LOGIC: Treat p_val as Total Receipt Amount, derive unit cost dynamically
                     total_line_cost = float(p_val or 0.0)
                     incoming_unit_price = total_line_cost / qty if qty > 0 else 0.0
                     
@@ -94,7 +93,7 @@ def web_inventory_tab(username):
                         total_delivery_expense += total_line_cost
                         
                         display_qty = int(qty) if qty % 1 == 0 else qty
-                        item_summaries.append(f"{display_qty:,}x {ing_name} (Total: P{total_line_cost:,.2f})")
+                        item_summaries.append(f"{display_qty:,}x {ing_name} (Total: PHP {total_line_cost:,.2f})")
                         
                         new_row = {
                             'Audit_ID': f"RCV{datetime.now().strftime('%M%S')}{logged_count}",
@@ -103,7 +102,7 @@ def web_inventory_tab(username):
                             'Theoretical': current_stock_bal,
                             'Physical': current_stock_bal + qty,
                             'Variance': qty,
-                            'Notes': f"Intake Cost: P{incoming_unit_price:,.2f}/unit | {meta_notes}"
+                            'Notes': f"Intake Cost: PHP {incoming_unit_price:,.2f}/unit | {meta_notes}"
                         }
                         audit_ledger_df = pd.concat([audit_ledger_df, pd.DataFrame([new_row])], ignore_index=True)
                         logged_count += 1
@@ -124,7 +123,7 @@ def web_inventory_tab(username):
                             'Notes': f"Auto-weighted cost matrix recalculated cleanly via column handle: {cost_price_col}."
                         })
                     
-                    feedback_msg = f"Success: Processed delivery for {logged_count} items from supplier: {supplier}. Financial invoice total of P{total_delivery_expense:,.2f} pushed to accounting."
+                    feedback_msg = f"Success: Processed delivery for {logged_count} items from supplier: {supplier}. Financial invoice total of PHP {total_delivery_expense:,.2f} pushed to accounting."
                     alert_type = "success"
 
             # 2. PROCESS KITCHEN PRODUCTION PREP LOGS
@@ -229,7 +228,7 @@ def web_inventory_tab(username):
                     feedback_msg = f"Kitchen Prep Logged: Converted warehouse elements into {total_yield_produced:g} units of {target_name} ({int(prep_batches) if prep_batches % 1 == 0 else prep_batches} batch/es) successfully."
                     alert_type = "success"
 
-            # 3. PROCESS ENHANCED BIFURCATED WASTE ENGINE (WITH FRACTIONAL SUPPORT)
+            # 3. PROCESS ENHANCED BIFURCATED WASTE ENGINE
             elif action == 'log_waste':
                 waste_target = request.form.get('waste_target_type')
                 wasted_by = request.form.get('wasted_by', '').strip()
@@ -321,6 +320,7 @@ def web_inventory_tab(username):
             elif action == 'reconcile_stock':
                 ing_ids = request.form.getlist('ingredient_id[]')
                 quantities = request.form.getlist('quantity[]')
+                variance_reasons = request.form.getlist('variance_reason[]')
                 reconcile_by = request.form.get('reconcile_by', '').strip()
                 reconcile_reason = request.form.get('reconcile_reason', '').strip()
                 
@@ -330,7 +330,7 @@ def web_inventory_tab(username):
                 meta_notes = f"Physical Count by {reconcile_by} ({reconcile_reason})"
                 logged_count = 0
                 
-                for i_id, q_val in zip(ing_ids, quantities):
+                for i_id, q_val, v_reason in zip(ing_ids, quantities, variance_reasons):
                     if not q_val or q_val.strip() == "": continue
                     physical_count = float(q_val)
                     
@@ -339,6 +339,11 @@ def web_inventory_tab(username):
                         ing_name = ingredients_df.loc[idx[0], 'Ingredient_Name']
                         theoretical_count = float(ingredients_df.loc[idx[0], 'Current_Stock'])
                         variance = physical_count - theoretical_count
+                        
+                        item_notes = meta_notes
+                        if abs(variance) > 0.001:
+                            justification = v_reason.strip() if v_reason.strip() else "No reason provided."
+                            item_notes += f" | Variance Justification: {justification}"
                         
                         ingredients_df.loc[idx[0], 'Current_Stock'] = physical_count
                         
@@ -349,7 +354,7 @@ def web_inventory_tab(username):
                             'Theoretical': theoretical_count,
                             'Physical': physical_count,
                             'Variance': variance,
-                            'Notes': meta_notes
+                            'Notes': item_notes
                         }
                         audit_ledger_df = pd.concat([audit_ledger_df, pd.DataFrame([new_audit_row])], ignore_index=True)
                         logged_count += 1
@@ -357,7 +362,7 @@ def web_inventory_tab(username):
                 if logged_count > 0:
                     client_db.save_tab('Ingredients', ingredients_df)
                     client_db.save_tab('Inventory_Audit_Log', audit_ledger_df)
-                    feedback_msg = "Inventory Reconciled: Balance adjustments permanently recorded."
+                    feedback_msg = "Inventory Reconciled: Balance adjustments permanently recorded with variance justifications."
                     alert_type = "info"
                     
             client_db.update_all_product_costs()
@@ -413,7 +418,7 @@ def web_inventory_tab(username):
             a_id = str(row['Audit_ID'])
             date_val = str(row['Date'])
             ing_name = str(row['Ingredient_Name'])
-            variance = float(row['Variance'] or 0)
+            variance = float(row['Variance'] or 0.0)
             notes = str(row['Notes'] or '')
             
             if a_id.startswith('RCV') or a_id.startswith('AUD'):

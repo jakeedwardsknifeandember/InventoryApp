@@ -1,30 +1,25 @@
 {% extends 'base.html' %}
 {% block content %}
 
-<!-- 🎨 COMPLETE HIGH-CONTRAST DARK MODE OVERRIDE PATCH -->
+<!-- COMPLETE HIGH-CONTRAST DARK MODE OVERRIDE PATCH -->
 <style>
-    /* Force all text inside the table data cells to be bright and readable */
     .expenses-workspace table tbody td {
-        color: #f8fafc !important; /* Crisp luminous off-white */
+        color: #f8fafc !important; 
     }
     
-    /* Keep muted secondary items readable but slightly softer silver */
     .expenses-workspace .text-muted {
         color: #94a3b8 !important; 
     }
     
-    /* Brighten table headers for quick scannability */
     .expenses-workspace table thead th {
         color: #cbd5e1 !important; 
     }
     
-    /* Force form placeholder text to be visible against input fields */
     .expenses-workspace .form-control::placeholder {
         color: #64748b !important; 
         opacity: 1;
     }
 
-    /* Date Filter Preset Buttons */
     .badge-filter-btn { 
         padding: 4px 12px; 
         border-radius: 20px; 
@@ -48,34 +43,34 @@
 </style>
 
 <div class="expenses-workspace">
-    <!-- 🔔 DYNAMIC OPERATIONAL NOTIFICATION BANNER -->
+    <!-- DYNAMIC OPERATIONAL NOTIFICATION BANNER -->
     {% if msg %}
     <div class="alert alert-{{ alert_type }} alert-dismissible fade show border-0 mb-4 text-white custom-alert" role="alert" style="background-color: {% if alert_type == 'danger' %}#dc3545{% elif alert_type == 'warning' %}#ffc107{% else %}#198754{% endif %};">
         <div class="d-flex align-items-center">
-            <span class="fs-5 me-2">{% if alert_type == 'danger' %}❌{% elif alert_type == 'warning' %}⚠️{% else %}✨{% endif %}</span>
+            <span class="fs-5 me-2 font-monospace">{% if alert_type == 'danger' %}[ERROR]{% elif alert_type == 'warning' %}[WARNING]{% else %}[INFO]{% endif %}</span>
             <div>{{ msg }}</div>
         </div>
         <button type="button" class="btn-close btn-close-white" data-bs-dismiss="alert" aria-label="Close"></button>
     </div>
     {% endif %}
 
-    <!-- 👑 HEADER ACTIONS SECTION -->
+    <!-- HEADER ACTIONS SECTION -->
     <div class="d-flex justify-content-between align-items-center mb-4">
         <div>
             <h3 class="m-0" style="font-weight: 800; letter-spacing: -0.5px; text-transform: uppercase; color: #ffffff;">Expenses Management</h3>
             <p class="text-muted m-0 small">Track overhead outflows, monitor operational burn rates, and review cash positions.</p>
         </div>
         <button class="btn btn-primary d-flex align-items-center gap-2 px-4 py-2" data-bs-toggle="modal" data-bs-target="#addExpenseModal" style="font-weight: 600; border-radius: 8px;">
-            <span>➕</span> Log New Expense
+            Log New Expense
         </button>
     </div>
 
-    <!-- 📊 INTEL TRIPLE METRIC KPI CARDS -->
+    <!-- INTEL TRIPLE METRIC KPI CARDS -->
     <div class="row g-3 mb-4">
         <div class="col-12 col-md-4">
             <div class="p-3" style="background: #1e1e24; border-left: 4px solid #3b82f6; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.15);">
                 <div class="text-muted small mb-1" style="font-weight: 700; letter-spacing: 0.5px; text-transform: uppercase;">Outflow (This Month)</div>
-                <div class="fs-3" style="font-weight: 800; color: #ffffff;">₱{{ "{:,.2f}".format(kpi_month_total) }}</div>
+                <div class="fs-3" style="font-weight: 800; color: #ffffff;">PHP {{ "{:,.2f}".format(kpi_month_total) }}</div>
             </div>
         </div>
         
@@ -91,12 +86,12 @@
                 <div class="text-muted small mb-1" style="font-weight: 700; letter-spacing: 0.5px; text-transform: uppercase;">Cash vs Digital Mix</div>
                 <div class="d-flex align-items-center justify-content-between pt-1">
                     <div class="text-center">
-                        <span class="d-block small text-muted" style="font-size: 10px; font-weight: 700;">💵 PETTY CASH</span>
+                        <span class="d-block small text-muted" style="font-size: 10px; font-weight: 700;">PETTY CASH</span>
                         <strong style="color: #10b981;">{{ kpi_cash_ratio }}%</strong>
                     </div>
                     <div style="width: 2px; height: 28px; background: #374151;"></div>
                     <div class="text-center">
-                        <span class="d-block small text-muted" style="font-size: 10px; font-weight: 700;">📱 DIGITAL</span>
+                        <span class="d-block small text-muted" style="font-size: 10px; font-weight: 700;">DIGITAL</span>
                         <strong style="color: #60a5fa;">{{ kpi_digital_ratio }}%</strong>
                     </div>
                 </div>
@@ -104,7 +99,7 @@
         </div>
     </div>
 
-    <!-- 🔍 LIVE COMPREHENSIVE FILTER ENGINE CONTROL BAR WITH CUSTOM DATE RANGE -->
+    <!-- LIVE COMPREHENSIVE FILTER ENGINE CONTROL BAR WITH CUSTOM DATE RANGE -->
     <div class="p-3 mb-4" style="background: #18181c; border: 1px solid #2d2d34; border-radius: 8px;">
         <form method="get" action="/portal/{{ username }}/expenses" id="expensesFilterForm" class="row g-2 align-items-center">
             <input type="hidden" name="period" id="periodTrackingHiddenInput" value="{{ current_period }}">
@@ -112,7 +107,7 @@
             <!-- Search Field -->
             <div class="col-12 col-md-3">
                 <div class="input-group">
-                    <span class="input-group-text border-0 text-muted" style="background: #27272c;">🔍</span>
+                    <span class="input-group-text border-0 text-muted" style="background: #27272c; font-weight: bold;">FIND</span>
                     <input type="text" name="search" value="{{ current_search }}" class="form-control text-white border-0" placeholder="Search description..." style="background: #27272c;">
                 </div>
             </div>
@@ -138,13 +133,13 @@
                     <input type="date" name="start_date" id="customStartDateInput" value="{{ start_date }}" class="form-control form-control-sm bg-secondary text-white border-0 font-monospace" style="width:115px; font-size:11px; color-scheme: dark;" onchange="document.getElementById('periodTrackingHiddenInput').value='custom';">
                     <input type="date" name="end_date" id="customEndDateInput" value="{{ end_date }}" class="form-control form-control-sm bg-secondary text-white border-0 font-monospace" style="width:115px; font-size:11px; color-scheme: dark;" onchange="document.getElementById('periodTrackingHiddenInput').value='custom';">
                     <button type="submit" class="btn btn-sm btn-success fw-bold text-white px-2 py-1" style="font-size:11px;">Apply</button>
-                    <a href="/portal/{{ username }}/expenses" class="btn btn-sm btn-dark" title="Clear All Active Filter Settings" style="border: 1px solid #2d2d34; padding: 2px 8px;">🔄</a>
+                    <a href="/portal/{{ username }}/expenses" class="btn btn-sm btn-dark font-monospace" title="Clear All Active Filter Settings" style="border: 1px solid #2d2d34; padding: 2px 8px;">CLEAR</a>
                 </div>
             </div>
         </form>
     </div>
 
-    <!-- 📋 LIVE FINANCIAL DATA LEDGER GRID -->
+    <!-- LIVE FINANCIAL DATA LEDGER GRID -->
     <div class="content-card p-0 overflow-hidden" style="background: #1e1e24; border: 1px solid #2d2d34; border-radius: 8px;">
         <table class="table table-hover text-white m-0" style="background: transparent;">
             <thead style="background: #151518;">
@@ -153,8 +148,7 @@
                     <th class="py-3 text-muted" style="font-weight: 700; font-size: 12px; uppercase; letter-spacing: 0.5px;">ITEM DESCRIPTION</th>
                     <th class="py-3 text-muted" style="font-weight: 700; font-size: 12px; uppercase; letter-spacing: 0.5px;">CATEGORY</th>
                     <th class="py-3 text-muted" style="font-weight: 700; font-size: 12px; uppercase; letter-spacing: 0.5px;">PAYMENT METHOD</th>
-                    <th class="py-3 text-muted" style="font-weight: 700; font-size: 12px; uppercase; letter-spacing: 0.5px;">TOTAL AMOUNT</th>
-                    <th class="pe-4 py-3 text-end text-muted" style="font-weight: 700; font-size: 12px; uppercase; letter-spacing: 0.5px;">ACTIONS</th>
+                    <th class="pe-4 py-3 text-end text-muted" style="font-weight: 700; font-size: 12px; uppercase; letter-spacing: 0.5px;">TOTAL AMOUNT</th>
                 </tr>
             </thead>
             <tbody>
@@ -167,24 +161,16 @@
                             <span class="badge px-2.5 py-1.5 rounded-pill" style="background: #2d2d34; color: #e5e7eb; font-size: 11px;">{{ e.Category }}</span>
                         </td>
                         <td class="align-middle text-muted">
-                            <span class="d-flex align-items-center gap-1.5">
-                                {% if e.Payment_Method and e.Payment_Method.lower() in ['cash', 'petty cash', 'cashier'] %}💵{% else %}📱{% endif %} {{ e.Payment_Method }}
+                            <span class="d-flex align-items-center gap-1.5 font-monospace" style="font-size: 12px;">
+                                {{ e.Payment_Method }}
                             </span>
                         </td>
-                        <td class="align-middle text-danger font-monospace" style="font-weight: 700; font-size: 15px;">₱{{ "%.2f"|format(e.Amount) }}</td>
-                        <td class="align-middle pe-4 text-end">
-                            <form method="post" style="display:inline;">
-                                <input type="hidden" name="action_type" value="delete_expense">
-                                <input type="hidden" name="expense_id" value="{{ e.Expense_ID }}">
-                                <button type="submit" class="btn btn-sm" onclick="return confirm('⚠️ Operational Warning: Are you absolutely sure you want to permanently erase this transaction from your legal business ledger logs?');" style="background: rgba(239, 68, 68, 0.15); color: #ef4444; border: 1px solid rgba(239, 68, 68, 0.3); border-radius: 6px;">🗑️ Eraser</button>
-                            </form>
-                        </td>
+                        <td class="align-middle pe-4 text-end text-danger font-monospace" style="font-weight: 700; font-size: 15px;">PHP {{ "%.2f"|format(e.Amount) }}</td>
                     </tr>
                     {% endfor %}
                 {% else %}
                     <tr>
-                        <td colspan="6" class="text-center py-5 text-muted">
-                            <div class="fs-2 mb-2">📦</div>
+                        <td colspan="5" class="text-center py-5 text-muted">
                             <div style="font-weight: 600; color: #ffffff;">No matching ledger expenses found</div>
                             <div class="small mt-1 text-muted">Try adjusting your category configurations or time window scopes.</div>
                         </td>
@@ -194,7 +180,7 @@
         </table>
     </div>
 
-    <!-- 📦 GUARDRAILED EXPENSE ENTRY CREATION MODAL CONTAINER -->
+    <!-- GUARDRAILED EXPENSE ENTRY CREATION MODAL CONTAINER -->
     <div class="modal fade" id="addExpenseModal" tabindex="-1" aria-hidden="true">
         <div class="modal-dialog modal-dialog-centered">
             <div class="modal-content text-white border-0 shadow-lg" style="background: #1e1e24; border-radius: 12px;">
@@ -218,9 +204,9 @@
                         </div>
                         
                         <div class="mb-3">
-                            <label class="form-label text-muted small" style="font-weight: 600;">OUTFLOW COST VALUE AMOUNT (₱):</label>
+                            <label class="form-label text-muted small" style="font-weight: 600;">OUTFLOW COST VALUE AMOUNT (PHP):</label>
                             <div class="input-group">
-                                <span class="input-group-text border-0 text-white font-monospace" style="background: #373742; font-weight:700;">₱</span>
+                                <span class="input-group-text border-0 text-white font-monospace" style="background: #373742; font-weight:700;">PHP</span>
                                 <input type="number" step="0.01" min="0.01" name="amount" class="form-control text-white border-0 font-monospace" placeholder="0.00" style="background: #27272c; height: 44px; font-weight:700; font-size:16px;" required>
                             </div>
                         </div>
@@ -229,23 +215,23 @@
                             <div class="col-6">
                                 <label class="form-label text-muted small" style="font-weight: 600;">CATEGORY:</label>
                                 <select name="category" class="form-select text-white border-0" style="background: #27272c; height: 44px; border-radius: 6px;" required>
-                                    <option value="Raw Ingredients">📦 Raw Ingredients</option>
-                                    <option value="Utilities">⚡ Utilities</option>
-                                    <option value="Rent & Lease">🏠 Rent & Lease</option>
-                                    <option value="Staff Salaries">👷 Staff Salaries</option>
-                                    <option value="Packaging">🏷️ Packaging</option>
-                                    <option value="Equipment Maintenance">🛠️ Equipment Maintenance</option>
-                                    <option value="Misc" selected>⚙️ Misc Overhead</option>
+                                    <option value="Raw Ingredients">Raw Ingredients</option>
+                                    <option value="Utilities">Utilities</option>
+                                    <option value="Rent & Lease">Rent & Lease</option>
+                                    <option value="Staff Salaries">Staff Salaries</option>
+                                    <option value="Packaging">Packaging</option>
+                                    <option value="Equipment Maintenance">Equipment Maintenance</option>
+                                    <option value="Misc" selected>Misc Overhead</option>
                                 </select>
                             </div>
                             
                             <div class="col-6">
                                 <label class="form-label text-muted small" style="font-weight: 600;">PAYMENT METHOD:</label>
                                 <select name="payment_method" class="form-select text-white border-0" style="background: #27272c; height: 44px; border-radius: 6px;" required>
-                                    <option value="Petty Cash" selected>💵 Petty Cash</option>
-                                    <option value="GCash">📱 GCash Wallet</option>
-                                    <option value="Bank Transfer">🏦 Bank Transfer</option>
-                                    <option value="Credit Card">💳 Credit Card</option>
+                                    <option value="Petty Cash" selected>Petty Cash</option>
+                                    <option value="GCash">GCash Wallet</option>
+                                    <option value="Bank Transfer">Bank Transfer</option>
+                                    <option value="Credit Card">Credit Card</option>
                                 </select>
                             </div>
                         </div>

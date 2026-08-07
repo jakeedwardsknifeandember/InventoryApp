@@ -17,7 +17,7 @@ def web_expenses_tab(username):
     alert_type = "success"
 
     # ==========================================
-    # 📥 1. POST METHOD: DATA WRITE OPERATIONS
+    # 1. POST METHOD: DATA WRITE OPERATIONS
     # ==========================================
     if request.method == 'POST':
         action = request.form.get('action_type')
@@ -32,10 +32,10 @@ def web_expenses_tab(username):
             try:
                 amount = float(amount_str)
                 if amount <= 0:
-                    feedback_msg = "❌ Error: Expense amount must be greater than ₱0.00."
+                    feedback_msg = "Error: Expense amount must be greater than 0.00."
                     alert_type = "danger"
                 elif not description:
-                    feedback_msg = "❌ Error: Description field cannot be blank."
+                    feedback_msg = "Error: Description field cannot be blank."
                     alert_type = "danger"
                 else:
                     success, msg = db.add_expense({
@@ -50,25 +50,13 @@ def web_expenses_tab(username):
                     feedback_msg = msg
                     alert_type = "success" if success else "danger"
             except ValueError:
-                feedback_msg = "❌ Error: Invalid numeric formatting supplied in Amount field."
+                feedback_msg = "Error: Invalid numeric formatting supplied in Amount field."
                 alert_type = "danger"
                 
-        elif action == 'delete_expense':
-            # 🔒 SECURITY CHECKPOINT: Block unauthorized staff from erasing financial ledgers
-            staff_role = session.get('staff_role', 'Staff')
-            if staff_role not in ['Platform Owner Admin', 'Store Manager']:
-                feedback_msg = "❌ Security Error: You do not have authorization to delete financial records."
-                alert_type = "danger"
-            else:
-                expense_id = request.form.get('expense_id')
-                success, msg = db.delete_expense(expense_id)
-                feedback_msg = msg
-                alert_type = "success" if success else "danger"
-            
         return redirect(f"/portal/{username}/expenses?msg={feedback_msg}&alert_type={alert_type}")
 
     # ==========================================
-    # 📤 2. GET METHOD: DATA RECOVERY & ANALYTICS
+    # 2. GET METHOD: DATA RECOVERY & ANALYTICS
     # ==========================================
     url_msg = request.args.get('msg')
     url_alert = request.args.get('alert_type', 'success')
@@ -114,7 +102,7 @@ def web_expenses_tab(username):
             if not cat_group.empty:
                 top_cat_name = cat_group.idxmax()
                 top_cat_sum = cat_group.max()
-                top_burning_category = f"{top_cat_name} (₱{top_cat_sum:,.2f})"
+                top_burning_category = f"{top_cat_name} (PHP {top_cat_sum:,.2f})"
 
         total_all_time = expenses_df['Amount'].sum()
         if total_all_time > 0:
@@ -124,7 +112,7 @@ def web_expenses_tab(username):
             gcash_ratio = round(100.0 - cash_ratio, 1)
 
         # ==========================================
-        # 🔍 3. DATE RANGE & ADVANCED FILTER ENGINE
+        # 3. DATE RANGE & ADVANCED FILTER ENGINE
         # ==========================================
         today_start = now.date()
         start_bound = None
@@ -156,15 +144,12 @@ def web_expenses_tab(username):
             start_bound = None
             end_bound = None
 
-        # Apply Date Range Filtering
         if start_bound is not None and end_bound is not None:
             expenses_df = expenses_df[(expenses_df['Expense_Date'] >= start_bound) & (expenses_df['Expense_Date'] <= end_bound)]
 
-        # Apply Category Filter
         if selected_category != 'All':
             expenses_df = expenses_df[expenses_df['Category'].astype(str) == selected_category]
             
-        # Apply Search Query
         if search_query:
             expenses_df = expenses_df[
                 expenses_df['Description'].astype(str).str.lower().str.contains(search_query) |

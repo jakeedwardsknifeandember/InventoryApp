@@ -9,7 +9,6 @@ import json
 reports_bp = Blueprint('reports', __name__)
 
 def ensure_operational_tables_exist(db_path):
-    """Dynamically provisions the HR & Incident tracking tables without breaking legacy schemas"""
     conn = sqlite3.connect(db_path)
     cursor = conn.cursor()
     cursor.execute("""
@@ -20,6 +19,15 @@ def ensure_operational_tables_exist(db_path):
             Staff_Involved TEXT,
             Description TEXT,
             Status TEXT
+        )
+    """)
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS Capital_Expenditures (
+            CapEx_ID TEXT PRIMARY KEY,
+            Date TEXT,
+            Category TEXT,
+            Description TEXT,
+            Amount REAL
         )
     """)
     conn.commit()
@@ -39,7 +47,7 @@ def web_reports_tab(username):
     alert_type = "success"
 
     # ==========================================
-    # 📥 1. POST METHOD: RECORD OPERATIONAL INCIDENTS
+    # 1. POST METHOD: RECORD OPERATIONAL DATA
     # ==========================================
     if request.method == 'POST':
         action = request.form.get('action_type')
@@ -52,7 +60,7 @@ def web_reports_tab(username):
             status = request.form.get('status', 'Pending').strip()
             
             if not description:
-                feedback_msg = "❌ Error: Incident description field cannot be left empty."
+                feedback_msg = "Error: Incident description field cannot be left empty."
                 alert_type = "danger"
             else:
                 try:
@@ -69,10 +77,10 @@ def web_reports_tab(username):
                     conn.commit()
                     conn.close()
                     
-                    feedback_msg = f"✅ Incident Report {incident_id} successfully logged to operations ledger."
+                    feedback_msg = f"Success: Incident Report {incident_id} successfully logged to operations ledger."
                     alert_type = "success"
                 except Exception as e:
-                    feedback_msg = f"❌ Database Error logging incident: {str(e)}"
+                    feedback_msg = f"Database Error logging incident: {str(e)}"
                     alert_type = "danger"
                     
         elif action == 'update_incident_status':
@@ -84,30 +92,73 @@ def web_reports_tab(username):
                 cursor.execute("UPDATE Operational_Incidents SET Status = ? WHERE Incident_ID = ?", (new_status, inc_id))
                 conn.commit()
                 conn.close()
-                feedback_msg = f"💼 Status updated for {inc_id}."
+                feedback_msg = f"Success: Status updated for {inc_id}."
                 alert_type = "success"
             except Exception as e:
                 feedback_msg = str(e)
                 alert_type = "danger"
 
+        elif action == 'add_capex':
+            capex_date = request.form.get('capex_date', datetime.now().strftime("%Y-%m-%d")).strip()
+            category = request.form.get('category', 'Equipment').strip()
+            description = request.form.get('description', '').strip()
+            amount_str = request.form.get('amount', '0.0')
+            
+            try:
+                amount = float(amount_str)
+                if amount <= 0 or not description:
+                    feedback_msg = "Error: Amount must be positive and description is mandatory."
+                    alert_type = "danger"
+                else:
+                    conn = sqlite3.connect(db_path)
+                    cursor = conn.cursor()
+                    cursor.execute("SELECT COUNT(*) FROM Capital_Expenditures")
+                    count = cursor.fetchone()[0]
+                    capex_id = f"CAP{count + 1:04d}"
+                    
+                    cursor.execute("""
+                        INSERT INTO Capital_Expenditures (CapEx_ID, Date, Category, Description, Amount)
+                        VALUES (?, ?, ?, ?, ?)
+                    """, (capex_id, capex_date, category, description, amount))
+                    conn.commit()
+                    conn.close()
+                    
+                    feedback_msg = f"Success: Capital investment {capex_id} logged to the balance sheet."
+                    alert_type = "success"
+            except Exception as e:
+                feedback_msg = f"Database Error logging CapEx: {str(e)}"
+                alert_type = "danger"
+                
+        elif action == 'delete_capex':
+            capex_id = request.form.get('capex_id')
+            try:
+                conn = sqlite3.connect(db_path)
+                cursor = conn.cursor()
+                cursor.execute("DELETE FROM Capital_Expenditures WHERE CapEx_ID = ?", (capex_id,))
+                conn.commit()
+                conn.close()
+                feedback_msg = f"Removed: Capital investment {capex_id} successfully deleted from the tracker."
+                alert_type = "warning"
+            except Exception as e:
+                feedback_msg = f"Database Error removing CapEx: {str(e)}"
+                alert_type = "danger"
+
         return redirect(url_for('reports.web_reports_tab', username=username, msg=feedback_msg, alert_type=alert_type))
 
     # ==========================================
-    # 📤 2. GET METHOD: CORE BUSINESS ANALYTICS
+    # 2. GET METHOD: CORE BUSINESS ANALYTICS
     # ==========================================
     url_msg = request.args.get('msg')
     if url_msg:
         feedback_msg = url_msg
         alert_type = request.args.get('alert_type', 'success')
 
-    # Read base tables directly matching verified database layout names
     sales_df = db.read_tab('Sales')
     expenses_df = db.read_tab('Expenses')
     products_df = db.read_tab('Products')
     audit_df = db.read_tab('Inventory_Audit_Log')  
     ingredients_df = db.read_tab('Ingredients')
 
-    # Clean and safely cast columns to appropriate numeric/date datatypes
     if not sales_df.empty:
         sales_df['Total_Amount'] = pd.to_numeric(sales_df['Total_Amount'], errors='coerce').fillna(0.0)
         sales_df['Quantity'] = pd.to_numeric(sales_df['Quantity'], errors='coerce').fillna(0.0)
@@ -119,8 +170,45 @@ def web_reports_tab(username):
         audit_df['Variance'] = pd.to_numeric(audit_df['Variance'], errors='coerce').fillna(0.0)
         audit_df['Date'] = pd.to_datetime(audit_df['Date'], errors='coerce')
 
+    # --- ALL-TIME ROI CALCULATIONS BEFORE DATE FILTER ---
+    all_time_revenue = float(sales_df['Total_Amount'].sum()) if not sales_df.empty else 0.0
+    all_time_expenses = float(expenses_df['Amount'].sum()) if not expenses_df.empty else 0.0
+    all_time_cogs = 0.0
+    
+    if not sales_df.empty:
+        for _, sale_row in sales_df.iterrows():
+            qty_sold = float(sale_row.get('Quantity', 0.0))
+            if 'Unit_Cost' in sale_row and pd.notnull(sale_row['Unit_Cost']):
+                unit_cost = float(sale_row['Unit_Cost'])
+            else:
+                unit_cost = 0.0
+                p_id = sale_row.get('Product_ID')
+                if not products_df.empty:
+                    prod_match = products_df[products_df['Product_ID'] == p_id]
+                    if not prod_match.empty:
+                        unit_cost = float(pd.to_numeric(prod_match['Cost_Price'], errors='coerce').fillna(0.0).iloc[0])
+            all_time_cogs += (qty_sold * unit_cost)
+
+    all_time_net_profit = all_time_revenue - all_time_cogs - all_time_expenses
+    
+    # CapEx Data
+    total_capex = 0.0
+    capex_list = []
+    try:
+        conn = sqlite3.connect(db_path)
+        capex_raw_df = pd.read_sql_query("SELECT * FROM Capital_Expenditures ORDER BY Date DESC", conn)
+        conn.close()
+        if not capex_raw_df.empty:
+            total_capex = float(capex_raw_df['Amount'].sum())
+            capex_list = capex_raw_df.to_dict(orient='records')
+    except:
+        pass
+        
+    roi_percentage = (all_time_net_profit / total_capex) * 100.0 if total_capex > 0 else 0.0
+    remaining_roi = max(0.0, total_capex - all_time_net_profit)
+
     # ==========================================
-    # 📅 DATE RANGE & ADVANCED FILTER ENGINE
+    # DATE RANGE & ADVANCED FILTER ENGINE
     # ==========================================
     selected_period = request.args.get('period', 'this_month')
     start_date_str = request.args.get('start_date', '')
@@ -167,7 +255,6 @@ def web_reports_tab(username):
     formatted_start_str = start_bound.strftime("%Y-%m-%d") if start_bound is not None else ""
     formatted_end_str = end_bound.strftime("%Y-%m-%d") if end_bound is not None else ""
 
-    # Apply global timeframe masks across all data matrices
     if start_bound is not None and end_bound is not None:
         if not sales_df.empty and 'Sale_Date' in sales_df.columns:
             sales_df = sales_df[(sales_df['Sale_Date'] >= start_bound) & (sales_df['Sale_Date'] <= end_bound)]
@@ -176,7 +263,7 @@ def web_reports_tab(username):
         if not audit_df.empty and 'Date' in audit_df.columns:
             audit_df = audit_df[(audit_df['Date'] >= start_bound) & (audit_df['Date'] <= end_bound)]
 
-    # 💰 CORE REVENUE & COST OF GOODS SOLD (COGS) CALCULATIONS
+    # CORE REVENUE & COST OF GOODS SOLD (COGS) CALCULATIONS
     total_revenue = 0.0
     total_cogs = 0.0
     total_sales_count = 0
@@ -188,7 +275,6 @@ def web_reports_tab(username):
         for _, sale_row in sales_df.iterrows():
             qty_sold = float(sale_row.get('Quantity', 0.0))
             
-            # Smart-Check: Prioritize the frozen historic unit cost if it exists, otherwise fall back to live cost
             if 'Unit_Cost' in sale_row and pd.notnull(sale_row['Unit_Cost']):
                 unit_cost = float(sale_row['Unit_Cost'])
             else:
@@ -201,10 +287,8 @@ def web_reports_tab(username):
             
             total_cogs += (qty_sold * unit_cost)
 
-    # 🏢 OPERATING EXPENSES (FIXED OVERHEAD)
     total_expenses = float(expenses_df['Amount'].sum()) if not expenses_df.empty else 0.0
 
-    # 🔄 RECONCILIATION FOR KITCHEN WASTE LOSS VALUES
     total_waste_cost = 0.0
     opportunity_cost = 0.0
     
@@ -244,26 +328,19 @@ def web_reports_tab(username):
                     
                 opportunity_cost += (row_financial_cost * retail_multiplier)
 
-    # 📋 FINANCIAL STATEMENTS MATRIX MATH
     gross_profit_margin = total_revenue - total_cogs
     net_profit = gross_profit_margin - total_expenses - total_waste_cost
 
-    # Warehouse Material Inventory asset valuation
     warehouse_asset_value = 0.0
     if not ingredients_df.empty:
         ingredients_df['Current_Stock'] = pd.to_numeric(ingredients_df['Current_Stock'], errors='coerce').fillna(0.0)
         ingredients_df['Cost_Per_Unit'] = pd.to_numeric(ingredients_df['Cost_Per_Unit'], errors='coerce').fillna(0.0)
         warehouse_asset_value = float((ingredients_df['Current_Stock'] * ingredients_df['Cost_Per_Unit']).sum())
 
-    # Balance Sheet Equations Formulas
     total_assets = net_profit + warehouse_asset_value
     total_liabilities = 0.0  
     owners_equity = total_assets - total_liabilities
 
-    # ==========================================
-    # 📈 BREAK-EVEN ANALYSIS CALCULATOR ENGINE
-    # ==========================================
-    # Break-Even should always use LIVE CURRENT product costs to correctly forecast future performance targets.
     if total_revenue > 0:
         gross_margin_pct = (gross_profit_margin / total_revenue) * 100.0
     elif not products_df.empty:
@@ -301,23 +378,22 @@ def web_reports_tab(username):
         bep_progress_pct = 0.0
 
     if total_revenue >= break_even_target and break_even_target > 0:
-        bep_status_text = "PROFIT ZONE 🟢"
-        bep_status_desc = f"Revenue exceeds fixed operating costs by ₱{total_revenue - break_even_target:,.2f}."
+        bep_status_text = "PROFIT ZONE"
+        bep_status_desc = f"Revenue exceeds fixed operating costs by PHP {total_revenue - break_even_target:,.2f}."
         bep_status_color = "#10b981"
         bep_badge_class = "bg-success"
     elif total_revenue >= (break_even_target * 0.8) and break_even_target > 0:
-        bep_status_text = "CAUTION ZONE 🟡"
-        bep_status_desc = f"You need ₱{break_even_target - total_revenue:,.2f} more in gross sales to reach break-even."
+        bep_status_text = "CAUTION ZONE"
+        bep_status_desc = f"You need PHP {break_even_target - total_revenue:,.2f} more in gross sales to reach break-even."
         bep_status_color = "#f59e0b"
         bep_badge_class = "bg-warning text-dark"
     else:
-        bep_status_text = "LOSS ZONE 🔴"
+        bep_status_text = "LOSS ZONE"
         needed = break_even_target - total_revenue
-        bep_status_desc = f"Current revenue is ₱{needed:,.2f} short of covering operating overhead." if break_even_target > 0 else "Log operating expenses and products to calculate your break-even threshold."
+        bep_status_desc = f"Current revenue is PHP {needed:,.2f} short of covering operating overhead." if break_even_target > 0 else "Log operating expenses and products to calculate your break-even threshold."
         bep_status_color = "#ef4444"
         bep_badge_class = "bg-danger"
 
-    # 🎯 MENU ENGINEERING MATRIX ALGORITHM DATA COMPILER
     menu_data_json = "[]"
     avg_qty_threshold = 0.0
     avg_margin_threshold = 0.0
@@ -353,13 +429,12 @@ def web_reports_tab(username):
                 chart_points.append({'label': p['name'], 'x': p['qty'], 'y': p['margin'], 'quadrant': quadrant, 'selling_price': p['selling_price']})
                 
                 if quadrant == 'Plowhorses' and p['qty'] > 0:
-                    action_notes.append(f"💡 <strong>Plowhorse Alert:</strong> '{p['name']}' generates high sales volume but thin margins. Re-evaluate ingredient portions or optimize vendor sourcing costs.")
+                    action_notes.append(f"Plowhorse Alert: '{p['name']}' generates high sales volume but thin margins. Re-evaluate ingredient portions or optimize vendor sourcing costs.")
                 elif quadrant == 'Puzzles':
-                    action_notes.append(f"🎯 <strong>Puzzle Opportunity:</strong> '{p['name']}' has strong gross profitability but slow sales movement. Feature prominently or tie into promotional bundles.")
+                    action_notes.append(f"Puzzle Opportunity: '{p['name']}' has strong gross profitability but slow sales movement. Feature prominently or tie into promotional bundles.")
                     
             menu_data_json = json.dumps(chart_points)
 
-    # 📉 COST VARIANCE & INFLATION TRACKER
     inflation_data = []
     full_audit_df = db.read_tab('Inventory_Audit_Log')
     
@@ -367,12 +442,11 @@ def web_reports_tab(username):
         rcv_df = full_audit_df[full_audit_df['Audit_ID'].astype(str).str.startswith('RCV')].copy()
         if not rcv_df.empty:
             rcv_df['Date'] = pd.to_datetime(rcv_df['Date'], errors='coerce')
-            rcv_df['Extracted_Price'] = rcv_df['Notes'].astype(str).str.extract(r'Intake Cost: P([\d,\.]+)/unit')[0]
+            rcv_df['Extracted_Price'] = rcv_df['Notes'].astype(str).str.extract(r'Intake Cost: PHP ([\d,\.]+)/unit')[0]
             rcv_df['Extracted_Price'] = pd.to_numeric(rcv_df['Extracted_Price'].astype(str).str.replace(',', ''), errors='coerce')
             rcv_df = rcv_df.dropna(subset=['Extracted_Price', 'Date'])
             rcv_df = rcv_df.sort_values('Date')
             
-            # Identify deliveries that happened in the currently selected timeframe
             if start_bound is not None and end_bound is not None:
                 current_period_rcv = rcv_df[(rcv_df['Date'] >= start_bound) & (rcv_df['Date'] <= end_bound)]
             else:
@@ -385,7 +459,6 @@ def web_reports_tab(username):
                 ing_current = current_period_rcv[current_period_rcv['Ingredient_Name'] == name]
                 
                 if len(ing_all_time) > 1 and not ing_current.empty:
-                    # Oldest known price vs Newest price in the active period
                     oldest_price = float(ing_all_time.iloc[0]['Extracted_Price'])
                     newest_price = float(ing_current.iloc[-1]['Extracted_Price'])
                     
@@ -399,10 +472,8 @@ def web_reports_tab(username):
                             'last_date': ing_current.iloc[-1]['Date'].strftime("%Y-%m-%d")
                         })
             
-            # Grab top 5 highest inflating materials
             inflation_data = sorted(inflation_data, key=lambda x: x['pct_change'], reverse=True)[:5]
 
-    # FETCH SALES DATA ACTIVITY LOG
     recent_sales = []
     if not sales_df.empty:
         sales_sorted = sales_df.sort_values('Sale_Date', ascending=False).head(8)
@@ -415,7 +486,6 @@ def web_reports_tab(username):
                 'Product_Name': p_name, 'Quantity': float(row['Quantity']), 'Total_Amount': float(row['Total_Amount'])
             })
 
-    # FETCH HR ENTRIES
     incidents_list = []
     try:
         conn = sqlite3.connect(db_path)
@@ -463,5 +533,10 @@ def web_reports_tab(username):
         bep_status_text=bep_status_text,
         bep_status_desc=bep_status_desc,
         bep_status_color=bep_status_color,
-        bep_badge_class=bep_badge_class
+        bep_badge_class=bep_badge_class,
+        total_capex=total_capex,
+        all_time_net_profit=all_time_net_profit,
+        roi_percentage=roi_percentage,
+        remaining_roi=remaining_roi,
+        capex_list=capex_list
     )

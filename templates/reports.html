@@ -1,7 +1,6 @@
 {% extends 'base.html' %}
 {% block content %}
 
-<!-- LOAD VISUAL PLOTTING LIBRARIES -->
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 
 <style>
@@ -13,7 +12,7 @@
     .financial-table td { padding: 14px; border-bottom: 1px solid #2d2d34; }
     .financial-title { font-weight: 700; color: #cbd5e1; }
     
-    #logIncidentModal label {
+    #logIncidentModal label, #addCapexModal label {
         color: #e2e8f0 !important;
         font-weight: 700 !important;
         font-size: 11.5px !important;
@@ -21,12 +20,13 @@
         margin-bottom: 6px;
         display: inline-block;
     }
-    #logIncidentModal .form-control, #logIncidentModal .form-select {
+    #logIncidentModal .form-control, #logIncidentModal .form-select,
+    #addCapexModal .form-control, #addCapexModal .form-select {
         color: #ffffff !important;
         background-color: #27272c !important;
         border: 1px solid #3f3f46 !important;
     }
-    #logIncidentModal .form-control::placeholder {
+    #logIncidentModal .form-control::placeholder, #addCapexModal .form-control::placeholder {
         color: #71717a !important;
     }
 
@@ -37,7 +37,6 @@
         margin-bottom: 4px;
     }
 
-    /* Date Filter Preset Buttons */
     .badge-filter-btn { 
         padding: 4px 12px; 
         border-radius: 20px; 
@@ -62,19 +61,17 @@
 
 <div class="reports-workspace">
     
-    <!-- 🔔 MESSAGE NOTIFICATIONS BANNER -->
     {% if msg %}
-    <div class="alert alert-{{ alert_type }} alert-dismissible fade show border-0 mb-4 text-white" role="alert" style="background-color: {% if alert_type == 'danger' %}#dc3545{% else %}#198754{% endif %}; border-radius: 8px;">
+    <div class="alert alert-{{ alert_type }} alert-dismissible fade show border-0 mb-4 text-white" role="alert" style="background-color: {% if alert_type == 'danger' %}#dc3545{% elif alert_type == 'warning' %}#f59e0b{% else %}#198754{% endif %}; border-radius: 8px;">
         {{ msg }}
         <button type="button" class="btn-close btn-close-white" data-bs-dismiss="alert"></button>
     </div>
     {% endif %}
 
-    <!-- 👑 HEADER FILTERS SELECTION STRIP WITH CUSTOM DATE RANGE -->
     <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-center mb-4 gap-3">
         <div>
-            <h3 class="m-0" style="font-weight: 800; text-transform: uppercase; color: #ffffff; letter-spacing: -0.5px;">Business Performance & Feasibility Hub</h3>
-            <p class="text-muted m-0 small">Analyze financial statements, evaluate menu parameters, test break-even targets, and simulate new store concepts.</p>
+            <h3 class="m-0" style="font-weight: 800; text-transform: uppercase; color: #ffffff; letter-spacing: -0.5px;">Business Performance Hub</h3>
+            <p class="text-muted m-0 small">Analyze financial statements, evaluate menu parameters, test break-even targets, and track actual capital ROI.</p>
         </div>
         
         <form method="get" action="/portal/{{ username }}/reports" id="dateControlFilterForm">
@@ -92,53 +89,54 @@
         </form>
     </div>
 
-    <!-- 📊 EXECUTIVE METRICS KPI CARD DISPLAY PANEL -->
     <div class="row g-3 mb-4">
         <div class="col-6 col-md-3">
             <div class="p-3" style="background: #1e1e24; border-bottom: 4px solid #10b981; border-radius: 8px;">
                 <div class="text-muted small mb-1" style="font-weight: 700; text-transform: uppercase; font-size:11px;">Gross Sales Revenue</div>
-                <h3 class="m-0 font-monospace" style="font-weight: 800; color: #10b981;">₱{{ "{:,.2f}".format(total_revenue) }}</h3>
+                <h3 class="m-0 font-monospace" style="font-weight: 800; color: #10b981;">PHP {{ "{:,.2f}".format(total_revenue) }}</h3>
             </div>
         </div>
         <div class="col-6 col-md-3">
             <div class="p-3" style="background: #1e1e24; border-bottom: 4px solid #ef4444; border-radius: 8px;">
                 <div class="text-muted small mb-1" style="font-weight: 700; text-transform: uppercase; font-size:11px;">Total Cash Expenses</div>
-                <h3 class="m-0 font-monospace" style="font-weight: 800; color: #ef4444;">₱{{ "{:,.2f}".format(total_expenses) }}</h3>
+                <h3 class="m-0 font-monospace" style="font-weight: 800; color: #ef4444;">PHP {{ "{:,.2f}".format(total_expenses) }}</h3>
             </div>
         </div>
         <div class="col-6 col-md-3">
             <div class="p-3" style="background: #1e1e24; border-bottom: 4px solid #f59e0b; border-radius: 8px;">
                 <div class="text-muted small mb-1" style="font-weight: 700; text-transform: uppercase; font-size:11px;">Kitchen Waste Loss</div>
-                <h3 class="m-0 font-monospace" style="font-weight: 800; color: #f59e0b;">₱{{ "{:,.2f}".format(waste_cost) }}</h3>
+                <h3 class="m-0 font-monospace" style="font-weight: 800; color: #f59e0b;">PHP {{ "{:,.2f}".format(waste_cost) }}</h3>
             </div>
         </div>
         <div class="col-6 col-md-3">
             <div class="p-3" style="background: #1e1e24; border-bottom: 4px solid #3b82f6; border-radius: 8px;">
                 <div class="text-muted small mb-1" style="font-weight: 700; text-transform: uppercase; font-size:11px;">Break-Even Target</div>
-                <h3 class="m-0 font-monospace" style="font-weight: 800; color: #3b82f6;">₱{{ "{:,.2f}".format(break_even_target) }}</h3>
+                <h3 class="m-0 font-monospace" style="font-weight: 800; color: #3b82f6;">PHP {{ "{:,.2f}".format(break_even_target) }}</h3>
             </div>
         </div>
     </div>
 
-    <!-- 🌟 CORE COMMAND TABS SELECTOR PANEL -->
     <ul class="nav nav-tabs border-bottom border-secondary mb-4" id="commandTabs" role="tablist">
         <li class="nav-item">
-            <button class="nav-link active" id="financials-tab" data-bs-toggle="tab" data-bs-target="#financials-panel" type="button" role="tab">💼 Financial Statements</button>
+            <button class="nav-link active" id="financials-tab" data-bs-toggle="tab" data-bs-target="#financials-panel" type="button" role="tab">Financial Statements</button>
         </li>
         <li class="nav-item">
-            <button class="nav-link" id="breakeven-tab" data-bs-toggle="tab" data-bs-target="#breakeven-panel" type="button" role="tab">📈 Break-Even Analytics</button>
+            <button class="nav-link" id="roi-tab" data-bs-toggle="tab" data-bs-target="#roi-panel" type="button" role="tab">Actual ROI & CapEx</button>
         </li>
         <li class="nav-item">
-            <button class="nav-link" id="sandbox-tab" data-bs-toggle="tab" data-bs-target="#sandbox-panel" type="button" role="tab">🚀 Concept Feasibility Sandbox</button>
+            <button class="nav-link" id="breakeven-tab" data-bs-toggle="tab" data-bs-target="#breakeven-panel" type="button" role="tab">Break-Even Analytics</button>
         </li>
         <li class="nav-item">
-            <button class="nav-link" id="menu-tab" data-bs-toggle="tab" data-bs-target="#menu-panel" type="button" role="tab">🎯 Menu Engineering Matrix</button>
+            <button class="nav-link" id="sandbox-tab" data-bs-toggle="tab" data-bs-target="#sandbox-panel" type="button" role="tab">Concept Feasibility Sandbox</button>
         </li>
         <li class="nav-item">
-            <button class="nav-link" id="inflation-tab" data-bs-toggle="tab" data-bs-target="#inflation-panel" type="button" role="tab">📉 Cost Variance Tracker</button>
+            <button class="nav-link" id="menu-tab" data-bs-toggle="tab" data-bs-target="#menu-panel" type="button" role="tab">Menu Engineering Matrix</button>
         </li>
         <li class="nav-item">
-            <button class="nav-link" id="incidents-tab" data-bs-toggle="tab" data-bs-target="#incidents-panel" type="button" role="tab">📋 HR & Operational Logs</button>
+            <button class="nav-link" id="inflation-tab" data-bs-toggle="tab" data-bs-target="#inflation-panel" type="button" role="tab">Cost Variance Tracker</button>
+        </li>
+        <li class="nav-item">
+            <button class="nav-link" id="incidents-tab" data-bs-toggle="tab" data-bs-target="#incidents-panel" type="button" role="tab">HR & Operational Logs</button>
         </li>
     </ul>
 
@@ -153,28 +151,28 @@
                         <table class="w-100 financial-table">
                             <tr>
                                 <td class="financial-title">Gross Sales Revenue</td>
-                                <td class="text-end font-monospace text-success" style="font-weight: 700;">₱{{ "{:,.2f}".format(total_revenue) }}</td>
+                                <td class="text-end font-monospace text-success" style="font-weight: 700;">PHP {{ "{:,.2f}".format(total_revenue) }}</td>
                             </tr>
                             <tr>
                                 <td class="financial-title text-muted">(-) Cost of Sales (COGS)</td>
-                                <td class="text-end font-monospace text-muted">- ₱{{ "{:,.2f}".format(total_cogs) }}</td>
+                                <td class="text-end font-monospace text-muted">- PHP {{ "{:,.2f}".format(total_cogs) }}</td>
                             </tr>
                             <tr style="background: #1a1a20;">
                                 <td style="font-weight: 600; padding-left: 20px;">Gross Profit Margin</td>
-                                <td class="text-end font-monospace text-white" style="font-weight: 600;">₱{{ "{:,.2f}".format(gross_margin) }}</td>
+                                <td class="text-end font-monospace text-white" style="font-weight: 600;">PHP {{ "{:,.2f}".format(gross_margin) }}</td>
                             </tr>
                             <tr>
                                 <td class="financial-title text-danger">(-) Operating Expenses (Overhead)</td>
-                                <td class="text-end font-monospace text-danger">- ₱{{ "{:,.2f}".format(total_expenses) }}</td>
+                                <td class="text-end font-monospace text-danger">- PHP {{ "{:,.2f}".format(total_expenses) }}</td>
                             </tr>
                             <tr>
                                 <td class="financial-title text-warning">(-) Cost of Spoilage / Waste</td>
-                                <td class="text-end font-monospace text-warning">- ₱{{ "{:,.2f}".format(waste_cost) }}</td>
+                                <td class="text-end font-monospace text-warning">- PHP {{ "{:,.2f}".format(waste_cost) }}</td>
                             </tr>
                             <tr style="background: #151518;">
                                 <td style="font-weight: 800; font-size:16px;">Net Operating Income</td>
                                 <td class="text-end font-monospace" style="font-weight: 800; font-size: 16px; color: {% if net_profit >= 0 %}#3b82f6{% else %}#ef4444{% endif %};">
-                                    ₱{{ "{:,.2f}".format(net_profit) }}
+                                    PHP {{ "{:,.2f}".format(net_profit) }}
                                 </td>
                             </tr>
                         </table>
@@ -190,15 +188,15 @@
                             </tr>
                             <tr>
                                 <td class="financial-title" style="padding-left: 25px;">Liquid Cash Reserves</td>
-                                <td class="text-end font-monospace text-info" style="font-weight: 700;">₱{{ "{:,.2f}".format(net_profit) }}</td>
+                                <td class="text-end font-monospace text-info" style="font-weight: 700;">PHP {{ "{:,.2f}".format(net_profit) }}</td>
                             </tr>
                             <tr>
                                 <td class="financial-title" style="padding-left: 25px;">Inventory Asset Value</td>
-                                <td class="text-end font-monospace text-info" style="font-weight: 700;">₱{{ "{:,.2f}".format(warehouse_asset) }}</td>
+                                <td class="text-end font-monospace text-info" style="font-weight: 700;">PHP {{ "{:,.2f}".format(warehouse_asset) }}</td>
                             </tr>
                             <tr style="background: #1a1a20;">
                                 <td style="font-weight: 700; padding-left: 14px;">TOTAL ASSETS</td>
-                                <td class="text-end font-monospace text-info" style="font-weight: 700;">₱{{ "{:,.2f}".format(total_assets) }}</td>
+                                <td class="text-end font-monospace text-info" style="font-weight: 700;">PHP {{ "{:,.2f}".format(total_assets) }}</td>
                             </tr>
                             
                             <tr>
@@ -206,7 +204,7 @@
                             </tr>
                             <tr>
                                 <td class="financial-title" style="padding-left: 25px;">Accounts Payable</td>
-                                <td class="text-end font-monospace text-muted">- ₱{{ "{:,.2f}".format(total_liabilities) }}</td>
+                                <td class="text-end font-monospace text-muted">- PHP {{ "{:,.2f}".format(total_liabilities) }}</td>
                             </tr>
                             
                             <tr>
@@ -214,12 +212,12 @@
                             </tr>
                             <tr>
                                 <td class="financial-title" style="padding-left: 25px;">Retained Earnings</td>
-                                <td class="text-end font-monospace text-success" style="font-weight: 700;">₱{{ "{:,.2f}".format(owners_equity) }}</td>
+                                <td class="text-end font-monospace text-success" style="font-weight: 700;">PHP {{ "{:,.2f}".format(owners_equity) }}</td>
                             </tr>
                             <tr style="background: #151518;">
                                 <td style="font-weight: 800; font-size:15px;">TOTAL LIABILITIES & EQUITY</td>
                                 <td class="text-end font-monospace text-success" style="font-weight: 800; font-size: 15px;">
-                                    ₱{{ "{:,.2f}".format(total_liabilities + owners_equity) }}
+                                    PHP {{ "{:,.2f}".format(total_liabilities + owners_equity) }}
                                 </td>
                             </tr>
                         </table>
@@ -246,7 +244,7 @@
                                     <td class="align-middle text-muted small font-monospace">{{ s.Sale_Time }}</td>
                                     <td class="align-middle" style="font-weight:600;">{{ s.Product_Name }}</td>
                                     <td class="align-middle font-monospace">{{ s.Quantity }} pcs</td>
-                                    <td class="align-middle pe-4 text-end text-success font-monospace" style="font-weight:700;">₱{{ "{:,.2f}".format(s.Total_Amount) }}</td>
+                                    <td class="align-middle pe-4 text-end text-success font-monospace" style="font-weight:700;">PHP {{ "{:,.2f}".format(s.Total_Amount) }}</td>
                                 </tr>
                                 {% else %}
                                 <tr><td colspan="5" class="text-center py-4 text-muted">No sales metrics captured inside this chronological scope period window.</td></tr>
@@ -255,6 +253,82 @@
                         </table>
                     </div>
                 </div>
+            </div>
+        </div>
+
+        <!-- NEW PANEL: ACTUAL ROI & CAPEX TRACKER -->
+        <div class="tab-pane fade text-white" id="roi-panel" role="tabpanel">
+            <div class="d-flex justify-content-between align-items-center mb-3">
+                <div>
+                    <h5 class="m-0 text-white" style="font-weight: 700; color: #a6e3a1;">Real-Time Capital Recovery Tracker</h5>
+                    <p class="text-muted small m-0">Unlike the Feasibility Sandbox, this module tracks your exact historical equipment investments against your store's true All-Time Net Operating Income to calculate actual ROI status.</p>
+                </div>
+                <button class="btn btn-sm btn-success px-3 py-2" data-bs-toggle="modal" data-bs-target="#addCapexModal" style="font-weight:600; border-radius:6px;">Log Capital Investment</button>
+            </div>
+            
+            <div class="row g-3 mb-4">
+                <div class="col-12 col-md-3">
+                    <div class="p-3" style="background: #1e1e24; border-left: 4px solid #ef4444; border-radius: 8px;">
+                        <div class="text-muted small mb-1" style="font-weight: 700; text-transform: uppercase;">Total Capital Invested</div>
+                        <div class="fs-4 font-monospace" style="font-weight: 800; color: #ef4444;">PHP {{ "{:,.2f}".format(total_capex) }}</div>
+                    </div>
+                </div>
+                <div class="col-12 col-md-3">
+                    <div class="p-3" style="background: #1e1e24; border-left: 4px solid #3b82f6; border-radius: 8px;">
+                        <div class="text-muted small mb-1" style="font-weight: 700; text-transform: uppercase;">All-Time Net Income</div>
+                        <div class="fs-4 font-monospace" style="font-weight: 800; color: {% if all_time_net_profit >= 0 %}#3b82f6{% else %}#ef4444{% endif %};">PHP {{ "{:,.2f}".format(all_time_net_profit) }}</div>
+                    </div>
+                </div>
+                <div class="col-12 col-md-3">
+                    <div class="p-3" style="background: #1e1e24; border-left: 4px solid #10b981; border-radius: 8px;">
+                        <div class="text-muted small mb-1" style="font-weight: 700; text-transform: uppercase;">Capital Recovered (%)</div>
+                        <div class="fs-4 font-monospace" style="font-weight: 800; color: #10b981;">{{ "{:,.1f}".format(roi_percentage) }}%</div>
+                    </div>
+                </div>
+                <div class="col-12 col-md-3">
+                    <div class="p-3" style="background: #1e1e24; border-left: 4px solid #f59e0b; border-radius: 8px;">
+                        <div class="text-muted small mb-1" style="font-weight: 700; text-transform: uppercase;">Remaining to Break-Even</div>
+                        <div class="fs-4 font-monospace" style="font-weight: 800; color: #f59e0b;">PHP {{ "{:,.2f}".format(remaining_roi) }}</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="content-card p-0 overflow-hidden" style="background: #1e1e24; border: 1px solid #2d2d34; border-radius: 8px;">
+                <table class="table table-hover text-white m-0">
+                    <thead style="background: #151518;">
+                        <tr>
+                            <th class="ps-4 py-3">CAPEX ID</th>
+                            <th class="py-3">DATE</th>
+                            <th class="py-3">INVESTMENT CATEGORY</th>
+                            <th class="py-3" style="width: 40%;">DESCRIPTION</th>
+                            <th class="pe-4 py-3 text-end">INVESTMENT AMOUNT</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for c in capex_list %}
+                        <tr style="border-bottom: 1px solid #2d2d34;">
+                            <td class="align-middle ps-4 font-monospace text-muted">{{ c.CapEx_ID }}</td>
+                            <td class="align-middle font-monospace text-info">{{ c.Date }}</td>
+                            <td class="align-middle">
+                                <span class="badge bg-secondary text-white px-2 py-1" style="font-size:11px;">
+                                    {{ c.Category }}
+                                </span>
+                            </td>
+                            <td class="align-middle text-wrap text-light small" style="line-height:1.4;">{{ c.Description }}</td>
+                            <td class="align-middle pe-4 text-end">
+                                <span class="font-monospace fw-bold text-danger d-block mb-1">PHP {{ "{:,.2f}".format(c.Amount) }}</span>
+                                <form method="post" class="d-inline" onsubmit="return confirm('Are you sure you want to remove this capital investment? This action cannot be undone.');">
+                                    <input type="hidden" name="action_type" value="delete_capex">
+                                    <input type="hidden" name="capex_id" value="{{ c.CapEx_ID }}">
+                                    <button type="submit" class="btn btn-sm btn-outline-danger border-secondary py-0 px-2" style="font-size: 11px; font-weight: bold;">REMOVE</button>
+                                </form>
+                            </td>
+                        </tr>
+                        {% else %}
+                        <tr><td colspan="5" class="text-center py-5 text-muted">No historical capital expenditures logged. Log your initial store investments to track real ROI.</td></tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
             </div>
         </div>
 
@@ -273,7 +347,7 @@
                     <div class="progress" style="height: 12px; background-color: #111118; border-radius: 6px;">
                         <div class="progress-bar" role="progressbar" style="width: {{ bep_progress_pct }}%; background-color: {{ bep_status_color }};"></div>
                     </div>
-                    <small class="text-muted mt-1 d-block font-monospace">₱{{ "{:,.2f}".format(total_revenue) }} / ₱{{ "{:,.2f}".format(break_even_target) }}</small>
+                    <small class="text-muted mt-1 d-block font-monospace">PHP {{ "{:,.2f}".format(total_revenue) }} / PHP {{ "{:,.2f}".format(break_even_target) }}</small>
                 </div>
             </div>
 
@@ -284,7 +358,7 @@
                         <table class="w-100 financial-table">
                             <tr>
                                 <td class="financial-title">Fixed Operating Overhead (Expenses)</td>
-                                <td class="text-end font-monospace text-danger" style="font-weight: 700;">₱{{ "{:,.2f}".format(total_expenses) }}</td>
+                                <td class="text-end font-monospace text-danger" style="font-weight: 700;">PHP {{ "{:,.2f}".format(total_expenses) }}</td>
                             </tr>
                             <tr>
                                 <td class="financial-title">Gross Contribution Margin %</td>
@@ -292,15 +366,15 @@
                             </tr>
                             <tr style="background: #151518;">
                                 <td style="font-weight: 800; color: #ffffff;">Required Revenue to Break-Even</td>
-                                <td class="text-end font-monospace text-warning" style="font-weight: 800; font-size: 16px;">₱{{ "{:,.2f}".format(break_even_target) }}</td>
+                                <td class="text-end font-monospace text-warning" style="font-weight: 800; font-size: 16px;">PHP {{ "{:,.2f}".format(break_even_target) }}</td>
                             </tr>
                             <tr>
                                 <td class="financial-title text-muted">Daily Revenue Milestone (30-Day Avg)</td>
-                                <td class="text-end font-monospace text-light" style="font-weight: 700;">₱{{ "{:,.2f}".format(daily_break_even) }} / day</td>
+                                <td class="text-end font-monospace text-light" style="font-weight: 700;">PHP {{ "{:,.2f}".format(daily_break_even) }} / day</td>
                             </tr>
                             <tr>
                                 <td class="financial-title text-muted">Average Ticket Value (AOV)</td>
-                                <td class="text-end font-monospace text-light" style="font-weight: 700;">₱{{ "{:,.2f}".format(aov) }} / order</td>
+                                <td class="text-end font-monospace text-light" style="font-weight: 700;">PHP {{ "{:,.2f}".format(aov) }} / order</td>
                             </tr>
                             <tr style="background: #1a1a20;">
                                 <td style="font-weight: 700; color: #10b981;">Daily Target Order Volume</td>
@@ -312,11 +386,11 @@
 
                 <div class="col-12 col-lg-5">
                     <div class="p-4" style="background: #1e1e24; border-radius: 8px; border: 1px solid #2d2d34;">
-                        <h5 class="mb-2" style="font-weight: 700; color: #60a5fa;">💡 Daily Ticket Goal Simulator</h5>
+                        <h5 class="mb-2" style="font-weight: 700; color: #60a5fa;">Daily Ticket Goal Simulator</h5>
                         <p class="text-muted small mb-3">Adjust your estimated customer ticket size to project daily required order volume.</p>
 
                         <div class="p-3 mb-3 rounded" style="background: #151518; border: 1px solid #2d2d34;">
-                            <label class="form-label text-light mb-1" style="font-weight: 600; font-size: 12px;">Simulated Avg Order Value (AOV ₱):</label>
+                            <label class="form-label text-light mb-1" style="font-weight: 600; font-size: 12px;">Simulated Avg Order Value (AOV PHP):</label>
                             <input type="number" step="10" id="simAovInput" class="form-control bg-dark text-white border-secondary mb-3" value="{{ "%.2f"|format(aov) }}" oninput="runBepSimulation({{ daily_break_even }})">
 
                             <div class="p-3 rounded" style="background: #1c1c24; border: 1px solid #2a2a38;">
@@ -340,7 +414,7 @@
                 <!-- INPUT PARAMETERS COLUMN -->
                 <div class="col-12 col-lg-6">
                     <div class="p-4 rounded h-100" style="background: #1e1e24; border: 1px solid #2d2d34;">
-                        <h5 class="mb-1" style="font-weight: 700; color: #60a5fa;">🛠️ Pre-Opening Model Inputs</h5>
+                        <h5 class="mb-1" style="font-weight: 700; color: #60a5fa;">Pre-Opening Model Inputs</h5>
                         <p class="text-muted small mb-4">Input prospective capital expenditures, operating overhead, and sales unit economics.</p>
 
                         <!-- SECTION 1: CAPEX -->
@@ -348,11 +422,11 @@
                             <h6 style="color: #facc15; font-size: 13px; font-weight: 700;" class="mb-2">1. Capital Expenditure (CapEx / Initial Setup)</h6>
                             <div class="row g-2 sandbox-input">
                                 <div class="col-6">
-                                    <label>Equipment & Fit-out (₱):</label>
+                                    <label>Equipment & Fit-out (PHP):</label>
                                     <input type="number" id="sbCapexEquip" class="form-control bg-dark text-white border-secondary" value="35000" oninput="runProFormaSandbox()">
                                 </div>
                                 <div class="col-6">
-                                    <label>Deposit & Permits (₱):</label>
+                                    <label>Deposit & Permits (PHP):</label>
                                     <input type="number" id="sbCapexPermits" class="form-control bg-dark text-white border-secondary" value="100000" oninput="runProFormaSandbox()">
                                 </div>
                             </div>
@@ -363,19 +437,19 @@
                             <h6 style="color: #ef4444; font-size: 13px; font-weight: 700;" class="mb-2">2. Monthly Fixed Operating Expenses (OpEx)</h6>
                             <div class="row g-2 sandbox-input">
                                 <div class="col-6 mb-2">
-                                    <label>Monthly Rent (₱):</label>
+                                    <label>Monthly Rent (PHP):</label>
                                     <input type="number" id="sbOpexRent" class="form-control bg-dark text-white border-secondary" value="30000" oninput="runProFormaSandbox()">
                                 </div>
                                 <div class="col-6 mb-2">
-                                    <label>Target Payroll / Staff (₱):</label>
+                                    <label>Target Payroll / Staff (PHP):</label>
                                     <input type="number" id="sbOpexLabor" class="form-control bg-dark text-white border-secondary" value="45000" oninput="runProFormaSandbox()">
                                 </div>
                                 <div class="col-6">
-                                    <label>Utilities & Wifi (₱):</label>
+                                    <label>Utilities & Wifi (PHP):</label>
                                     <input type="number" id="sbOpexUtils" class="form-control bg-dark text-white border-secondary" value="18000" oninput="runProFormaSandbox()">
                                 </div>
                                 <div class="col-6">
-                                    <label>Marketing & Misc (₱):</label>
+                                    <label>Marketing & Misc (PHP):</label>
                                     <input type="number" id="sbOpexMisc" class="form-control bg-dark text-white border-secondary" value="10000" oninput="runProFormaSandbox()">
                                 </div>
                             </div>
@@ -390,7 +464,7 @@
                                     <input type="number" id="sbTraffic" class="form-control bg-dark text-white border-secondary" value="70" oninput="runProFormaSandbox()">
                                 </div>
                                 <div class="col-4">
-                                    <label>Avg Ticket (₱):</label>
+                                    <label>Avg Ticket (PHP):</label>
                                     <input type="number" id="sbAov" class="form-control bg-dark text-white border-secondary" value="160" oninput="runProFormaSandbox()">
                                 </div>
                                 <div class="col-4">
@@ -405,12 +479,12 @@
                 <!-- FEASIBILITY RESULTS COLUMN -->
                 <div class="col-12 col-lg-6">
                     <div class="p-4 rounded h-100 d-flex flex-column" style="background: #1e1e24; border: 1px solid #2d2d34;">
-                        <h5 class="mb-1" style="font-weight: 700; color: #a6e3a1;">📊 Dynamic Pro-Forma Outputs</h5>
+                        <h5 class="mb-1" style="font-weight: 700; color: #a6e3a1;">Dynamic Pro-Forma Outputs</h5>
                         <p class="text-muted small mb-3">Live financial feasibility metrics computed directly from input models.</p>
 
                         <!-- STATUS BADGE -->
                         <div id="sbStatusBox" class="p-3 rounded mb-3 text-center" style="background: #151518; border: 2px solid #10b981;">
-                            <span id="sbBadgeText" class="badge bg-success px-3 py-1 mb-1" style="font-size: 13px;">🟢 HIGHLY VIABLE CONCEPT</span>
+                            <span id="sbBadgeText" class="badge bg-success px-3 py-1 mb-1" style="font-size: 13px;">HIGHLY VIABLE CONCEPT</span>
                             <div id="sbStatusSub" style="font-size: 12px; color: #cbd5e1;">Projected payback period is healthy and within investor standards.</div>
                         </div>
 
@@ -418,14 +492,14 @@
                             <div class="col-6">
                                 <div class="p-3 rounded" style="background: #151518; border: 1px solid #2d2d34;">
                                     <small style="color: #cbd5e1; font-weight: 600;" class="d-block">Total Initial Investment:</small>
-                                    <span id="sbResultCapEx" class="font-monospace fw-bold style-val" style="font-size: 18px; color: #facc15;">₱450,000.00</span>
+                                    <span id="sbResultCapEx" class="font-monospace fw-bold style-val" style="font-size: 18px; color: #facc15;">PHP 450,000.00</span>
                                 </div>
                             </div>
                             <div class="col-6">
                                 <div class="col-6 w-100">
                                     <div class="p-3 rounded" style="background: #151518; border: 1px solid #2d2d34;">
                                         <small style="color: #cbd5e1; font-weight: 600;" class="d-block">Total Fixed Monthly OpEx:</small>
-                                        <span id="sbResultOpEx" class="font-monospace fw-bold style-val" style="font-size: 18px; color: #ef4444;">₱103,000.00</span>
+                                        <span id="sbResultOpEx" class="font-monospace fw-bold style-val" style="font-size: 18px; color: #ef4444;">PHP 103,000.00</span>
                                     </div>
                                 </div>
                             </div>
@@ -435,13 +509,13 @@
                             <div class="col-6">
                                 <div class="p-3 rounded" style="background: #151518; border: 1px solid #2d2d34;">
                                     <small style="color: #cbd5e1; font-weight: 600;" class="d-block">Projected Monthly Revenue:</small>
-                                    <span id="sbResultRev" class="font-monospace fw-bold style-val" style="font-size: 18px; color: #10b981;">₱336,000.00</span>
+                                    <span id="sbResultRev" class="font-monospace fw-bold style-val" style="font-size: 18px; color: #10b981;">PHP 336,000.00</span>
                                 </div>
                             </div>
                             <div class="col-6">
                                 <div class="p-3 rounded" style="background: #151518; border: 1px solid #2d2d34;">
                                     <small style="color: #cbd5e1; font-weight: 600;" class="d-block">Projected Net Monthly Profit:</small>
-                                    <span id="sbResultNet" class="font-monospace fw-bold style-val" style="font-size: 18px; color: #3b82f6;">₱138,920.00</span>
+                                    <span id="sbResultNet" class="font-monospace fw-bold style-val" style="font-size: 18px; color: #3b82f6;">PHP 138,920.00</span>
                                 </div>
                             </div>
                         </div>
@@ -461,7 +535,7 @@
 
                         <div class="p-3 rounded mt-auto" style="background: #181820; border-left: 4px solid #60a5fa;">
                             <small class="d-block" style="color: #cbd5e1; font-size: 11.5px; line-height: 1.4;">
-                                💡 <strong>Consultant Insight:</strong> A store concept with a payback period under 18 months and a net operating margin over 18% represents an elite risk-adjusted investment for potential franchise partners.
+                                <strong>Consultant Insight:</strong> A store concept with a payback period under 18 months and a net operating margin over 18% represents an elite risk-adjusted investment for potential franchise partners.
                             </small>
                         </div>
                     </div>
@@ -519,8 +593,8 @@
                                     {% for item in inflation_data %}
                                     <tr style="border-bottom: 1px solid #2d2d34;">
                                         <td class="align-middle ps-4" style="font-weight: 600;">{{ item.name }}</td>
-                                        <td class="align-middle font-monospace text-muted">₱{{ "{:,.2f}".format(item.old_price) }}</td>
-                                        <td class="align-middle font-monospace text-warning" style="font-weight: 600;">₱{{ "{:,.2f}".format(item.new_price) }}</td>
+                                        <td class="align-middle font-monospace text-muted">PHP {{ "{:,.2f}".format(item.old_price) }}</td>
+                                        <td class="align-middle font-monospace text-warning" style="font-weight: 600;">PHP {{ "{:,.2f}".format(item.new_price) }}</td>
                                         <td class="align-middle font-monospace text-muted small">{{ item.last_date }}</td>
                                         <td class="align-middle pe-4 text-end">
                                             <span class="badge bg-danger px-2 py-1" style="font-size:12px;">+{{ "{:,.1f}".format(item.pct_change) }}%</span>
@@ -559,7 +633,7 @@
         <div class="tab-pane fade" id="incidents-panel" role="tabpanel">
             <div class="d-flex justify-content-between align-items-center mb-3">
                 <h5 class="m-0 text-white" style="font-weight: 700;">Operational Event Register & Customer Complaint Logs</h5>
-                <button class="btn btn-sm btn-primary px-3 py-2" data-bs-toggle="modal" data-bs-target="#logIncidentModal" style="font-weight:600; border-radius:6px;">➕ Record Operational Event</button>
+                <button class="btn btn-sm btn-primary px-3 py-2" data-bs-toggle="modal" data-bs-target="#logIncidentModal" style="font-weight:600; border-radius:6px;">Record Operational Event</button>
             </div>
             
             <div class="content-card p-0 overflow-hidden" style="background: #1e1e24; border: 1px solid #2d2d34; border-radius: 8px;">
@@ -608,7 +682,56 @@
     </div>
 </div>
 
-<!-- 📦 POPUP DIALOG FOR RECORDING NEW OPERATIONAL ACTIONS -->
+<!-- POPUP DIALOG FOR RECORDING NEW CAPEX -->
+<div class="modal fade" id="addCapexModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content text-white border-0 shadow-lg" style="background: #1e1e24; border-radius: 12px;">
+            <form method="post">
+                <input type="hidden" name="action_type" value="add_capex">
+                
+                <div class="modal-header" style="border-bottom: 1px solid #2d2d34; background: #151518; border-top-left-radius: 12px; border-top-right-radius: 12px;">
+                    <h5 class="modal-title" style="font-weight: 700;">Log Capital Expenditure</h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                </div>
+                
+                <div class="modal-body p-4">
+                    <div class="mb-3">
+                        <label class="form-label">INVESTMENT DATE:</label>
+                        <input type="date" name="capex_date" class="form-control" value="{{ now.strftime('%Y-%m-%d') }}" required>
+                    </div>
+                    
+                    <div class="row g-3 mb-3">
+                        <div class="col-6">
+                            <label class="form-label">CAPEX CATEGORY:</label>
+                            <select name="category" class="form-select" required>
+                                <option value="Equipment Selection">Equipment Selection</option>
+                                <option value="Store Buildout">Store Buildout & Renovation</option>
+                                <option value="Permits & Deposits">Permits & Deposits</option>
+                                <option value="Initial Inventory">Initial Inventory Procurement</option>
+                                <option value="Other Investments">Other Investments</option>
+                            </select>
+                        </div>
+                        <div class="col-6">
+                            <label class="form-label">INVESTMENT AMOUNT (PHP):</label>
+                            <input type="number" step="0.01" min="0.01" name="amount" class="form-control font-monospace text-end" placeholder="0.00" required>
+                        </div>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label">INVESTMENT DESCRIPTION:</label>
+                        <textarea name="description" class="form-control p-3" rows="3" placeholder="e.g., Mahlkonig Grinder, Espresso Machine, Storefront Signage..." required></textarea>
+                    </div>
+                </div>
+                
+                <div class="modal-footer p-3" style="border-top: 1px solid #2d2d34; background: #151518; border-bottom-left-radius: 12px; border-bottom-right-radius: 12px;">
+                    <button type="submit" class="btn btn-success w-100 py-2.5" style="font-weight: 700; border-radius: 6px;">Commit Investment to Ledger</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- POPUP DIALOG FOR RECORDING NEW OPERATIONAL ACTIONS -->
 <div class="modal fade" id="logIncidentModal" tabindex="-1" aria-hidden="true">
     <div class="modal-dialog modal-dialog-centered">
         <div class="modal-content text-white border-0 shadow-lg" style="background: #1e1e24; border-radius: 12px;">
@@ -630,10 +753,10 @@
                         <div class="col-6">
                             <label class="form-label">CLASSIFICATION CATEGORY:</label>
                             <select name="incident_type" class="form-select" required>
-                                <option value="Customer Complaint">🗣️ Customer Complaint</option>
-                                <option value="Employee Violation">👮 Employee Violation</option>
-                                <option value="Equipment Failure">🛠️ Equipment Breakdown</option>
-                                <option value="Product Quality Issue">🍰 Product Quality Issue</option>
+                                <option value="Customer Complaint">Customer Complaint</option>
+                                <option value="Employee Violation">Employee Violation</option>
+                                <option value="Equipment Failure">Equipment Breakdown</option>
+                                <option value="Product Quality Issue">Product Quality Issue</option>
                             </select>
                         </div>
                         <div class="col-6">
@@ -650,8 +773,8 @@
                     <div>
                         <label class="form-label">INITIAL RECONCILIATION STATUS:</label>
                         <select name="status" class="form-select">
-                            <option value="Pending" selected>🔴 Pending Management Review</option>
-                            <option value="Resolved">🟢 Resolved & Settled</option>
+                            <option value="Pending" selected>Pending Management Review</option>
+                            <option value="Resolved">Resolved & Settled</option>
                         </select>
                     </div>
                 </div>
@@ -664,15 +787,47 @@
     </div>
 </div>
 
-<!-- 📊 CHARTJS INTERACTIVE ROUTINES GRAPH CONFIGURATION & SIMULATOR JS -->
 <script>
     document.addEventListener("DOMContentLoaded", function () {
+        
+        // 1. TAB MEMORY SYSTEM INTEGRATION (DOM-Forced Override)
+        const activeTabId = localStorage.getItem('reportsActiveTab');
+        if (activeTabId) {
+            const tabTrigger = document.querySelector(activeTabId);
+            if (tabTrigger) {
+                // Strip all active classes first to prevent layout collisions
+                document.querySelectorAll('.nav-link').forEach(t => t.classList.remove('active'));
+                document.querySelectorAll('.tab-pane').forEach(p => {
+                    p.classList.remove('show', 'active');
+                });
+                
+                // Force active state to the specific tab
+                tabTrigger.classList.add('active');
+                const targetPane = document.querySelector(tabTrigger.getAttribute('data-bs-target'));
+                if (targetPane) {
+                    targetPane.classList.add('show', 'active');
+                }
+            }
+        }
+
+        const commandTabs = document.querySelectorAll('button[data-bs-toggle="tab"]');
+        commandTabs.forEach(tab => {
+            tab.addEventListener('shown.bs.tab', function (e) {
+                localStorage.setItem('reportsActiveTab', `#${e.target.id}`);
+            });
+            // Click fallback for edge-case caching
+            tab.addEventListener('click', function (e) {
+                localStorage.setItem('reportsActiveTab', `#${e.target.id}`);
+            });
+        });
+
+        // 2. CHART GENERATION
         const rawPointsData = {{ menu_data_json|safe }};
         const dataSets = [
-            { label: '⭐️ Stars', data: rawPointsData.filter(p => p.quadrant === 'Stars'), backgroundColor: '#10b981', radius: 9, hoverRadius: 12 },
-            { label: '🐎 Plowhorses', data: rawPointsData.filter(p => p.quadrant === 'Plowhorses'), backgroundColor: '#3b82f6', radius: 9, hoverRadius: 12 },
-            { label: '🧩 Puzzles', data: rawPointsData.filter(p => p.quadrant === 'Puzzles'), backgroundColor: '#f59e0b', radius: 9, hoverRadius: 12 },
-            { label: '🐕 Dogs', data: rawPointsData.filter(p => p.quadrant === 'Dogs'), backgroundColor: '#ef4444', radius: 9, hoverRadius: 12 }
+            { label: 'Stars', data: rawPointsData.filter(p => p.quadrant === 'Stars'), backgroundColor: '#10b981', radius: 9, hoverRadius: 12 },
+            { label: 'Plowhorses', data: rawPointsData.filter(p => p.quadrant === 'Plowhorses'), backgroundColor: '#3b82f6', radius: 9, hoverRadius: 12 },
+            { label: 'Puzzles', data: rawPointsData.filter(p => p.quadrant === 'Puzzles'), backgroundColor: '#f59e0b', radius: 9, hoverRadius: 12 },
+            { label: 'Dogs', data: rawPointsData.filter(p => p.quadrant === 'Dogs'), backgroundColor: '#ef4444', radius: 9, hoverRadius: 12 }
         ];
 
         const ctx = document.getElementById('menuMatrixChart').getContext('2d');
@@ -683,7 +838,7 @@
                 responsive: true, maintainAspectRatio: false,
                 scales: {
                     x: { title: { display: true, text: 'Volume Units Sold (Popularity)', color: '#94a3b8', font: { weight: 'bold' } }, grid: { color: '#2d2d34' }, ticks: { color: '#94a3b8' } },
-                    y: { title: { display: true, text: 'Unit Profit Margin (₱ Profitability)', color: '#94a3b8', font: { weight: 'bold' } }, grid: { color: '#2d2d34' }, ticks: { color: '#94a3b8' } }
+                    y: { title: { display: true, text: 'Unit Profit Margin (PHP Profitability)', color: '#94a3b8', font: { weight: 'bold' } }, grid: { color: '#2d2d34' }, ticks: { color: '#94a3b8' } }
                 },
                 plugins: {
                     legend: { labels: { color: '#e2e8f0' }, position: 'top' },
@@ -691,7 +846,7 @@
                         callbacks: {
                             label: function (context) {
                                 const item = context.raw;
-                                return `Item: ${item.label} | Sold: ${item.x} pcs | Margin: ₱${item.y.toFixed(2)} (Price: ₱${item.selling_price.toFixed(2)})`;
+                                return `Item: ${item.label} | Sold: ${item.x} pcs | Margin: PHP ${item.y.toFixed(2)} (Price: PHP ${item.selling_price.toFixed(2)})`;
                             }
                         }
                     }
@@ -699,7 +854,6 @@
             }
         });
 
-        // Initialize Pro-Forma Sandbox on initial page render
         runProFormaSandbox();
     });
 
@@ -715,7 +869,6 @@
         }
     }
 
-    // ===== PRO-FORMA CONCEPT SANDBOX CALCULATION ENGINE =====
     function runProFormaSandbox() {
         const capexEquip = parseFloat(document.getElementById('sbCapexEquip').value) || 0;
         const capexPermits = parseFloat(document.getElementById('sbCapexPermits').value) || 0;
@@ -739,13 +892,12 @@
         const netMarginPct = projMonthlyRev > 0 ? (projNetProfit / projMonthlyRev) * 100.0 : 0.0;
         const paybackMonths = projNetProfit > 0 ? (totalCapex / projNetProfit) : 0;
 
-        // Render formatted text to UI
-        document.getElementById('sbResultCapEx').innerText = "₱" + totalCapex.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2});
-        document.getElementById('sbResultOpEx').innerText = "₱" + totalOpEx.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2});
-        document.getElementById('sbResultRev').innerText = "₱" + projMonthlyRev.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2});
+        document.getElementById('sbResultCapEx').innerText = "PHP " + totalCapex.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2});
+        document.getElementById('sbResultOpEx').innerText = "PHP " + totalOpEx.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2});
+        document.getElementById('sbResultRev').innerText = "PHP " + projMonthlyRev.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2});
         
         const netSpan = document.getElementById('sbResultNet');
-        netSpan.innerText = "₱" + projNetProfit.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2});
+        netSpan.innerText = "PHP " + projNetProfit.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2});
         netSpan.style.color = projNetProfit >= 0 ? "#10b981" : "#ef4444";
 
         document.getElementById('sbResultMarginPct').innerText = netMarginPct.toFixed(1) + "%";
@@ -758,7 +910,6 @@
             paybackSpan.innerText = "N/A (Loss)";
         }
 
-        // Feasibility Indicator Logic
         const statusBox = document.getElementById('sbStatusBox');
         const badgeText = document.getElementById('sbBadgeText');
         const statusSub = document.getElementById('sbStatusSub');
@@ -766,17 +917,17 @@
         if (projNetProfit > 0 && paybackMonths > 0 && paybackMonths <= 18.0 && netMarginPct >= 18.0) {
             statusBox.style.borderColor = "#10b981";
             badgeText.className = "badge bg-success px-3 py-1 mb-1";
-            badgeText.innerText = "🟢 HIGHLY VIABLE CONCEPT";
+            badgeText.innerText = "HIGHLY VIABLE CONCEPT";
             statusSub.innerText = "Projected payback is under 18 months with strong net cash flow margins.";
         } else if (projNetProfit > 0 && paybackMonths <= 36.0) {
             statusBox.style.borderColor = "#f59e0b";
             badgeText.className = "badge bg-warning text-dark px-3 py-1 mb-1";
-            badgeText.innerText = "🟡 MODERATE FEASIBILITY";
+            badgeText.innerText = "MODERATE FEASIBILITY";
             statusSub.innerText = "Viable concept, but payback takes 1.5 to 3 years. Consider optimizing rent or labor overhead.";
         } else {
             statusBox.style.borderColor = "#ef4444";
             badgeText.className = "badge bg-danger px-3 py-1 mb-1";
-            badgeText.innerText = "🔴 HIGH FINANCIAL RISK";
+            badgeText.innerText = "HIGH FINANCIAL RISK";
             statusSub.innerText = "Projected sales volume is insufficient to cover fixed monthly overhead.";
         }
     }
