@@ -52,6 +52,10 @@
         margin-right: 8px;
         font-weight: bold;
     }
+    .high-contrast-subtext {
+        color: #94a3b8 !important;
+        font-weight: 500;
+    }
 
     /* SUB-TAB BAR STYLING */
     .nav-tabs .nav-link { 
@@ -84,8 +88,7 @@
         display: inline-block;
     }
     .modal-content p, 
-    .modal-content small, 
-    .modal-content .text-muted {
+    .modal-content small {
         color: #cbd5e1 !important;
     }
     .modal-content .form-control, 
@@ -185,7 +188,7 @@
     Showing <span class="text-white fw-bold">{{ total_count }}</span> product option(s) in this view
 </div>
 
-<!-- UNIFIED LOYVERSE NESTED PRODUCT LEDGER WITH DEDICATED ID COLUMN -->
+<!-- UNIFIED LOYVERSE NESTED PRODUCT LEDGER -->
 <div class="content-card p-0 overflow-hidden" style="background: #1e1e24; border: 1px solid #2d2d34; border-radius: 8px;">
     <div class="table-responsive">
         <table class="loyverse-table align-middle m-0">
@@ -205,10 +208,10 @@
             <tbody>
                 {% for parent, variants in grouped_products.items() %}
                     {% set parent_index = loop.index %}
-                    {% set has_multiple_variants = (variants|length > 1) or (variants|length == 1 and variants[0].Variant_Name != 'Regular') %}
+                    {% set has_multiple_variants = (variants|length > 1) %}
 
                     {% if has_multiple_variants %}
-                        <!-- PARENT ROW WITH EXPAND CARET -->
+                        <!-- PARENT ROW WITH EXPAND CARET (ONLY FOR 2+ VARIANTS) -->
                         <tr class="loyverse-parent-row" style="cursor: pointer;" onclick="toggleParentVariants({{ parent_index }})">
                             <td>
                                 <span id="caret-{{ parent_index }}" class="font-monospace text-info me-2 fw-bold" style="display: inline-block; width: 14px;">v</span>
@@ -243,7 +246,7 @@
                             <td class="ps-3">
                                 <span class="variant-indent-tree">|-</span>
                                 <strong class="text-white">{{ p.Variant_Name }}</strong>
-                                <small class="text-muted ms-1">({{ p.Product_Name }})</small>
+                                <small class="high-contrast-subtext ms-1">({{ p.Product_Name }})</small>
                             </td>
                             <td class="text-light small">{{ p.Category }}</td>
                             <td class="font-monospace text-white fw-bold">PHP {{ "%.2f"|format(p.Selling_Price) }}</td>
@@ -293,14 +296,14 @@
                         {% endfor %}
 
                     {% else %}
-                        <!-- SINGLE STANDALONE ITEM -->
+                        <!-- SINGLE STANDALONE ITEM (CLEAN DIRECT ROW, NO ACCORDION) -->
                         {% set p = variants[0] %}
                         <tr class="loyverse-variant-row">
                             <td>
                                 <span class="font-monospace text-info fw-bold" style="font-size: 12.5px;">{{ p.Product_ID }}</span>
                             </td>
                             <td>
-                                <strong class="text-white fs-6">{{ parent }}</strong>
+                                <strong class="text-white fs-6">{{ p.Product_Name }}</strong>
                             </td>
                             <td class="text-light small">{{ p.Category }}</td>
                             <td class="font-monospace text-white fw-bold">PHP {{ "%.2f"|format(p.Selling_Price) }}</td>
@@ -433,7 +436,7 @@
                                 <input type="number" step="0.1" id="addCalcTargetPct" class="form-control text-white border-secondary mb-3 font-monospace" value="28.0" oninput="calcAddTargetPrice()">
 
                                 <div class="p-2 rounded mb-3" style="background-color: #1c1c24; border: 1px solid #2a2a38;">
-                                    <small class="d-block text-muted" style="font-size: 10px; font-weight: 700;">SUGGESTED RETAIL PRICE:</small>
+                                    <small class="d-block" style="color: #94a3b8; font-size: 10px; font-weight: 700;">SUGGESTED RETAIL PRICE:</small>
                                     <span id="addCalcResultPrice" class="font-monospace" style="font-size: 18px; font-weight: bold; color: #a6e3a1;">PHP 0.00</span>
                                 </div>
 
@@ -510,7 +513,7 @@
                                     <p style="font-size: 11.5px; color: #cbd5e1;" class="mb-2">Calculates recommended selling price using this product's live Recipe BOM cost.</p>
 
                                     <div class="p-2 rounded mb-3" style="background-color: #1c1c24; border: 1px solid #2a2a38;">
-                                        <small class="d-block text-muted" style="font-size: 10px; font-weight: 700;">LIVE RECIPE BOM COST:</small>
+                                        <small class="d-block" style="color: #94a3b8; font-size: 10px; font-weight: 700;">LIVE RECIPE BOM COST:</small>
                                         <span class="font-monospace" style="font-size: 16px; font-weight: bold; color: #facc15;">PHP {{ "%.2f"|format(p.Cost_Price) }}</span>
                                     </div>
 
@@ -518,7 +521,7 @@
                                     <input type="number" step="0.1" id="editCalcTargetPct{{ p.Product_ID }}" class="form-control text-white border-secondary mb-3 font-monospace" value="28.0" oninput="calcEditTargetPrice('{{ p.Product_ID }}', {{ p.Cost_Price }})">
 
                                     <div class="p-2 rounded mb-3" style="background-color: #1c1c24; border: 1px solid #2a2a38;">
-                                        <small class="d-block text-muted" style="font-size: 10px; font-weight: 700;">SUGGESTED RETAIL PRICE:</small>
+                                        <small class="d-block" style="color: #94a3b8; font-size: 10px; font-weight: 700;">SUGGESTED RETAIL PRICE:</small>
                                         <span id="editCalcResultPrice{{ p.Product_ID }}" class="font-monospace" style="font-size: 18px; font-weight: bold; color: #a6e3a1;">
                                             {% if p.Cost_Price > 0 %}
                                                 PHP {{ "%.2f"|format(p.Cost_Price / 0.28) }}

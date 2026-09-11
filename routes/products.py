@@ -7,6 +7,30 @@ import re
 
 products_bp = Blueprint('products', __name__)
 
+def heal_product_variants(db_path):
+    """Automatically repairs any NULL, blank, or 'None' strings in Parent_Item and Variant_Name."""
+    try:
+        conn = sqlite3.connect(db_path)
+        cursor = conn.cursor()
+        cursor.execute("""
+            UPDATE Products 
+            SET Variant_Name = 'Regular' 
+            WHERE Variant_Name IS NULL 
+               OR TRIM(Variant_Name) = '' 
+               OR LOWER(TRIM(Variant_Name)) IN ('none', 'nan', 'null');
+        """)
+        cursor.execute("""
+            UPDATE Products 
+            SET Parent_Item = Product_Name 
+            WHERE Parent_Item IS NULL 
+               OR TRIM(Parent_Item) = '' 
+               OR LOWER(TRIM(Parent_Item)) IN ('none', 'nan', 'null');
+        """)
+        conn.commit()
+        conn.close()
+    except Exception as e:
+        print(f"Product variant healing warning: {e}")
+
 def sync_product_categories(db_path):
     """Automatically synchronizes unique product categories into the Categories table."""
     try:
@@ -54,6 +78,7 @@ def web_products_tab(username):
     
     client_db_path = f"data/client_{username}.db"
     db = InventoryDB(client_db_path)
+    heal_product_variants(client_db_path)
     sync_product_categories(client_db_path)
     
     current_status = request.args.get('status', 'Yes')
@@ -66,6 +91,9 @@ def web_products_tab(username):
         if action == 'add_product':
             parent_item = request.form.get('parent_item', '').strip()
             variant_name = request.form.get('variant_name', 'Regular').strip()
+            
+            if not variant_name or variant_name.lower() in ['none', 'nan', 'null', '']:
+                variant_name = 'Regular'
             
             if not parent_item:
                 parent_item = request.form.get('name', '').strip() 
@@ -90,6 +118,7 @@ def web_products_tab(username):
             }, username=operator)
             
             db.update_all_product_costs()
+            heal_product_variants(client_db_path)
             sync_product_categories(client_db_path)
             alert_type = 'success' if success else 'danger'
             return redirect(f"/portal/{username}/products?status=Yes&msg={msg}&alert_type={alert_type}")
@@ -99,6 +128,9 @@ def web_products_tab(username):
             parent_item = request.form.get('parent_item', '').strip()
             variant_name = request.form.get('variant_name', 'Regular').strip()
             product_id = request.form.get('product_id')
+            
+            if not variant_name or variant_name.lower() in ['none', 'nan', 'null', '']:
+                variant_name = 'Regular'
             
             if not parent_item:
                 parent_item = request.form.get('name', '').strip() 
@@ -123,11 +155,12 @@ def web_products_tab(username):
             }, username=operator)
             
             db.update_all_product_costs()
+            heal_product_variants(client_db_path)
             sync_product_categories(client_db_path)
             alert_type = 'success' if success else 'danger'
             return redirect(f"/portal/{username}/products?status={current_status}&msg={msg}&alert_type={alert_type}")
             
-        # 3. ACTION: DELETE OR ARCHIVE PRODUCT
+        # 3. ACTION: DELETE PRODUCT
         elif action == 'delete_product':
             product_id = request.form.get('product_id')
             success, msg = db.delete_product(product_id, username=operator)
@@ -135,7 +168,7 @@ def web_products_tab(username):
             alert_type = 'success' if success else 'danger'
             return redirect(f"/portal/{username}/products?status={current_status}&msg={msg}&alert_type={alert_type}")
 
-        # 4. ACTION: REACTIVATE ARCHIVED PRODUCT
+        # 4. ACTION: REACTIVATE PRODUCT
         elif action == 'reactivate_product':
             product_id = request.form.get('product_id')
             if hasattr(db, 'reactivate_product'):
@@ -172,29 +205,33 @@ def web_products_tab(username):
         if 'Category' in df.columns:
             categories = sorted([c for c in df['Category'].dropna().unique() if str(c).strip()])
 
-        # ===== INTELLIGENT AUTO-PARSING FOR VARIANTS IF CSV HAD BLANK PARENT_ITEM =====
         if 'Parent_Item' not in df.columns:
             df['Parent_Item'] = None
         if 'Variant_Name' not in df.columns:
             df['Variant_Name'] = 'Regular'
 
+        # STRICT NORMALIZATION OF PARENT AND VARIANT LABELS
         for idx, row in df.iterrows():
-            curr_parent = str(row['Parent_Item']).strip() if pd.notna(row['Parent_Item']) else ''
-            curr_variant = str(row['Variant_Name']).strip() if pd.notna(row['Variant_Name']) else 'Regular'
-            curr_name = str(row['Product_Name']).strip() if pd.notna(row['Product_Name']) else ''
+            raw_p = row.get('Parent_Item')
+            raw_v = row.get('Variant_Name')
+            raw_name = str(row.get('Product_Name') or '').strip()
 
-            if not curr_parent or curr_parent.lower() in ['nan', 'none', '']:
-                match = re.match(r'^(Hot|Iced|Warm|Cold)\s*[-–:]\s*(.+)$', curr_name, re.IGNORECASE)
+            v_str = str(raw_v).strip() if pd.notna(raw_v) else ''
+            if v_str.lower() in ['', 'nan', 'none', 'null']:
+                v_str = 'Regular'
+
+            p_str = str(raw_p).strip() if pd.notna(raw_p) else ''
+            if p_str.lower() in ['', 'nan', 'none', 'null']:
+                match = re.match(r'^(Hot|Iced|Warm|Cold)\s*[-–:]\s*(.+)$', raw_name, re.IGNORECASE)
                 if match:
-                    detected_variant = match.group(1).capitalize()
-                    detected_parent = match.group(2).strip()
-                    df.at[idx, 'Parent_Item'] = detected_parent
-                    if curr_variant.lower() == 'regular':
-                        df.at[idx, 'Variant_Name'] = detected_variant
+                    p_str = match.group(2).strip()
+                    if v_str == 'Regular':
+                        v_str = match.group(1).capitalize()
                 else:
-                    df.at[idx, 'Parent_Item'] = curr_name
-                    if not curr_variant:
-                        df.at[idx, 'Variant_Name'] = 'Regular'
+                    p_str = raw_name
+
+            df.at[idx, 'Parent_Item'] = p_str
+            df.at[idx, 'Variant_Name'] = v_str
 
         all_products_raw = df.to_dict('records')
 
