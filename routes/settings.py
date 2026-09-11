@@ -233,7 +233,7 @@ def web_settings_tab(username):
                             unit_val = str(row[unit_col]).strip() if unit_col and pd.notna(row.get(unit_col)) else ing_id_to_default_unit.get(resolved_iid, 'pcs')
 
                             # Normalize grams and milliliters into base inventory units
-                            stored_qty = qty_val / 1000.0 if unit_val.lower() in ['g', 'ml'] else qty_val
+                            stored_qty = qty_val
 
                             if resolved_pid not in recipes_by_product:
                                 recipes_by_product[resolved_pid] = []
