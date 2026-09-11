@@ -158,41 +158,51 @@
 <div class="settings-grid">
     <div class="settings-card" style="border-color: #3b8ed0;">
         <h3 class="card-title" style="color:#3b8ed0;">Bulk CSV Data Sync</h3>
-        <p style="font-size:13px; color:#a1a1aa; line-height:1.5; margin-bottom:15px;">Download mapped templates, export current records, or upload a formatted CSV to rapidly onboard or mass-edit ingredients, products, and recipe formulas.</p>
+        <p style="font-size:13px; color:#a1a1aa; line-height:1.5; margin-bottom:15px;">Download mapped templates, export current records, or upload formatted CSV spreadsheets to onboard or mass-edit ingredients, products, menu recipes, and kitchen prep blueprints.</p>
         
-        <div style="display:flex; gap:10px; margin-bottom: 15px;">
-            <form method="post" style="flex:1;">
+        <div style="display:grid; grid-template-columns: repeat(2, 1fr); gap:8px; margin-bottom: 12px;">
+            <form method="post">
                 <input type="hidden" name="action_type" value="download_template">
                 <input type="hidden" name="template_type" value="ingredients">
                 <button type="submit" class="action-btn" style="width:100%; font-size:11px; background:#4b5563;">Ingredient Template</button>
             </form>
-            <form method="post" style="flex:1;">
+            <form method="post">
                 <input type="hidden" name="action_type" value="download_template">
                 <input type="hidden" name="template_type" value="products">
                 <button type="submit" class="action-btn" style="width:100%; font-size:11px; background:#4b5563;">Product Template</button>
             </form>
-            <form method="post" style="flex:1;">
+            <form method="post">
                 <input type="hidden" name="action_type" value="download_template">
                 <input type="hidden" name="template_type" value="recipes">
-                <button type="submit" class="action-btn" style="width:100%; font-size:11px; background:#4b5563;">Recipe Template</button>
+                <button type="submit" class="action-btn" style="width:100%; font-size:11px; background:#4b5563;">Menu Recipe Template</button>
+            </form>
+            <form method="post">
+                <input type="hidden" name="action_type" value="download_template">
+                <input type="hidden" name="template_type" value="prep_recipes">
+                <button type="submit" class="action-btn" style="width:100%; font-size:11px; background:#4b5563;">Kitchen Prep Template</button>
             </form>
         </div>
         
-        <div style="display:flex; gap:10px; margin-bottom: 20px; border-bottom: 1px dashed #3f3f46; padding-bottom: 15px;">
-            <form method="post" style="flex:1;">
+        <div style="display:grid; grid-template-columns: repeat(2, 1fr); gap:8px; margin-bottom: 20px; border-bottom: 1px dashed #3f3f46; padding-bottom: 15px;">
+            <form method="post">
                 <input type="hidden" name="action_type" value="export_csv">
                 <input type="hidden" name="export_target" value="ingredients">
                 <button type="submit" class="action-btn btn-blue" style="width:100%; font-size:11px;">Export Ingredients</button>
             </form>
-            <form method="post" style="flex:1;">
+            <form method="post">
                 <input type="hidden" name="action_type" value="export_csv">
                 <input type="hidden" name="export_target" value="products">
                 <button type="submit" class="action-btn btn-blue" style="width:100%; font-size:11px;">Export Products</button>
             </form>
-            <form method="post" style="flex:1;">
+            <form method="post">
                 <input type="hidden" name="action_type" value="export_csv">
                 <input type="hidden" name="export_target" value="recipes">
-                <button type="submit" class="action-btn btn-blue" style="width:100%; font-size:11px;">Export Recipes</button>
+                <button type="submit" class="action-btn btn-blue" style="width:100%; font-size:11px;">Export Menu Recipes</button>
+            </form>
+            <form method="post">
+                <input type="hidden" name="action_type" value="export_csv">
+                <input type="hidden" name="export_target" value="prep_recipes">
+                <button type="submit" class="action-btn btn-blue" style="width:100%; font-size:11px;">Export Kitchen Prep</button>
             </form>
         </div>
 
@@ -203,7 +213,8 @@
             <select name="import_target" required style="margin-bottom: 12px;">
                 <option value="ingredients">Ingredients Database</option>
                 <option value="products">Products & Menu Items</option>
-                <option value="recipes">Product Recipes (Formulas)</option>
+                <option value="recipes">Product Recipes (Menu Items → Portions)</option>
+                <option value="prep_recipes">Kitchen Prep Sub-Recipes (Portions → Raw Materials)</option>
             </select>
             
             <label>Attach Completed CSV File:</label>
@@ -215,7 +226,8 @@
         <div style="margin-top: 15px; padding-top: 15px; border-top: 1px dashed #3f3f46;">
             <p style="font-size: 12px; color: #cbd5e1; font-weight: bold; margin-bottom: 5px;">Formatting Instructions:</p>
             <p style="font-size: 11px; color: #a1a1aa; margin-bottom: 5px;">* <b>Ingredients & Products:</b> To add entirely new items, leave the ID column blank. To bulk update existing items, keep the ID intact in your spreadsheet.</p>
-            <p style="font-size: 11px; color: #a1a1aa; margin-bottom: 5px;">* <b>Recipes:</b> Map Product_ID (or Product_Name), Ingredient_ID (or Ingredient_Name), Quantity_Required, and Unit (e.g., g, ml, pcs, kg). Importing recipes replaces the formula for each product listed and automatically recalculates all food costs and profit margins.</p>
+            <p style="font-size: 11px; color: #a1a1aa; margin-bottom: 5px;">* <b>Menu Recipes:</b> Map Product_ID (or Product_Name), Ingredient_ID (or Ingredient_Name), Quantity_Required, and Unit (e.g., g, ml, pcs). Automatically updates retail food costs and profit margins.</p>
+            <p style="font-size: 11px; color: #a1a1aa; margin-bottom: 5px;">* <b>Kitchen Prep Recipes:</b> Map Prepped_ID (or Prepped_Name), Raw_Ingredient_ID (or Raw_Ingredient_Name), Quantity_Required, Unit, and Batch_Yield (e.g. 3424 g). Automatically calculates cost-per-UOM and registers prepped components.</p>
         </div>
     </div>
 
@@ -250,7 +262,7 @@
                 </label>
                 <label class="maintenance-checkbox-row" style="color: #facc15;">
                     <input type="checkbox" name="wipe_recipes" value="yes">
-                    <span>Flush Connected Product Formulas & Batch Specs</span>
+                    <span>Flush Connected Product Formulas & Kitchen Prep Blueprints</span>
                 </label>
                 <label class="maintenance-checkbox-row" style="color: #60a5fa;">
                     <input type="checkbox" name="wipe_ingredients" value="yes">

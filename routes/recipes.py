@@ -1,8 +1,10 @@
 # routes/recipes.py - Advanced Recipes Studio Router Blueprint
 from flask import Blueprint, request, redirect, session, render_template, flash
 from modules.database import InventoryDB
+import sqlite3
 import pandas as pd
 import numpy as np
+from collections import defaultdict
 
 recipes_bp = Blueprint('recipes', __name__)
 
@@ -38,7 +40,8 @@ def web_recipes_tab(username):
         flash('Unauthorized access: Recipes management is strictly reserved for Platform Owner Admins.', 'danger')
         return redirect(f"/portal/{username}")
     
-    db = InventoryDB(f"data/client_{username}.db")
+    client_db_path = f"data/client_{username}.db"
+    db = InventoryDB(client_db_path)
     
     current_tab = request.args.get('tab', 'product').lower().strip()
     if current_tab not in ['product', 'prep']:
@@ -58,6 +61,7 @@ def web_recipes_tab(username):
         recipe_type = request.form.get('recipe_type', 'product').lower().strip()
         target_id = request.form.get('product_id')
         
+        # ACTION: SAVE / UPDATE RECIPE
         if action == 'save_recipe':
             ing_ids = request.form.getlist('ingredient_id[]')
             qtys = request.form.getlist('quantity[]')
@@ -109,17 +113,58 @@ def web_recipes_tab(username):
                 db.save_tab('Prep_Recipes', prep_df)
                 
             db.update_all_product_costs()
+            return redirect(f"/portal/{username}/recipes?tab={recipe_type}&msg=Recipe specification updated successfully.")
             
+        # ACTION: DELETE RECIPE / PREPPED COMPONENT
         elif action == 'delete_recipe':
             if recipe_type == 'product':
                 db.delete_recipe(target_id)
+                msg = f"Product recipe for {target_id} has been cleared."
             elif recipe_type == 'prep':
-                prep_df = db.read_tab('Prep_Recipes')
-                if not prep_df.empty:
-                    prep_df = prep_df[prep_df['Prepped_Ingredient_ID'] != target_id]
-                    db.save_tab('Prep_Recipes', prep_df)
+                conn = sqlite3.connect(client_db_path, timeout=20.0)
+                cursor = conn.cursor()
+                cursor.execute("DELETE FROM Prep_Recipes WHERE Prepped_Ingredient_ID = ?", (target_id,))
+                cursor.execute("DELETE FROM Ingredients WHERE Ingredient_ID = ?", (target_id,))
+                conn.commit()
+                conn.close()
+                msg = f"Kitchen prep component {target_id} and its formula blueprint were permanently removed."
                     
             db.update_all_product_costs()
+            return redirect(f"/portal/{username}/recipes?tab={recipe_type}&msg={msg}&alert_type=success")
+
+        # ACTION: DEDUPLICATE PREPPED INGREDIENTS
+        elif action == 'clean_duplicate_prep':
+            conn = sqlite3.connect(client_db_path, timeout=20.0)
+            cursor = conn.cursor()
+            cursor.execute("SELECT Ingredient_ID, LOWER(TRIM(Ingredient_Name)) FROM Ingredients WHERE UPPER(Ingredient_Type) = 'PREPPED'")
+            rows = cursor.fetchall()
+            
+            grouped = defaultdict(list)
+            for i_id, name in rows:
+                grouped[name].append(i_id)
+                
+            purged_count = 0
+            for name, ids in grouped.items():
+                if len(ids) > 1:
+                    ids_with_recipes = []
+                    for i_id in ids:
+                        cursor.execute("SELECT COUNT(*) FROM Prep_Recipes WHERE Prepped_Ingredient_ID = ?", (i_id,))
+                        if cursor.fetchone()[0] > 0:
+                            ids_with_recipes.append(i_id)
+                            
+                    primary_id = ids_with_recipes[0] if ids_with_recipes else ids[0]
+                    duplicates = [i_id for i_id in ids if i_id != primary_id]
+                    
+                    for d_id in duplicates:
+                        cursor.execute("DELETE FROM Prep_Recipes WHERE Prepped_Ingredient_ID = ?", (d_id,))
+                        cursor.execute("DELETE FROM Ingredients WHERE Ingredient_ID = ?", (d_id,))
+                        purged_count += 1
+                        
+            conn.commit()
+            conn.close()
+            db.update_all_product_costs()
+            msg = f"Deduplication complete: Purged {purged_count} duplicate prepped component entries."
+            return redirect(f"/portal/{username}/recipes?tab=prep&msg={msg}&alert_type=success")
             
         return redirect(f"/portal/{username}/recipes?tab={recipe_type}")
 
@@ -270,5 +315,7 @@ def web_recipes_tab(username):
         categories=categories,
         current_tab=current_tab,
         ingredients=dropdown_ingredients,
-        unallocated_prepped_items=[i for i in ingredients_df.to_dict('records') if i.get('Ingredient_Type') == 'PREPPED'] if not ingredients_df.empty else []
+        unallocated_prepped_items=[i for i in ingredients_df.to_dict('records') if i.get('Ingredient_Type') == 'PREPPED'] if not ingredients_df.empty else [],
+        msg=request.args.get('msg', ''),
+        alert_type=request.args.get('alert_type', 'success')
     )

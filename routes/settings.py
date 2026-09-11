@@ -1,4 +1,4 @@
-# routes/settings.py - Enterprise Settings Engine with Multi-Entity CSV Sync, Auto-Cost Reconciliation & Backup
+# routes/settings.py - Enterprise Settings Engine with Multi-Entity CSV Sync, Kitchen Prep Sub-Recipes & Auto-Cost Reconciliation
 from flask import Blueprint, request, redirect, session, render_template, send_file
 from modules.database import InventoryDB
 import sqlite3
@@ -57,7 +57,6 @@ def heal_database_integrity(conn):
         """)
 
         # 3. Heal RAW ingredient Cost_Per_Unit mathematical desynchronization:
-        # If Purchase_Cost > 0 and Pack_Size > 0, Cost_Per_Unit MUST equal Purchase_Cost / Pack_Size.
         cursor.execute("""
             UPDATE Ingredients
             SET Cost_Per_Unit = ROUND(Purchase_Cost / Pack_Size, 4)
@@ -214,7 +213,7 @@ def web_settings_tab(username):
                     feedback_msg = f"Restoration Fault during file overwrite sequencing: {str(e)}"
                     alert_type = "danger"
 
-        # 7. BULK CSV IMPORT (SAFE UPSERT, COLLISION SHIELD & COST RECONCILIATION)
+        # 7. BULK CSV IMPORT (SAFE UPSERT, COLLISION SHIELD, PRODUCTS, RECIPES & KITCHEN PREP)
         elif action == 'bulk_import':
             target_table = request.form.get('import_target')
             uploaded_file = request.files.get('csv_file')
@@ -228,7 +227,7 @@ def web_settings_tab(username):
                     df = pd.read_csv(stream)
                     conn = sqlite3.connect(client_db_path, timeout=20.0)
 
-                    # ===== SCENARIO A: RECIPES IMPORT =====
+                    # ===== SCENARIO A: PRODUCT FINISHED RECIPES IMPORT =====
                     if target_table == 'recipes':
                         col_map = {str(col).lower().strip().replace(' ', '_'): col for col in df.columns}
                         
@@ -337,16 +336,179 @@ def web_settings_tab(username):
                                 details=f"Bulk imported recipe matrices for {len(recipes_by_product)} products ({total_lines} lines)"
                             )
 
-                            feedback_msg = f"Success: Successfully imported recipes for {len(recipes_by_product)} products ({total_lines} recipe components). Food costs and margins recalculated."
+                            feedback_msg = f"Success: Successfully imported recipes for {len(recipes_by_product)} products ({total_lines} components). Food costs recalculated."
                             if skipped_rows:
-                                feedback_msg += f" Note: {len(skipped_rows)} rows skipped due to invalid product/ingredient names."
+                                feedback_msg += f" Note: {len(skipped_rows)} rows skipped due to invalid item identifiers."
                             alert_type = "success"
                         else:
                             conn.close()
-                            feedback_msg = "Error: No valid recipe rows found in CSV. Please verify that your Product and Ingredient names or IDs match existing catalog records."
+                            feedback_msg = "Error: No valid recipe rows found in CSV. Please verify Product and Ingredient names or IDs match existing catalog records."
                             alert_type = "danger"
 
-                    # ===== SCENARIO B: INGREDIENTS OR PRODUCTS SAFE UPSERT =====
+                    # ===== SCENARIO B: KITCHEN PREP SUB-RECIPES IMPORT =====
+                    elif target_table == 'prep_recipes':
+                        col_map = {str(col).lower().strip().replace(' ', '_'): col for col in df.columns}
+                        
+                        prepped_id_col = col_map.get('prepped_id') or col_map.get('prepped_ingredient_id') or col_map.get('prep_id')
+                        prepped_name_col = col_map.get('prepped_name') or col_map.get('prepped_item') or col_map.get('prepped_ingredient') or col_map.get('prep_name')
+                        raw_id_col = col_map.get('raw_ingredient_id') or col_map.get('raw_id') or col_map.get('ingredient_id') or col_map.get('ing_id')
+                        raw_name_col = col_map.get('raw_ingredient_name') or col_map.get('raw_name') or col_map.get('ingredient_name') or col_map.get('raw_item')
+                        qty_col = col_map.get('quantity_required') or col_map.get('quantity') or col_map.get('qty') or col_map.get('amount')
+                        unit_col = col_map.get('unit') or col_map.get('uom')
+                        yield_col = col_map.get('batch_yield') or col_map.get('yield') or col_map.get('output_yield') or col_map.get('batch_output_yield')
+
+                        cursor = conn.cursor()
+                        cursor.execute("SELECT Ingredient_ID, LOWER(TRIM(Ingredient_Name)), Unit, Ingredient_Type FROM Ingredients")
+                        all_ings = cursor.fetchall()
+                        ing_name_to_id = {r[1]: r[0] for r in all_ings if r and r[1]}
+                        valid_ing_ids = {r[0] for r in all_ings if r and r[0]}
+                        ing_id_to_default_unit = {r[0]: (r[2] or 'g') for r in all_ings if r and r[0]}
+
+                        cursor.execute("SELECT Ingredient_ID FROM Ingredients WHERE Ingredient_ID LIKE 'ING%'")
+                        existing_ids = [r[0] for r in cursor.fetchall() if r and r[0]]
+                        nums = []
+                        for eid in existing_ids:
+                            try:
+                                nums.append(int(eid.replace('ING', '')))
+                            except ValueError:
+                                pass
+                        next_ing_num = max(nums) + 1 if nums else 1
+
+                        prep_recipes_by_item = {}
+                        skipped_rows = []
+
+                        for row_idx, row in df.iterrows():
+                            raw_pid = str(row[prepped_id_col]).strip() if prepped_id_col and pd.notna(row.get(prepped_id_col)) else ""
+                            raw_pname = str(row[prepped_name_col]).strip() if prepped_name_col and pd.notna(row.get(prepped_name_col)) else ""
+
+                            resolved_pid = None
+                            if raw_pid and raw_pid in valid_ing_ids:
+                                resolved_pid = raw_pid
+                            elif raw_pname and raw_pname.lower() in ing_name_to_id:
+                                resolved_pid = ing_name_to_id[raw_pname.lower()]
+                            elif raw_pid and raw_pid.lower() in ing_name_to_id:
+                                resolved_pid = ing_name_to_id[raw_pid.lower()]
+                            elif raw_pname or raw_pid:
+                                # Automatically register prepped component in Ingredients if not yet present
+                                target_name = raw_pname if raw_pname else raw_pid
+                                if raw_pid and raw_pid.startswith('ING') and raw_pid not in valid_ing_ids:
+                                    new_pid = raw_pid
+                                else:
+                                    new_pid = f"ING{next_ing_num:03d}"
+                                    next_ing_num += 1
+                                    
+                                cursor.execute("""
+                                    INSERT INTO Ingredients (
+                                        Ingredient_ID, Ingredient_Name, Unit, Category,
+                                        Ingredient_Type, Active, Current_Stock, Min_Stock, Cost_Per_Unit
+                                    ) VALUES (?, ?, 'g', 'Prep', 'PREPPED', 'Yes', 0.0, 0.0, 0.0)
+                                """, (new_pid, target_name))
+                                
+                                valid_ing_ids.add(new_pid)
+                                ing_name_to_id[target_name.lower()] = new_pid
+                                ing_id_to_default_unit[new_pid] = 'g'
+                                resolved_pid = new_pid
+
+                            if not resolved_pid:
+                                skipped_rows.append(f"Row {row_idx+2}: Unknown Prepped Item '{raw_pid or raw_pname}'")
+                                continue
+
+                            # Resolve Raw Ingredient Component
+                            raw_iid = str(row[raw_id_col]).strip() if raw_id_col and pd.notna(row.get(raw_id_col)) else ""
+                            raw_iname = str(row[raw_name_col]).strip() if raw_name_col and pd.notna(row.get(raw_name_col)) else ""
+
+                            resolved_iid = None
+                            if raw_iid and raw_iid in valid_ing_ids:
+                                resolved_iid = raw_iid
+                            elif raw_iname and raw_iname.lower() in ing_name_to_id:
+                                resolved_iid = ing_name_to_id[raw_iname.lower()]
+                            elif raw_iid and raw_iid.lower() in ing_name_to_id:
+                                resolved_iid = ing_name_to_id[raw_iid.lower()]
+
+                            if not resolved_iid:
+                                skipped_rows.append(f"Row {row_idx+2}: Unknown Raw Ingredient '{raw_iid or raw_iname}'")
+                                continue
+
+                            try:
+                                qty_val = float(row[qty_col]) if qty_col and pd.notna(row.get(qty_col)) else 0.0
+                            except (ValueError, TypeError):
+                                qty_val = 0.0
+
+                            if qty_val <= 0:
+                                skipped_rows.append(f"Row {row_idx+2}: Invalid quantity for {resolved_pid}")
+                                continue
+
+                            unit_val = str(row[unit_col]).strip() if unit_col and pd.notna(row.get(unit_col)) else ing_id_to_default_unit.get(resolved_iid, 'g')
+
+                            try:
+                                yield_val = float(row[yield_col]) if yield_col and pd.notna(row.get(yield_col)) else 1.0
+                                if yield_val <= 0:
+                                    yield_val = 1.0
+                            except (ValueError, TypeError):
+                                yield_val = 1.0
+
+                            if resolved_pid not in prep_recipes_by_item:
+                                prep_recipes_by_item[resolved_pid] = {
+                                    'yield': yield_val,
+                                    'items': []
+                                }
+
+                            if yield_val > 1.0:
+                                prep_recipes_by_item[resolved_pid]['yield'] = yield_val
+
+                            prep_recipes_by_item[resolved_pid]['items'].append({
+                                'raw_ingredient_id': resolved_iid,
+                                'quantity': qty_val,
+                                'unit': unit_val
+                            })
+
+                        if prep_recipes_by_item:
+                            existing_prep_recipes = pd.read_sql("SELECT * FROM Prep_Recipes", conn)
+                            updated_prep_ids = list(prep_recipes_by_item.keys())
+
+                            if not existing_prep_recipes.empty:
+                                existing_prep_recipes = existing_prep_recipes[~existing_prep_recipes['Prepped_Ingredient_ID'].isin(updated_prep_ids)]
+
+                            new_prep_rows = []
+                            total_lines = 0
+                            for pid, data in prep_recipes_by_item.items():
+                                batch_yield = data['yield']
+                                for idx, item in enumerate(data['items'], start=1):
+                                    new_prep_rows.append({
+                                        'Prep_Recipe_ID': f"{pid}-PREP{idx:03d}",
+                                        'Prepped_Ingredient_ID': pid,
+                                        'Raw_Ingredient_ID': item['raw_ingredient_id'],
+                                        'Quantity_Required': item['quantity'],
+                                        'Unit': item['unit'],
+                                        'Batch_Yield': batch_yield
+                                    })
+                                    total_lines += 1
+
+                            combined_prep_recipes = pd.concat([existing_prep_recipes, pd.DataFrame(new_prep_rows)], ignore_index=True) if new_prep_rows else existing_prep_recipes
+                            combined_prep_recipes.to_sql('Prep_Recipes', conn, if_exists='replace', index=False)
+                            
+                            heal_database_integrity(conn)
+                            conn.commit()
+                            conn.close()
+
+                            client_db.update_all_product_costs()
+                            client_db.log_user_action(
+                                username=username,
+                                action_type="BULK_IMPORT_PREP_RECIPES",
+                                module="Recipes",
+                                details=f"Bulk imported kitchen prep formulas for {len(prep_recipes_by_item)} components ({total_lines} lines)"
+                            )
+
+                            feedback_msg = f"Success: Successfully imported kitchen prep blueprints for {len(prep_recipes_by_item)} prepped items ({total_lines} constituent lines). Yield and amortized costs updated."
+                            if skipped_rows:
+                                feedback_msg += f" Note: {len(skipped_rows)} rows skipped due to invalid constituent names."
+                            alert_type = "success"
+                        else:
+                            conn.close()
+                            feedback_msg = "Error: No valid kitchen prep rows found in CSV. Please verify prepped and raw ingredient names or IDs match existing records."
+                            alert_type = "danger"
+
+                    # ===== SCENARIO C: INGREDIENTS OR PRODUCTS SAFE UPSERT =====
                     else:
                         cursor = conn.cursor()
                         is_ingredients = (target_table == 'ingredients')
@@ -371,7 +533,6 @@ def web_settings_tab(username):
                             name_to_id = {r[1]: r[0] for r in existing_rows if r and r[1]}
                             occupied_ids = set(r[0] for r in existing_rows if r and r[0])
 
-                        # Determine the next available ID sequence
                         cursor.execute(f"SELECT {id_col} FROM {target_table_name} WHERE {id_col} LIKE '{prefix}%'")
                         existing_ids = [r[0] for r in cursor.fetchall() if r and r[0]]
                         nums = []
@@ -464,21 +625,19 @@ def web_settings_tab(username):
 
                             processed_count += 1
 
-                        # 3. RUN DATABASE INTEGRITY RECONCILIATION
                         heal_database_integrity(conn)
-
                         conn.commit()
                         conn.close()
 
                         client_db.update_all_product_costs()
-                        feedback_msg = f"Success: Safely processed {processed_count} records into {target_table_name}. Packaging costs mathematically verified and sub-recipes preserved."
+                        feedback_msg = f"Success: Safely processed {processed_count} records into {target_table_name}. Packaging costs verified and sub-recipes preserved."
                         alert_type = "success"
 
                 except Exception as e:
                     feedback_msg = f"CSV Format Error: {str(e)}"
                     alert_type = "danger"
 
-        # 8. DOWNLOAD CSV TEMPLATE
+        # 8. DOWNLOAD CSV TEMPLATES
         elif action == 'download_template':
             template_type = request.form.get('template_type')
             
@@ -487,6 +646,10 @@ def web_settings_tab(username):
                 if template_type == 'recipes':
                     df = pd.DataFrame(columns=[
                         'Product_ID', 'Product_Name', 'Ingredient_ID', 'Ingredient_Name', 'Quantity_Required', 'Unit'
+                    ])
+                elif template_type == 'prep_recipes':
+                    df = pd.DataFrame(columns=[
+                        'Prepped_ID', 'Prepped_Name', 'Raw_Ingredient_ID', 'Raw_Ingredient_Name', 'Quantity_Required', 'Unit', 'Batch_Yield'
                     ])
                 elif template_type == 'ingredients':
                     df = pd.read_sql("SELECT * FROM Ingredients LIMIT 0", conn)
@@ -503,7 +666,7 @@ def web_settings_tab(username):
                 feedback_msg = f"Template Generation Error: {str(e)}"
                 alert_type = "danger"
 
-        # 9. EXPORT CSV DATA
+        # 9. EXPORT CSV DATA (MENU RECIPES & KITCHEN PREP SEPARATED)
         elif action == 'export_csv':
             export_target = request.form.get('export_target')
             
@@ -528,6 +691,29 @@ def web_settings_tab(username):
                     
                     if not df.empty and 'Quantity_Required' in df.columns:
                         df['Quantity_Required'] = pd.to_numeric(df['Quantity_Required'], errors='coerce').fillna(0.0)
+
+                elif export_target == 'prep_recipes':
+                    query = """
+                        SELECT 
+                            pr.Prepped_Ingredient_ID AS Prepped_ID,
+                            COALESCE(i_prep.Ingredient_Name, pr.Prepped_Ingredient_ID) AS Prepped_Name,
+                            pr.Raw_Ingredient_ID,
+                            COALESCE(i_raw.Ingredient_Name, pr.Raw_Ingredient_ID) AS Raw_Ingredient_Name,
+                            pr.Quantity_Required,
+                            pr.Unit,
+                            pr.Batch_Yield
+                        FROM Prep_Recipes pr
+                        LEFT JOIN Ingredients i_prep ON pr.Prepped_Ingredient_ID = i_prep.Ingredient_ID
+                        LEFT JOIN Ingredients i_raw ON pr.Raw_Ingredient_ID = i_raw.Ingredient_ID
+                        ORDER BY pr.Prepped_Ingredient_ID, pr.Raw_Ingredient_ID
+                    """
+                    df = pd.read_sql(query, conn)
+                    conn.close()
+
+                    if not df.empty:
+                        df['Quantity_Required'] = pd.to_numeric(df['Quantity_Required'], errors='coerce').fillna(0.0)
+                        df['Batch_Yield'] = pd.to_numeric(df['Batch_Yield'], errors='coerce').fillna(1.0)
+
                 elif export_target == 'ingredients':
                     df = pd.read_sql("SELECT * FROM Ingredients", conn)
                     conn.close()
@@ -561,7 +747,7 @@ def web_settings_tab(username):
                         
                     if request.form.get('wipe_recipes'):
                         tables_to_wipe.extend(['Recipes', 'Prep_Recipes'])
-                        wiped_categories.append("Linked Product Recipes")
+                        wiped_categories.append("Linked Product Recipes & Kitchen Prep Sub-Recipes")
                         
                     if request.form.get('wipe_ingredients'):
                         tables_to_wipe.extend(['Ingredients'])
