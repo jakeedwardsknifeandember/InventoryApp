@@ -1,12 +1,54 @@
-# routes/recipes.py - Advanced Recipes Studio Router Blueprint
+# routes/recipes.py - Advanced Recipes Studio Router Blueprint with Dynamic Parent-Variant Hierarchy
 from flask import Blueprint, request, redirect, session, render_template, flash
 from modules.database import InventoryDB
 import sqlite3
 import pandas as pd
 import numpy as np
+import re
 from collections import defaultdict
 
 recipes_bp = Blueprint('recipes', __name__)
+
+def resolve_parent_and_variant(p):
+    """
+    Intelligently extracts the master parent drink family and variant label.
+    Supports explicit database fields as well as standard beverage naming patterns.
+    """
+    raw_parent = p.get('Parent_Item')
+    raw_variant = p.get('Variant_Name')
+    
+    # 1. Respect explicit database values if populated
+    if raw_parent and str(raw_parent).strip().lower() not in ['nan', 'none', '', 'null']:
+        parent = str(raw_parent).strip()
+        variant = str(raw_variant).strip() if (raw_variant and str(raw_variant).strip().lower() not in ['nan', 'none', '', 'null']) else 'Regular'
+        return parent, variant
+
+    full_name = str(p.get('Product_Name') or '').strip()
+    
+    # 2. Match Prefix Patterns: "Hot - Brown Sugar Coffee", "Iced- Americano Coffee", "Hot Cafe Mocha"
+    prefix_match = re.match(r"^(Hot|Iced|Cold|Warm)\s*[-–—:]?\s*(.+)$", full_name, re.IGNORECASE)
+    if prefix_match:
+        variant = prefix_match.group(1).strip().capitalize()
+        parent = prefix_match.group(2).strip()
+        return parent, variant
+
+    # 3. Match Suffix Patterns: "Brown Sugar Coffee - Hot", "Americano (Iced)"
+    suffix_match = re.match(r"^(.+?)\s*[-–—:(]\s*(Hot|Iced|Cold|Warm|12oz|16oz|22oz|Regular|Large)\)?$", full_name, re.IGNORECASE)
+    if suffix_match:
+        parent = suffix_match.group(1).strip()
+        variant = suffix_match.group(2).strip().capitalize()
+        return parent, variant
+
+    # 4. Standard Delimiter: "Product Family - Variant"
+    delimiter_match = re.match(r"^([^-–—(]+)\s*[-–—]\s*(.+)$", full_name)
+    if delimiter_match:
+        part1 = delimiter_match.group(1).strip()
+        part2 = delimiter_match.group(2).strip()
+        if part1.lower() in ['hot', 'iced', 'cold', 'warm']:
+            return part2, part1.capitalize()
+        return part1, part2
+
+    return full_name, "Regular"
 
 def normalize_recipe_qty(qty, selected_unit, base_unit):
     """Normalizes recipe input quantity into the ingredient's actual database base unit."""
@@ -61,7 +103,7 @@ def web_recipes_tab(username):
         recipe_type = request.form.get('recipe_type', 'product').lower().strip()
         target_id = request.form.get('product_id')
         
-        # ACTION: SAVE / UPDATE RECIPE
+        # SAVE / UPDATE FORMULA
         if action == 'save_recipe':
             ing_ids = request.form.getlist('ingredient_id[]')
             qtys = request.form.getlist('quantity[]')
@@ -113,13 +155,13 @@ def web_recipes_tab(username):
                 db.save_tab('Prep_Recipes', prep_df)
                 
             db.update_all_product_costs()
-            return redirect(f"/portal/{username}/recipes?tab={recipe_type}&msg=Recipe specification updated successfully.")
+            return redirect(f"/portal/{username}/recipes?tab={recipe_type}&msg=Formula specifications successfully saved.")
             
-        # ACTION: DELETE RECIPE / PREPPED COMPONENT
+        # DELETE SPECIFICATION OR INGREDIENT SHELL
         elif action == 'delete_recipe':
             if recipe_type == 'product':
                 db.delete_recipe(target_id)
-                msg = f"Product recipe for {target_id} has been cleared."
+                msg = f"Product recipe for {target_id} was successfully cleared."
             elif recipe_type == 'prep':
                 conn = sqlite3.connect(client_db_path, timeout=20.0)
                 cursor = conn.cursor()
@@ -132,7 +174,7 @@ def web_recipes_tab(username):
             db.update_all_product_costs()
             return redirect(f"/portal/{username}/recipes?tab={recipe_type}&msg={msg}&alert_type=success")
 
-        # ACTION: DEDUPLICATE PREPPED INGREDIENTS
+        # PURGE REDUNDANT DUPLICATE PREPPED ITEMS
         elif action == 'clean_duplicate_prep':
             conn = sqlite3.connect(client_db_path, timeout=20.0)
             cursor = conn.cursor()
@@ -199,7 +241,7 @@ def web_recipes_tab(username):
         active_prod_df = products_df[products_df['Active'].astype(str).str.upper() == 'YES']
         all_products_list = active_prod_df.to_dict('records')
 
-    # SCENARIO A: PRODUCT RECIPES TAB
+    # SCENARIO A: PRODUCT RECIPES TAB (WITH PARENT-VARIANT FOLDERS)
     if current_tab == 'product':
         categories = sorted(list(set(p.get('Category', 'General') for p in all_products_list if p.get('Category')))) if all_products_list else []
         
@@ -228,14 +270,14 @@ def web_recipes_tab(username):
             profit = selling_price - total_cost
             margin = (profit / selling_price * 100) if selling_price > 0 else 0.0
             
-            parent_item_name = str(p.get('Parent_Item') or p.get('Product_Name') or 'Uncategorized').strip()
-            variant_item_name = str(p.get('Variant_Name') or 'Regular').strip()
+            # RESOLVE PARENT PRODUCT FAMILY & VARIANT LABEL
+            parent_name, variant_name = resolve_parent_and_variant(p)
 
             recipe_obj = {
                 'Product_Name': p['Product_Name'], 
                 'Product_ID': p['Product_ID'], 
-                'Parent_Item': parent_item_name,
-                'Variant_Name': variant_item_name,
+                'Parent_Item': parent_name,
+                'Variant_Name': variant_name,
                 'Category': p.get('Category', 'General') or 'General', 
                 'Selling_Price': selling_price, 
                 'Items': items, 'Total_Cost': total_cost, 'Profit': profit, 'Margin': margin
@@ -243,9 +285,9 @@ def web_recipes_tab(username):
 
             recipe_data.append(recipe_obj)
 
-            if parent_item_name not in grouped_recipes:
-                grouped_recipes[parent_item_name] = []
-            grouped_recipes[parent_item_name].append(recipe_obj)
+            if parent_name not in grouped_recipes:
+                grouped_recipes[parent_name] = []
+            grouped_recipes[parent_name].append(recipe_obj)
 
     # SCENARIO B: KITCHEN PREP SUB-RECIPES TAB
     elif current_tab == 'prep' and not ingredients_df.empty:

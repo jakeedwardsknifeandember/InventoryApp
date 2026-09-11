@@ -1,4 +1,4 @@
-# routes/settings.py - Enterprise Settings Engine with Multi-Entity CSV Sync, Kitchen Prep Sub-Recipes & Auto-Cost Reconciliation
+# routes/settings.py - Enterprise Settings Engine with Multi-Encoding CSV Sync, Prep Sub-Recipes & Auto-Cost Reconciliation
 from flask import Blueprint, request, redirect, session, render_template, send_file
 from modules.database import InventoryDB
 import sqlite3
@@ -56,7 +56,7 @@ def heal_database_integrity(conn):
             WHERE Ingredient_ID IN (SELECT DISTINCT Prepped_Ingredient_ID FROM Prep_Recipes)
         """)
 
-        # 3. Heal RAW ingredient Cost_Per_Unit mathematical desynchronization:
+        # 3. Heal RAW ingredient Cost_Per_Unit mathematical desynchronization
         cursor.execute("""
             UPDATE Ingredients
             SET Cost_Per_Unit = ROUND(Purchase_Cost / Pack_Size, 4)
@@ -70,7 +70,7 @@ def heal_database_integrity(conn):
               )
         """)
 
-        # 4. If Cost_Per_Unit > 0 but Purchase_Cost is 0 or NULL for RAW items:
+        # 4. If Cost_Per_Unit > 0 but Purchase_Cost is 0 or NULL for RAW items
         cursor.execute("""
             UPDATE Ingredients
             SET Purchase_Cost = ROUND(Cost_Per_Unit * Pack_Size, 2)
@@ -213,7 +213,7 @@ def web_settings_tab(username):
                     feedback_msg = f"Restoration Fault during file overwrite sequencing: {str(e)}"
                     alert_type = "danger"
 
-        # 7. BULK CSV IMPORT (SAFE UPSERT, COLLISION SHIELD, PRODUCTS, RECIPES & KITCHEN PREP)
+        # 7. BULK CSV IMPORT (MULTI-ENCODING RESILIENT PARSER)
         elif action == 'bulk_import':
             target_table = request.form.get('import_target')
             uploaded_file = request.files.get('csv_file')
@@ -223,7 +223,21 @@ def web_settings_tab(username):
                 alert_type = "danger"
             else:
                 try:
-                    stream = io.StringIO(uploaded_file.stream.read().decode("utf-8-sig"), newline=None)
+                    raw_bytes = uploaded_file.stream.read()
+                    decoded_text = None
+
+                    # Resilient encoding cascade: checks UTF-8 variations and Windows Excel ANSI encodings
+                    for enc in ['utf-8-sig', 'utf-8', 'cp1252', 'latin-1', 'iso-8859-1']:
+                        try:
+                            decoded_text = raw_bytes.decode(enc)
+                            break
+                        except UnicodeDecodeError:
+                            continue
+                            
+                    if decoded_text is None:
+                        decoded_text = raw_bytes.decode('utf-8', errors='replace')
+
+                    stream = io.StringIO(decoded_text, newline=None)
                     df = pd.read_csv(stream)
                     conn = sqlite3.connect(client_db_path, timeout=20.0)
 
@@ -389,7 +403,6 @@ def web_settings_tab(username):
                             elif raw_pid and raw_pid.lower() in ing_name_to_id:
                                 resolved_pid = ing_name_to_id[raw_pid.lower()]
                             elif raw_pname or raw_pid:
-                                # Automatically register prepped component in Ingredients if not yet present
                                 target_name = raw_pname if raw_pname else raw_pid
                                 if raw_pid and raw_pid.startswith('ING') and raw_pid not in valid_ing_ids:
                                     new_pid = raw_pid
@@ -576,7 +589,6 @@ def web_settings_tab(username):
 
                                 row_dict['Pack_Size'] = p_size
                                 
-                                # Force exact math: Cost_Per_Unit MUST equal Purchase_Cost / Pack_Size
                                 if p_cost > 0:
                                     row_dict['Purchase_Cost'] = p_cost
                                     row_dict['Cost_Per_Unit'] = round(p_cost / p_size, 4)
@@ -666,7 +678,7 @@ def web_settings_tab(username):
                 feedback_msg = f"Template Generation Error: {str(e)}"
                 alert_type = "danger"
 
-        # 9. EXPORT CSV DATA (MENU RECIPES & KITCHEN PREP SEPARATED)
+        # 9. EXPORT CSV DATA
         elif action == 'export_csv':
             export_target = request.form.get('export_target')
             

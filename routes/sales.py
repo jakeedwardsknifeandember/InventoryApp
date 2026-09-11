@@ -1,289 +1,275 @@
-# routes/sales.py - EOD Bulk Entry Blueprint
+# routes/sales.py - End-of-Day (EOD) Sales Entry & Recipe Inventory Deduction Engine
 from flask import Blueprint, request, redirect, session, render_template
 from modules.database import InventoryDB
-import pandas as pd
 import sqlite3
+import pandas as pd
+import numpy as np
+import re
 from datetime import datetime
+from collections import defaultdict
 
 sales_bp = Blueprint('sales', __name__)
+
+def resolve_parent_and_variant(p):
+    """
+    Intelligently extracts the master parent drink family and variant label.
+    Supports explicit database fields as well as standard beverage naming patterns.
+    """
+    raw_parent = p.get('Parent_Item')
+    raw_variant = p.get('Variant_Name')
+    
+    # 1. Respect explicit database values if populated
+    if raw_parent and str(raw_parent).strip().lower() not in ['nan', 'none', '', 'null']:
+        parent = str(raw_parent).strip()
+        variant = str(raw_variant).strip() if (raw_variant and str(raw_variant).strip().lower() not in ['nan', 'none', '', 'null']) else 'Regular'
+        return parent, variant
+
+    full_name = str(p.get('Product_Name') or '').strip()
+    
+    # 2. Match Prefix Patterns: "Hot - Brown Sugar Coffee", "Iced- Americano Coffee", "Hot Cafe Mocha"
+    prefix_match = re.match(r"^(Hot|Iced|Cold|Warm)\s*[-–—:]?\s*(.+)$", full_name, re.IGNORECASE)
+    if prefix_match:
+        variant = prefix_match.group(1).strip().capitalize()
+        parent = prefix_match.group(2).strip()
+        return parent, variant
+
+    # 3. Match Suffix Patterns: "Brown Sugar Coffee - Hot", "Americano (Iced)"
+    suffix_match = re.match(r"^(.+?)\s*[-–—:(]\s*(Hot|Iced|Cold|Warm|12oz|16oz|22oz|Regular|Large)\)?$", full_name, re.IGNORECASE)
+    if suffix_match:
+        parent = suffix_match.group(1).strip()
+        variant = suffix_match.group(2).strip().capitalize()
+        return parent, variant
+
+    # 4. Standard Delimiter: "Product Family - Variant"
+    delimiter_match = re.match(r"^([^-–—(]+)\s*[-–—]\s*(.+)$", full_name)
+    if delimiter_match:
+        part1 = delimiter_match.group(1).strip()
+        part2 = delimiter_match.group(2).strip()
+        if part1.lower() in ['hot', 'iced', 'cold', 'warm']:
+            return part2, part1.capitalize()
+        return part1, part2
+
+    return full_name, "Regular"
 
 @sales_bp.route('/portal/<username>/sales', methods=['GET', 'POST'])
 def web_sales_tab(username):
     username = username.lower().strip()
-    if session.get('logged_in_user') != username: 
+    
+    if session.get('logged_in_user') != username:
         return redirect('/login')
         
-    db_path = f"data/client_{username}.db"
-    client_db = InventoryDB(db_path)
+    client_db_path = f"data/client_{username}.db"
+    client_db = InventoryDB(client_db_path)
+    
     feedback_msg = None
     alert_type = "success"
-    
-    # Process End-of-Day Bulk Sheet Post Form Submission
+
+    # ==========================================
+    # 1. POST METHOD: SUBMIT EOD CLOSING SALES
+    # ==========================================
     if request.method == 'POST':
-        product_ids = request.form.getlist('product_id[]')
-        quantities = request.form.getlist('quantity[]')
-        
-        modifier_ids = request.form.getlist('modifier_id[]')
-        modifier_quantities = request.form.getlist('modifier_quantity[]')
-        
-        chosen_date = request.form.get('sale_date', datetime.now().strftime("%Y-%m-%d")).strip()
+        sale_date = request.form.get('sale_date', '').strip() or datetime.now().strftime("%Y-%m-%d")
         audit_note = request.form.get('audit_note', '').strip()
+        recorded_by = session.get('staff_role') or session.get('logged_in_user') or 'Staff'
         
-        # ===== BACKEND SECURITY ENFORCEMENT =====
-        today_str = datetime.now().strftime("%Y-%m-%d")
-        staff_role = session.get('staff_role', 'Staff')
-        is_backdated = (chosen_date != today_str)
+        prod_ids = request.form.getlist('product_id[]')
+        prod_qtys = request.form.getlist('quantity[]')
         
-        if is_backdated and staff_role not in ['Platform Owner Admin', 'Store Manager']:
-            return redirect(f"/portal/{username}/sales?error=Security Block: Only Managers and Admins are authorized to submit backdated ledger entries.")
-            
-        if is_backdated and not audit_note:
-            return redirect(f"/portal/{username}/sales?error=Security Policy Violation: Audit entry notes are strictly mandatory for backdated adjustments.")
-            
-        for qty_str in quantities + modifier_quantities:
-            if qty_str and float(qty_str) < 0:
-                return redirect(f"/portal/{username}/sales?error=Security Block: Negative quantities are not allowed on the standard EOD sheet. Voids must be processed through the Corrections module.")
-        # =========================================
+        mod_ids = request.form.getlist('modifier_id[]')
+        mod_qtys = request.form.getlist('modifier_quantity[]')
         
-        processed_count = 0
-        blocked_items = []
-        products_df = client_db.get_all_products()
-        modifiers_df = client_db.read_tab('Modifiers')
+        conn = sqlite3.connect(client_db_path, timeout=20.0)
+        cursor = conn.cursor()
         
-        try:
-            conn = sqlite3.connect(db_path, timeout=20.0)
-            cursor = conn.cursor()
-            cursor.execute("PRAGMA table_info(Sales);")
-            sales_cols = [row[1] for row in cursor.fetchall()]
-            if 'Unit_Cost' not in sales_cols:
-                cursor.execute("ALTER TABLE Sales ADD COLUMN Unit_Cost REAL DEFAULT 0.0;")
-            if 'Entry_Reason' not in sales_cols:
-                cursor.execute("ALTER TABLE Sales ADD COLUMN Entry_Reason TEXT DEFAULT '';")
-            if 'System_Timestamp' not in sales_cols:
-                cursor.execute("ALTER TABLE Sales ADD COLUMN System_Timestamp TEXT DEFAULT '';")
-            conn.commit()
-            conn.close()
-        except Exception as e:
-            print(f"Schema check error: {e}")
+        # Ensure Sales and Audit tables exist
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS Sales (
+                Sale_ID TEXT PRIMARY KEY,
+                Sale_Date TEXT,
+                Sale_Time TEXT,
+                Product_ID TEXT,
+                Product_Name TEXT,
+                Quantity REAL,
+                Price REAL,
+                Total_Amount REAL,
+                Reason TEXT,
+                Recorded_By TEXT
+            )
+        """)
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS Inventory_Audit_Log (
+                Audit_ID TEXT,
+                Date TEXT,
+                Ingredient_Name TEXT,
+                Theoretical REAL,
+                Physical REAL,
+                Variance REAL,
+                Notes TEXT
+            )
+        """)
+        conn.commit()
 
-        # 1. Process Product Sales
-        for p_id, qty_str in zip(product_ids, quantities):
-            if not qty_str or float(qty_str or 0) == 0:
-                continue
+        logged_sales_count = 0
+        sale_time_str = datetime.now().strftime("%H:%M:%S")
+
+        # Process Products Sold
+        for p_id, q_str in zip(prod_ids, prod_qtys):
+            try:
+                qty = float(q_str or 0)
+            except (ValueError, TypeError):
+                qty = 0.0
                 
-            qty = float(qty_str)
-            p_name = p_id
-            unit_price = 0.0
-            unit_cost = 0.0
-            
-            if not products_df.empty:
-                prod_row = products_df[products_df['Product_ID'] == p_id]
-                if not prod_row.empty:
-                    p_name = prod_row['Product_Name'].values[0]
-                    unit_price = float(prod_row['Selling_Price'].values[0] or 0.0)
-                    if 'Cost_Price' in prod_row.columns:
-                        try:
-                            unit_cost = float(prod_row['Cost_Price'].values[0] or 0.0)
-                        except (ValueError, TypeError):
-                            unit_cost = 0.0
-                
-            stock_ok, stock_msg = client_db.update_inventory_from_sale(p_id, qty)
-            if stock_ok:
-                try:
-                    conn = sqlite3.connect(db_path, timeout=20.0)
-                    cursor = conn.cursor()
-                    cursor.execute("SELECT COUNT(*) FROM Sales")
-                    sale_count = cursor.fetchone()[0]
-                    sale_id = f"SALE{sale_count + 1:04d}"
-                    total_amt = qty * unit_price
-                    sale_time = datetime.now().strftime("%H:%M:%S")
-                    system_time_exact = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-
-                    cursor.execute("""
-                        INSERT INTO Sales (Sale_ID, Product_ID, Quantity, Sale_Date, Sale_Time, Total_Amount, Unit_Cost, Entry_Reason, System_Timestamp)
-                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-                    """, (sale_id, p_id, qty, chosen_date, sale_time, total_amt, unit_cost, audit_note, system_time_exact))
-                    conn.commit()
-                    conn.close()
-                    processed_count += 1
-                except Exception as e:
-                    blocked_items.append(f"{p_name} (Database Error: {str(e)})")
-            else:
-                blocked_items.append(f"{p_name} ({stock_msg.strip()})")
-
-        # 2. Process Modifier Add-On Sales
-        for m_id, m_qty_str in zip(modifier_ids, modifier_quantities):
-            if not m_qty_str or float(m_qty_str or 0) == 0:
+            if qty == 0:
                 continue
 
-            m_qty = float(m_qty_str)
-            m_name = m_id
-            m_price = 0.0
+            cursor.execute("SELECT Product_Name, Selling_Price FROM Products WHERE Product_ID = ?", (p_id,))
+            prod_match = cursor.fetchone()
+            p_name = prod_match[0] if prod_match else p_id
+            selling_price = float(prod_match[1] or 0.0) if prod_match else 0.0
+            line_total = qty * selling_price
+            
+            sale_tx_id = f"SAL{datetime.now().strftime('%M%S')}{logged_sales_count:02d}"
 
-            if not modifiers_df.empty:
-                mod_row = modifiers_df[modifiers_df['Modifier_ID'] == m_id]
-                if not mod_row.empty:
-                    m_name = mod_row['Modifier_Name'].values[0]
-                    m_price = float(mod_row['Price'].values[0] or 0.0)
+            cursor.execute("""
+                INSERT INTO Sales (
+                    Sale_ID, Sale_Date, Sale_Time, Product_ID, Product_Name,
+                    Quantity, Price, Total_Amount, Reason, Recorded_By
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """, (sale_tx_id, sale_date, sale_time_str, p_id, p_name, qty, selling_price, line_total, audit_note, recorded_by))
 
-            mod_stock_ok, mod_stock_msg = client_db.update_inventory_from_modifier_sale(m_id, m_qty, username=username)
-            if mod_stock_ok:
-                try:
-                    conn = sqlite3.connect(db_path, timeout=20.0)
-                    cursor = conn.cursor()
-                    cursor.execute("SELECT COUNT(*) FROM Sales")
-                    sale_count = cursor.fetchone()[0]
-                    sale_id = f"SALE{sale_count + 1:04d}"
-                    total_amt = m_qty * m_price
-                    sale_time = datetime.now().strftime("%H:%M:%S")
-                    system_time_exact = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            # Deduct ingredient inventory according to recipe specifications
+            cursor.execute("SELECT Ingredient_ID, Quantity_Required, Unit FROM Recipes WHERE Product_ID = ?", (p_id,))
+            recipe_rows = cursor.fetchall()
 
+            for ing_id, req_qty, rec_unit in recipe_rows:
+                tot_deduct = float(req_qty or 0.0) * qty
+                cursor.execute("SELECT Current_Stock, Ingredient_Name, Unit FROM Ingredients WHERE Ingredient_ID = ?", (ing_id,))
+                ing_match = cursor.fetchone()
+
+                if ing_match:
+                    current_stock, ing_name, base_unit = ing_match
+                    current_stock = float(current_stock or 0.0)
+                    new_stock = current_stock - tot_deduct
+
+                    cursor.execute("UPDATE Ingredients SET Current_Stock = ? WHERE Ingredient_ID = ?", (new_stock, ing_id))
+                    
                     cursor.execute("""
-                        INSERT INTO Sales (Sale_ID, Product_ID, Quantity, Sale_Date, Sale_Time, Total_Amount, Unit_Cost, Entry_Reason, System_Timestamp)
-                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-                    """, (sale_id, f"MOD:{m_id}", m_qty, chosen_date, sale_time, total_amt, 0.0, f"Modifier: {m_name} | {audit_note}".strip(), system_time_exact))
-                    conn.commit()
-                    conn.close()
-                    processed_count += 1
-                except Exception as e:
-                    blocked_items.append(f"{m_name} Add-On (Database Error: {str(e)})")
-            else:
-                blocked_items.append(f"{m_name} Add-On ({mod_stock_msg.strip()})")
+                        INSERT INTO Inventory_Audit_Log (
+                            Audit_ID, Date, Ingredient_Name, Theoretical, Physical, Variance, Notes
+                        ) VALUES (?, ?, ?, ?, ?, ?, ?)
+                    """, (
+                        sale_tx_id, 
+                        sale_date, 
+                        ing_name, 
+                        current_stock, 
+                        new_stock, 
+                        -tot_deduct, 
+                        f"POS Depletion: {qty:g}x {p_name} | {audit_note}".strip(" | ")
+                    ))
 
-        if processed_count > 0 and not blocked_items:
-            feedback_msg = f"EOD Sync Complete! Successfully logged operations for {processed_count} items/modifiers on accounting date: {chosen_date}."
-            alert_type = "success"
-        elif processed_count > 0 and blocked_items:
-            feedback_msg = f"Partial Sync: Processed {processed_count} updates for {chosen_date}. Some entries skipped:\n" + " | ".join(blocked_items)
-            alert_type = "warning"
-        elif len(blocked_items) > 0:
-            feedback_msg = "EOD Sync Failed! Insufficient ingredients stock metrics:\n" + " | ".join(blocked_items)
-            alert_type = "danger"
-        else:
-            feedback_msg = "No sales numbers were entered. Ledger entries remain unchanged."
-            alert_type = "info"
+            logged_sales_count += 1
 
-    # ===== GET METHOD =====
-    sales_df = client_db.read_tab('Sales')
-    master_products_df = client_db.get_all_products()
-    modifiers_df = client_db.read_tab('Modifiers')
+        # Process Modifiers Sold
+        for m_id, mq_str in zip(mod_ids, mod_qtys):
+            try:
+                m_qty = float(mq_str or 0)
+            except (ValueError, TypeError):
+                m_qty = 0.0
+                
+            if m_qty == 0:
+                continue
+
+            cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='Modifiers'")
+            if cursor.fetchone():
+                cursor.execute("SELECT Modifier_Name, Price FROM Modifiers WHERE Modifier_ID = ?", (m_id,))
+                mod_match = cursor.fetchone()
+                m_name = mod_match[0] if mod_match else m_id
+                m_price = float(mod_match[1] or 0.0) if mod_match else 0.0
+                m_total = m_qty * m_price
+                
+                mod_tx_id = f"MOD{datetime.now().strftime('%M%S')}{logged_sales_count:02d}"
+
+                cursor.execute("""
+                    INSERT INTO Sales (
+                        Sale_ID, Sale_Date, Sale_Time, Product_ID, Product_Name,
+                        Quantity, Price, Total_Amount, Reason, Recorded_By
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """, (mod_tx_id, sale_date, sale_time_str, m_id, f"Modifier: {m_name}", m_qty, m_price, m_total, audit_note, recorded_by))
+                logged_sales_count += 1
+
+        conn.commit()
+        conn.close()
+        client_db.update_all_product_costs()
+
+        return redirect(f"/portal/{username}/sales?msg=Success:+Successfully+recorded+closing+sales+and+deducted+recipe+ingredients.&alert_type=success")
+
+    # ==========================================
+    # 2. GET METHOD: RENDER GROUPED WORKSHEET
+    # ==========================================
+    conn = sqlite3.connect(client_db_path, timeout=20.0)
     
-    search = request.args.get('search', '').lower().strip()
-    category = request.args.get('category', 'All')
-    sort_by = request.args.get('sort_by', 'name')
-    order = request.args.get('order', 'asc')
-
+    # Read active products and build parent-variant dictionary
+    products_df = pd.read_sql("SELECT * FROM Products WHERE Active = 'Yes' OR Active = 'yes'", conn)
+    
+    grouped_products = defaultdict(list)
     categories = []
-    grouped_products = {}
-    active_modifiers = []
-
-    if not modifiers_df.empty:
-        if 'Active' in modifiers_df.columns:
-            active_mods_df = modifiers_df[modifiers_df['Active'].astype(str).str.upper() == 'YES']
-        else:
-            active_mods_df = modifiers_df
-        active_modifiers = active_mods_df.to_dict('records')
     
-    filtered_products_df = master_products_df.copy() if not master_products_df.empty else pd.DataFrame()
-    
-    if not master_products_df.empty:
-        if 'Category' in master_products_df.columns:
-            categories = sorted([c for c in master_products_df['Category'].dropna().unique() if c])
-            
-        if search:
-            filtered_products_df = filtered_products_df[
-                filtered_products_df['Product_Name'].str.lower().str.contains(search) | 
-                filtered_products_df['Product_ID'].str.lower().str.contains(search) |
-                (filtered_products_df['Parent_Item'].fillna('').str.lower().str.contains(search) if 'Parent_Item' in filtered_products_df.columns else False)
-            ]
-        if category != 'All':
-            filtered_products_df = filtered_products_df[filtered_products_df['Category'] == category]
-            
-        ascending = (order == 'asc')
-        if sort_by == 'name':
-            filtered_products_df = filtered_products_df.sort_values('Product_Name', ascending=ascending)
-        elif sort_by == 'price':
-            filtered_products_df = filtered_products_df.sort_values('Selling_Price', ascending=ascending)
-
-        if 'Parent_Item' not in filtered_products_df.columns:
-            filtered_products_df['Parent_Item'] = filtered_products_df['Product_Name']
-        if 'Variant_Name' not in filtered_products_df.columns:
-            filtered_products_df['Variant_Name'] = 'Regular'
-
-        for _, row in filtered_products_df.iterrows():
-            p_dict = row.to_dict()
-            parent_name = str(p_dict.get('Parent_Item') or p_dict.get('Product_Name') or 'Uncategorized').strip()
-            if not parent_name:
-                parent_name = str(p_dict.get('Product_Name', 'Unknown Product')).strip()
-            
-            if parent_name not in grouped_products:
-                grouped_products[parent_name] = []
-            grouped_products[parent_name].append(p_dict)
-
-    grouped_history_list = []
-    if not sales_df.empty:
-        sales_df = sales_df.sort_values('Sale_ID', ascending=False)
-        unique_dates = sorted(list(sales_df['Sale_Date'].dropna().unique()), reverse=True)
+    if not products_df.empty:
+        categories = sorted(list(set(str(c).strip() for c in products_df['Category'].dropna() if str(c).strip())))
         
-        for date_val in unique_dates:
-            date_df = sales_df[sales_df['Sale_Date'] == date_val]
-            day_entries = []
-            day_total_qty = 0.0
-            day_total_revenue = 0.0
+        for _, p in products_df.iterrows():
+            parent_name, variant_name = resolve_parent_and_variant(p)
             
-            for _, row in date_df.iterrows():
-                p_id = str(row['Product_ID'])
-                p_name = p_id
-                
-                if p_id.startswith('MOD:'):
-                    mod_code = p_id.replace('MOD:', '')
-                    if not modifiers_df.empty:
-                        m_match = modifiers_df[modifiers_df['Modifier_ID'] == mod_code]
-                        if not m_match.empty:
-                            p_name = f"[Add-On] {m_match['Modifier_Name'].values[0]}"
-                elif not master_products_df.empty:
-                    match = master_products_df[master_products_df['Product_ID'] == p_id]
-                    if not match.empty: 
-                        p_name = match['Product_Name'].values[0]
-                
-                qty = float(row['Quantity'] or 0)
-                revenue = float(row['Total_Amount'] or 0)
-                
-                day_total_qty += qty
-                day_total_revenue += revenue
-                
-                day_entries.append({
-                    'Sale_ID': row['Sale_ID'],
-                    'Product_Name': p_name,
-                    'Quantity': qty,
-                    'Sale_Time': row['Sale_Time'] if 'Sale_Time' in sales_df.columns else '',
-                    'Total_Amount': revenue,
-                    'Reason': row.get('Entry_Reason', '') if 'Entry_Reason' in sales_df.columns else ''
-                })
-            
-            grouped_history_list.append({
-                'date': date_val,
-                'total_qty': day_total_qty,
-                'total_revenue': day_total_revenue,
-                'entries': day_entries
-            })
+            p_obj = {
+                'Product_ID': str(p['Product_ID']),
+                'Product_Name': str(p['Product_Name']),
+                'Parent_Item': parent_name,
+                'Variant_Name': variant_name,
+                'Category': str(p.get('Category') or 'General'),
+                'Selling_Price': float(pd.to_numeric(p.get('Selling_Price', 0.0), errors='coerce') or 0.0)
+            }
+            grouped_products[parent_name].append(p_obj)
 
-    server_error = request.args.get('error', '')
-    if server_error:
-        feedback_msg = server_error
-        alert_type = "danger"
+    # Read active modifiers
+    active_modifiers = []
+    cursor = conn.cursor()
+    cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='Modifiers'")
+    if cursor.fetchone():
+        mods_df = pd.read_sql("SELECT * FROM Modifiers WHERE Active = 'Yes' OR Active = 'yes'", conn)
+        if not mods_df.empty:
+            active_modifiers = mods_df.to_dict('records')
+
+    # Read historical sales grouped by date
+    sales_history = []
+    cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='Sales'")
+    if cursor.fetchone():
+        sales_ledger_df = pd.read_sql("SELECT * FROM Sales ORDER BY Sale_Date DESC, Sale_Time DESC", conn)
+        
+        if not sales_ledger_df.empty:
+            sales_ledger_df['Sale_Date'] = sales_ledger_df['Sale_Date'].astype(str)
+            unique_dates = sales_ledger_df['Sale_Date'].unique()
+
+            for u_date in unique_dates:
+                day_entries = sales_ledger_df[sales_ledger_df['Sale_Date'] == u_date]
+                total_qty = float(pd.to_numeric(day_entries['Quantity'], errors='coerce').fillna(0.0).sum())
+                total_revenue = float(pd.to_numeric(day_entries['Total_Amount'], errors='coerce').fillna(0.0).sum())
+
+                sales_history.append({
+                    'date': u_date,
+                    'total_qty': total_qty,
+                    'total_revenue': total_revenue,
+                    'entries': day_entries.to_dict('records')
+                })
+
+    conn.close()
 
     return render_template(
         'sales.html',
         username=username,
         grouped_products=grouped_products,
-        active_modifiers=active_modifiers,
         categories=categories,
-        sales_history=grouped_history_list,
-        msg=feedback_msg,
-        alert_type=alert_type,
-        current_search=search,
-        current_category=category,
-        current_sort=sort_by,
-        current_order=order
+        active_modifiers=active_modifiers,
+        sales_history=sales_history,
+        msg=request.args.get('msg', feedback_msg),
+        alert_type=request.args.get('alert_type', alert_type)
     )
