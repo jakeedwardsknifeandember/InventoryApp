@@ -1,4 +1,4 @@
-# modules/database.py - FULL, COMPLETE RESTORED SQLITE ENGINE WITH CATEGORIES, MODIFIERS, AUDIT LOGGING & PACK CONVERSION
+# modules/database.py - FULL, COMPLETE RESTORED SQLITE ENGINE WITH CATEGORIES, MODIFIERS, AUDIT LOGGING & HYBRID DELETION
 import pandas as pd
 import sqlite3
 import os
@@ -1009,31 +1009,83 @@ class InventoryDB:
             return False, f"Error updating product: {str(e)}"
     
     def delete_product(self, product_id, username="System"):
+        """
+        Commercial Hybrid Deletion:
+        1. If product has 0 historical sales -> Hard delete (purged from Products & Recipes)
+        2. If product has historical sales -> Soft delete (archived with Active='No' to protect P&L)
+        """
         try:
             products_df = self.read_tab('Products')
+            sales_df = self.read_tab('Sales')
             
             product_idx = products_df[products_df['Product_ID'] == product_id].index
-            
             if len(product_idx) == 0:
-                return False, f"Product {product_id} not found"
+                return False, f"Product {product_id} not found."
             
             idx = product_idx[0]
-            product_name = products_df.at[idx, 'Product_Name']
+            product_name = str(products_df.at[idx, 'Product_Name'])
             
-            products_df.at[idx, 'Active'] = 'No'
+            # Check historical sales ledger
+            has_sales = False
+            if not sales_df.empty and 'Product_ID' in sales_df.columns:
+                has_sales = (sales_df['Product_ID'].astype(str) == str(product_id)).any()
+            
+            if not has_sales:
+                # 1. HARD DELETE: Item has no sales, purge product and connected recipe formula cleanly
+                products_df = products_df[products_df['Product_ID'] != product_id]
+                self.save_tab('Products', products_df)
+                
+                recipes_df = self.read_tab('Recipes')
+                if not recipes_df.empty and 'Product_ID' in recipes_df.columns:
+                    recipes_df = recipes_df[recipes_df['Product_ID'] != product_id]
+                    self.save_tab('Recipes', recipes_df)
+                
+                self.log_user_action(
+                    username=username,
+                    action_type="PERMANENT_DELETE_PRODUCT",
+                    module="Products",
+                    details=f"Permanently purged test product {product_name} ({product_id}) and recipe formulas (0 historical sales)."
+                )
+                return True, f"Product '{product_name}' had zero sales history and was permanently removed from the database."
+            else:
+                # 2. SOFT DELETE: Preserve ledger history, switch Active to 'No'
+                products_df.at[idx, 'Active'] = 'No'
+                self.save_tab('Products', products_df)
+                
+                self.log_user_action(
+                    username=username,
+                    action_type="ARCHIVE_PRODUCT",
+                    module="Products",
+                    details=f"Archived product {product_name} ({product_id}) to safeguard historical sales ledgers."
+                )
+                return True, f"Product '{product_name}' has recorded sales transactions. It has been moved to Inactive/Archived to preserve financial audit reports."
+                
+        except Exception as e:
+            return False, f"Error deleting product: {str(e)}"
+
+    def reactivate_product(self, product_id, username="System"):
+        """Restores an archived/inactive product back to active menu status"""
+        try:
+            products_df = self.read_tab('Products')
+            product_idx = products_df[products_df['Product_ID'] == product_id].index
+            if len(product_idx) == 0:
+                return False, f"Product {product_id} not found."
+            
+            idx = product_idx[0]
+            product_name = str(products_df.at[idx, 'Product_Name'])
+            
+            products_df.at[idx, 'Active'] = 'Yes'
             self.save_tab('Products', products_df)
             
             self.log_user_action(
                 username=username,
-                action_type="ARCHIVE_PRODUCT",
+                action_type="REACTIVATE_PRODUCT",
                 module="Products",
-                details=f"Archived product {product_name} ({product_id}). Retained in database for historical reporting."
+                details=f"Reactivated product {product_name} ({product_id}) back to active menu status."
             )
-            
-            return True, f"Product {product_id} archived successfully"
-            
+            return True, f"Product '{product_name}' restored to active menu."
         except Exception as e:
-            return False, f"Error archiving product: {str(e)}"
+            return False, f"Error reactivating product: {str(e)}"
     
     def add_ingredient(self, ingredient_data, username="System"):
         try:

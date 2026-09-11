@@ -1,9 +1,45 @@
-# routes/products.py
+# routes/products.py - Complete Product Catalog, Costing & Lifecycle Controller
 from flask import Blueprint, request, redirect, session, render_template, flash
 from modules.database import InventoryDB
 import pandas as pd
+import sqlite3
+import re
 
 products_bp = Blueprint('products', __name__)
+
+def sync_product_categories(db_path):
+    """Automatically synchronizes unique product categories into the Categories table."""
+    try:
+        conn = sqlite3.connect(db_path)
+        cursor = conn.cursor()
+        
+        cursor.execute("SELECT DISTINCT Category FROM Products WHERE Category IS NOT NULL AND TRIM(Category) != '';")
+        prod_cats = [r[0].strip() for r in cursor.fetchall() if r and r[0]]
+        
+        cursor.execute("SELECT Category_Name FROM Categories;")
+        existing_cats = [r[0].strip().lower() for r in cursor.fetchall() if r and r[0]]
+        
+        cursor.execute("SELECT Category_ID FROM Categories WHERE Category_ID LIKE 'CAT%';")
+        existing_ids = [r[0] for r in cursor.fetchall() if r and r[0]]
+        nums = []
+        for cid in existing_ids:
+            try:
+                nums.append(int(cid.replace('CAT', '')))
+            except ValueError:
+                pass
+        next_num = max(nums) + 1 if nums else 1
+
+        for cat in prod_cats:
+            if cat.lower() not in existing_cats:
+                cat_id = f"CAT{next_num:03d}"
+                cursor.execute("INSERT INTO Categories (Category_ID, Category_Name, Active) VALUES (?, ?, 'Yes')", (cat_id, cat))
+                existing_cats.append(cat.lower())
+                next_num += 1
+                
+        conn.commit()
+        conn.close()
+    except Exception as e:
+        print(f"Category auto-sync error: {e}")
 
 @products_bp.route('/portal/<username>/products', methods=['GET', 'POST'])
 def web_products_tab(username):
@@ -16,12 +52,17 @@ def web_products_tab(username):
         flash('Unauthorized access: Products management is strictly reserved for Platform Owner Admins.', 'danger')
         return redirect(f"/portal/{username}")
     
-    db = InventoryDB(f"data/client_{username}.db")
+    client_db_path = f"data/client_{username}.db"
+    db = InventoryDB(client_db_path)
+    sync_product_categories(client_db_path)
+    
+    current_status = request.args.get('status', 'Yes')
+    operator = session.get('logged_in_user', username)
     
     if request.method == 'POST':
         action = request.form.get('action_type')
         
-        # 1. Action to add a product (Now tracking Parent and Variant structures)
+        # 1. ACTION: ADD NEW PRODUCT OR VARIANT
         if action == 'add_product':
             parent_item = request.form.get('parent_item', '').strip()
             variant_name = request.form.get('variant_name', 'Regular').strip()
@@ -33,22 +74,27 @@ def web_products_tab(username):
             
             df_check = db.read_tab('Products')
             if not df_check.empty and 'Parent_Item' in df_check.columns and 'Variant_Name' in df_check.columns:
-                conflict = df_check[(df_check['Parent_Item'].str.lower() == parent_item.lower()) & 
-                                    (df_check['Variant_Name'].str.lower() == variant_name.lower())]
+                conflict = df_check[(df_check['Parent_Item'].astype(str).str.lower() == parent_item.lower()) & 
+                                    (df_check['Variant_Name'].astype(str).str.lower() == variant_name.lower())]
                 if not conflict.empty:
-                    return redirect(f"/portal/{username}/products?error=Variant '{variant_name}' already exists under the '{parent_item}' product line.")
+                    return redirect(f"/portal/{username}/products?error=Variant '{variant_name}' already exists under the '{parent_item}' product line.&status={current_status}")
                     
-            db.add_product({
+            success, msg = db.add_product({
                 'Product_ID': db.generate_product_id(),
                 'Product_Name': product_name,
                 'Parent_Item': parent_item,
                 'Variant_Name': variant_name,
                 'Category': request.form.get('category', 'General'),
-                'Selling_Price': float(request.form.get('selling_price', 0)),
+                'Selling_Price': float(request.form.get('selling_price', 0) or 0.0),
                 'Active': request.form.get('status', 'Yes')
-            })
+            }, username=operator)
             
-        # 2. Action to edit an existing product
+            db.update_all_product_costs()
+            sync_product_categories(client_db_path)
+            alert_type = 'success' if success else 'danger'
+            return redirect(f"/portal/{username}/products?status=Yes&msg={msg}&alert_type={alert_type}")
+            
+        # 2. ACTION: EDIT EXISTING PRODUCT
         elif action == 'edit_product':
             parent_item = request.form.get('parent_item', '').strip()
             variant_name = request.form.get('variant_name', 'Regular').strip()
@@ -62,35 +108,52 @@ def web_products_tab(username):
             df_check = db.read_tab('Products')
             if not df_check.empty and 'Parent_Item' in df_check.columns and 'Variant_Name' in df_check.columns:
                 other_prods = df_check[df_check['Product_ID'] != product_id]
-                conflict = other_prods[(other_prods['Parent_Item'].str.lower() == parent_item.lower()) & 
-                                       (other_prods['Variant_Name'].str.lower() == variant_name.lower())]
+                conflict = other_prods[(other_prods['Parent_Item'].astype(str).str.lower() == parent_item.lower()) & 
+                                       (other_prods['Variant_Name'].astype(str).str.lower() == variant_name.lower())]
                 if not conflict.empty:
-                    return redirect(f"/portal/{username}/products?error=Another variant named '{variant_name}' already exists under the '{parent_item}' product line.")
+                    return redirect(f"/portal/{username}/products?error=Another variant named '{variant_name}' already exists under the '{parent_item}' product line.&status={current_status}")
                     
-            db.update_product(product_id, {
+            success, msg = db.update_product(product_id, {
                 'Product_Name': product_name,
                 'Parent_Item': parent_item,
                 'Variant_Name': variant_name,
                 'Category': request.form.get('category', 'General'),
-                'Selling_Price': float(request.form.get('selling_price', 0)),
+                'Selling_Price': float(request.form.get('selling_price', 0) or 0.0),
                 'Active': request.form.get('status', 'Yes')
-            })
+            }, username=operator)
             
-        # 3. Action to completely delete a product
+            db.update_all_product_costs()
+            sync_product_categories(client_db_path)
+            alert_type = 'success' if success else 'danger'
+            return redirect(f"/portal/{username}/products?status={current_status}&msg={msg}&alert_type={alert_type}")
+            
+        # 3. ACTION: DELETE OR ARCHIVE PRODUCT
         elif action == 'delete_product':
             product_id = request.form.get('product_id')
-            db.delete_product(product_id)
+            success, msg = db.delete_product(product_id, username=operator)
+            db.update_all_product_costs()
+            alert_type = 'success' if success else 'danger'
+            return redirect(f"/portal/{username}/products?status={current_status}&msg={msg}&alert_type={alert_type}")
 
-        db.update_all_product_costs()
-        return redirect(f"/portal/{username}/products")
+        # 4. ACTION: REACTIVATE ARCHIVED PRODUCT
+        elif action == 'reactivate_product':
+            product_id = request.form.get('product_id')
+            if hasattr(db, 'reactivate_product'):
+                success, msg = db.reactivate_product(product_id, username=operator)
+            else:
+                success, msg = db.update_product(product_id, {'Active': 'Yes'}, username=operator)
+                if success:
+                    msg = f"Product {product_id} reactivated and restored to active menu."
+            db.update_all_product_costs()
+            alert_type = 'success' if success else 'danger'
+            return redirect(f"/portal/{username}/products?status=Yes&msg={msg}&alert_type={alert_type}")
+
+        return redirect(f"/portal/{username}/products?status={current_status}")
 
     # ===== GET DATA & APPLY FILTERS =====
     df = db.read_tab('Products')
     
     all_products_raw = []
-    if not df.empty:
-        all_products_raw = df.to_dict('records')
-    
     categories = []
     grouped_products = {}
     unique_parents = []
@@ -107,28 +170,44 @@ def web_products_tab(username):
         df.loc[mask, 'Food_Cost_Pct'] = (df.loc[mask, 'Cost_Price'] / df.loc[mask, 'Selling_Price']) * 100.0
 
         if 'Category' in df.columns:
-            categories = sorted([c for c in df['Category'].dropna().unique() if c])
+            categories = sorted([c for c in df['Category'].dropna().unique() if str(c).strip()])
 
-        # Safety catch for legacy un-migrated databases
+        # ===== INTELLIGENT AUTO-PARSING FOR VARIANTS IF CSV HAD BLANK PARENT_ITEM =====
         if 'Parent_Item' not in df.columns:
-            df['Parent_Item'] = df['Product_Name']
+            df['Parent_Item'] = None
+        if 'Variant_Name' not in df.columns:
             df['Variant_Name'] = 'Regular'
-        else:
-            # FIXED: Using .mask() instead of passing a Series into .replace()
-            df['Parent_Item'] = df['Parent_Item'].fillna(df['Product_Name'])
-            df['Parent_Item'] = df['Parent_Item'].mask(df['Parent_Item'] == '', df['Product_Name'])
-            
-            df['Variant_Name'] = df['Variant_Name'].fillna('Regular')
-            df['Variant_Name'] = df['Variant_Name'].mask(df['Variant_Name'] == '', 'Regular')
+
+        for idx, row in df.iterrows():
+            curr_parent = str(row['Parent_Item']).strip() if pd.notna(row['Parent_Item']) else ''
+            curr_variant = str(row['Variant_Name']).strip() if pd.notna(row['Variant_Name']) else 'Regular'
+            curr_name = str(row['Product_Name']).strip() if pd.notna(row['Product_Name']) else ''
+
+            if not curr_parent or curr_parent.lower() in ['nan', 'none', '']:
+                match = re.match(r'^(Hot|Iced|Warm|Cold)\s*[-–:]\s*(.+)$', curr_name, re.IGNORECASE)
+                if match:
+                    detected_variant = match.group(1).capitalize()
+                    detected_parent = match.group(2).strip()
+                    df.at[idx, 'Parent_Item'] = detected_parent
+                    if curr_variant.lower() == 'regular':
+                        df.at[idx, 'Variant_Name'] = detected_variant
+                else:
+                    df.at[idx, 'Parent_Item'] = curr_name
+                    if not curr_variant:
+                        df.at[idx, 'Variant_Name'] = 'Regular'
+
+        all_products_raw = df.to_dict('records')
 
         search = request.args.get('search', '').lower()
-        status = request.args.get('status', 'All')
+        status = request.args.get('status', 'Yes')
         category = request.args.get('category', 'All')
-        sort_by = request.args.get('sort_by', 'name')
+        sort_by = request.args.get('sort_by', 'id')
         order = request.args.get('order', 'asc')
 
         if search:
-            df = df[df['Product_Name'].str.lower().str.contains(search) | df['Product_ID'].str.lower().str.contains(search)]
+            df = df[df['Product_Name'].astype(str).str.lower().str.contains(search) | 
+                    df['Product_ID'].astype(str).str.lower().str.contains(search) |
+                    df['Parent_Item'].astype(str).str.lower().str.contains(search)]
 
         if status != 'All':
             df = df[df['Active'].astype(str).str.upper() == status.upper()]
@@ -137,7 +216,9 @@ def web_products_tab(username):
             df = df[df['Category'] == category]
 
         ascending = (order == 'asc')
-        if sort_by == 'name':
+        if sort_by == 'id':
+            df = df.sort_values('Product_ID', ascending=ascending)
+        elif sort_by == 'name':
             df = df.sort_values('Product_Name', ascending=ascending)
         elif sort_by == 'price':
             df = df.sort_values('Selling_Price', ascending=ascending)
@@ -150,7 +231,7 @@ def web_products_tab(username):
         
         products_list = df.to_dict('records')
         for p in products_list:
-            parent = p.get('Parent_Item', p['Product_Name'])
+            parent = p.get('Parent_Item') or p.get('Product_Name') or 'General Item'
             if parent not in grouped_products:
                 grouped_products[parent] = []
             grouped_products[parent].append(p)
@@ -166,9 +247,11 @@ def web_products_tab(username):
         categories=categories,
         total_count=total_count,
         error_msg=request.args.get('error', ''),
+        msg=request.args.get('msg', ''),
+        alert_type=request.args.get('alert_type', 'success'),
         current_search=request.args.get('search', ''),
-        current_status=request.args.get('status', 'All'),
-        current_category=request.args.get('category', 'All'),
-        current_sort=request.args.get('sort_by', 'name'),
-        current_order=request.args.get('order', 'asc')
+        current_status=status,
+        current_category=category,
+        current_sort=sort_by,
+        current_order=order
     )
