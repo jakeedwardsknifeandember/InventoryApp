@@ -1,4 +1,4 @@
-# modules/database.py - FULL, RESTORED WEB SQLITE VERSION WITH CATEGORIES, MODIFIERS & MODIFIER RECIPES
+# modules/database.py - FULL, COMPLETE RESTORED SQLITE ENGINE WITH CATEGORIES, MODIFIERS, AUDIT LOGGING & PACK CONVERSION
 import pandas as pd
 import sqlite3
 import os
@@ -46,7 +46,7 @@ class InventoryDB:
                     'Ingredient_ID', 'Ingredient_Name', 'Unit', 
                     'Category', 'Current_Stock', 'Min_Stock', 'Cost_Per_Unit',
                     'Supplier', 'Description', 'Active', 'Last_Updated',
-                    'Ingredient_Type'  
+                    'Ingredient_Type', 'Purchase_Unit', 'Pack_Size', 'Purchase_Cost'
                 ]),
                 'Recipes': pd.DataFrame(columns=[
                     'Recipe_ID', 'Product_ID', 'Ingredient_ID', 'Quantity_Required', 'Unit'
@@ -84,7 +84,13 @@ class InventoryDB:
             columns = [row[1] for row in cursor.fetchall()]
             if 'Ingredient_Type' not in columns:
                 cursor.execute("ALTER TABLE Ingredients ADD COLUMN Ingredient_Type TEXT DEFAULT 'RAW';")
-                conn.commit()
+            if 'Purchase_Unit' not in columns:
+                cursor.execute("ALTER TABLE Ingredients ADD COLUMN Purchase_Unit TEXT DEFAULT 'pack';")
+            if 'Pack_Size' not in columns:
+                cursor.execute("ALTER TABLE Ingredients ADD COLUMN Pack_Size REAL DEFAULT 1.0;")
+            if 'Purchase_Cost' not in columns:
+                cursor.execute("ALTER TABLE Ingredients ADD COLUMN Purchase_Cost REAL DEFAULT 0.0;")
+            conn.commit()
 
             cursor.execute("PRAGMA table_info(Prep_Recipes);")
             prep_columns = [row[1] for row in cursor.fetchall()]
@@ -820,7 +826,7 @@ class InventoryDB:
                 return False, f"Ingredient {ingredient_id} not found"
             
             idx = ingredient_idx[0]
-            old_stock = inventory_df.at[idx, 'Current_Stock']
+            old_stock = float(inventory_df.at[idx, 'Current_Stock'] or 0.0)
             new_stock = old_stock + quantity_to_add
             
             inventory_df.at[idx, 'Current_Stock'] = new_stock
@@ -861,15 +867,26 @@ class InventoryDB:
         inventory_df = inventory_df.copy()
         
         if 'Min_Stock' not in inventory_df.columns:
-            inventory_df['Min_Stock'] = 0
+            inventory_df['Min_Stock'] = 0.0
+        if 'Pack_Size' not in inventory_df.columns:
+            inventory_df['Pack_Size'] = 1.0
+        if 'Purchase_Unit' not in inventory_df.columns:
+            inventory_df['Purchase_Unit'] = inventory_df.get('Unit', 'pack')
+        if 'Purchase_Cost' not in inventory_df.columns:
+            inventory_df['Purchase_Cost'] = 0.0
+            
+        inventory_df['Current_Stock'] = pd.to_numeric(inventory_df['Current_Stock'], errors='coerce').fillna(0.0)
+        inventory_df['Min_Stock'] = pd.to_numeric(inventory_df['Min_Stock'], errors='coerce').fillna(0.0)
+        inventory_df['Pack_Size'] = pd.to_numeric(inventory_df['Pack_Size'], errors='coerce').fillna(1.0)
+        inventory_df['Purchase_Cost'] = pd.to_numeric(inventory_df['Purchase_Cost'], errors='coerce').fillna(0.0)
         
         inventory_df['Status'] = 'Normal'
         inventory_df['Days_Remaining'] = None
         
-        low_stock_mask = pd.to_numeric(inventory_df['Current_Stock']) <= pd.to_numeric(inventory_df['Min_Stock'])
+        low_stock_mask = inventory_df['Current_Stock'] <= inventory_df['Min_Stock']
         inventory_df.loc[low_stock_mask, 'Status'] = 'Low Stock'
         
-        critical_mask = pd.to_numeric(inventory_df['Current_Stock']) <= (pd.to_numeric(inventory_df['Min_Stock']) * 0.5)
+        critical_mask = inventory_df['Current_Stock'] <= (inventory_df['Min_Stock'] * 0.5)
         inventory_df.loc[critical_mask, 'Status'] = 'Critical'
         
         return inventory_df
@@ -921,12 +938,12 @@ class InventoryDB:
                 elif col == 'Cost_Price':
                     new_product_row[col] = 0.0
                 elif col == 'Profit_Margin':
-                    selling_price = product_data.get('Selling_Price', 0)
-                    cost_price = product_data.get('Cost_Price', 0)
+                    selling_price = float(product_data.get('Selling_Price', 0) or 0.0)
+                    cost_price = float(product_data.get('Cost_Price', 0) or 0.0)
                     new_product_row[col] = selling_price - cost_price
                 elif col == 'Margin_Percentage':
-                    selling_price = product_data.get('Selling_Price', 0)
-                    cost_price = product_data.get('Cost_Price', 0)
+                    selling_price = float(product_data.get('Selling_Price', 0) or 0.0)
+                    cost_price = float(product_data.get('Cost_Price', 0) or 0.0)
                     if selling_price > 0:
                         new_product_row[col] = ((selling_price - cost_price) / selling_price * 100)
                     else:
@@ -1024,6 +1041,25 @@ class InventoryDB:
             
             if 'Ingredient_Type' not in ingredient_data:
                 ingredient_data['Ingredient_Type'] = 'RAW'
+            if 'Purchase_Unit' not in ingredient_data or not ingredient_data['Purchase_Unit']:
+                ingredient_data['Purchase_Unit'] = ingredient_data.get('Unit', 'pack')
+            if 'Pack_Size' not in ingredient_data or not ingredient_data['Pack_Size']:
+                ingredient_data['Pack_Size'] = 1.0
+            if 'Purchase_Cost' not in ingredient_data or not ingredient_data['Purchase_Cost']:
+                ingredient_data['Purchase_Cost'] = 0.0
+
+            pack_size = float(ingredient_data['Pack_Size'] or 1.0)
+            if pack_size <= 0:
+                pack_size = 1.0
+                ingredient_data['Pack_Size'] = 1.0
+                
+            purchase_cost = float(ingredient_data.get('Purchase_Cost', 0.0) or 0.0)
+            cost_per_unit = float(ingredient_data.get('Cost_Per_Unit', 0.0) or 0.0)
+            
+            if purchase_cost > 0 and cost_per_unit == 0:
+                ingredient_data['Cost_Per_Unit'] = purchase_cost / pack_size
+            elif cost_per_unit > 0 and purchase_cost == 0:
+                ingredient_data['Purchase_Cost'] = cost_per_unit * pack_size
             
             if ingredient_data['Ingredient_ID'] in ingredients_df['Ingredient_ID'].values:
                 return False, f"Ingredient ID {ingredient_data['Ingredient_ID']} already exists"
@@ -1039,11 +1075,15 @@ class InventoryDB:
             
             self.save_tab('Ingredients', ingredients_df)
             
+            log_desc = f"Registered new ingredient {ingredient_data['Ingredient_Name']} ({ingredient_data['Ingredient_ID']}) [{ingredient_data.get('Ingredient_Type', 'RAW')}] Cost: PHP {ingredient_data.get('Cost_Per_Unit', 0):.4f}/{ingredient_data.get('Unit', 'pcs')}"
+            if pack_size > 1.0:
+                log_desc += f" (Pack: 1 {ingredient_data.get('Purchase_Unit', 'pack')} = {pack_size:g} {ingredient_data.get('Unit', 'pcs')} @ PHP {ingredient_data.get('Purchase_Cost', 0):.2f})"
+                
             self.log_user_action(
                 username=username,
                 action_type="ADD_INGREDIENT",
                 module="Ingredients",
-                details=f"Registered new ingredient {ingredient_data['Ingredient_Name']} ({ingredient_data['Ingredient_ID']}) [{ingredient_data.get('Ingredient_Type', 'RAW')}] Cost: PHP {ingredient_data.get('Cost_Per_Unit', 0):.2f}/{ingredient_data.get('Unit', 'pcs')}"
+                details=log_desc
             )
             
             return True, f"Ingredient '{ingredient_data['Ingredient_Name']}' added successfully"
@@ -1145,7 +1185,7 @@ class InventoryDB:
                 return False, f"Ingredient {ingredient_id} not found"
             
             idx = idx[0]
-            current_stock = float(ingredients_df.at[idx, 'Current_Stock'])
+            current_stock = float(ingredients_df.at[idx, 'Current_Stock'] or 0.0)
             ingredients_df.at[idx, 'Current_Stock'] = current_stock + amount
             self.save_tab('Ingredients', ingredients_df)
             

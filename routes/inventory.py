@@ -1,4 +1,4 @@
-# routes/inventory.py - Stock Inventory Module Blueprint
+# routes/inventory.py - Stock Inventory Module with Dynamic Delivery Pack Override & Adaptive Costing
 from flask import Blueprint, request, redirect, session, render_template
 from modules.database import InventoryDB
 import pandas as pd
@@ -37,11 +37,12 @@ def web_inventory_tab(username):
             ingredients_df['Ingredient_ID'] = ingredients_df['Ingredient_ID'].astype(str)
             ingredients_df['Current_Stock'] = pd.to_numeric(ingredients_df['Current_Stock'], errors='coerce').fillna(0.0)
 
-            # 1. PROCESS SUPPLY DELIVERIES
+            # 1. PROCESS SUPPLY DELIVERIES (DYNAMIC PACK OVERRIDE & ADAPTIVE COSTING)
             if action == 'receive_stock':
                 ing_ids = request.form.getlist('ingredient_id[]')
                 quantities = request.form.getlist('quantity[]')
                 purchase_prices = request.form.getlist('purchase_price[]') 
+                pack_sizes = request.form.getlist('pack_size[]')
                 
                 supplier = request.form.get('supplier', '').strip()
                 received_by = request.form.get('received_by', '').strip()
@@ -56,53 +57,78 @@ def web_inventory_tab(username):
                 item_summaries = []
                 meta_notes = f"Supplier: {supplier} (Rec'd by: {received_by}) | Pay-Method: {payment_method} | Notes: {delivery_notes}".strip(" | Notes: ")
                 
-                cost_price_col = None
-                for col in ingredients_df.columns:
-                    if 'cost' in col.lower() or 'price' in col.lower():
-                        cost_price_col = col
-                        break
-                if not cost_price_col:
-                    cost_price_col = 'Cost_Price'
+                cost_price_col = 'Cost_Per_Unit' if 'Cost_Per_Unit' in ingredients_df.columns else ('Cost_Price' if 'Cost_Price' in ingredients_df.columns else 'Cost_Per_Unit')
                 
-                for i_id, q_val, p_val in zip(ing_ids, quantities, purchase_prices):
-                    if not q_val or float(q_val or 0) <= 0: continue
-                    qty = float(q_val)
-                    
+                for idx_entry, (i_id, q_val, p_val) in enumerate(zip(ing_ids, quantities, purchase_prices)):
+                    if not q_val or float(q_val or 0) <= 0: 
+                        continue
+                        
+                    packs_received = float(q_val)
                     total_line_cost = float(p_val or 0.0)
-                    incoming_unit_price = total_line_cost / qty if qty > 0 else 0.0
                     
                     idx = ingredients_df[ingredients_df['Ingredient_ID'] == str(i_id)].index
                     if not idx.empty:
-                        current_stock_bal = float(ingredients_df.loc[idx[0], 'Current_Stock'])
-                        ing_name = ingredients_df.loc[idx[0], 'Ingredient_Name']
+                        row_idx = idx[0]
+                        current_stock_bal = float(ingredients_df.loc[row_idx, 'Current_Stock'])
+                        ing_name = ingredients_df.loc[row_idx, 'Ingredient_Name']
+                        base_unit = str(ingredients_df.loc[row_idx, 'Unit'] if 'Unit' in ingredients_df.columns else 'pcs')
+                        purchase_unit = str(ingredients_df.loc[row_idx, 'Purchase_Unit'] if 'Purchase_Unit' in ingredients_df.columns and pd.notna(ingredients_df.loc[row_idx, 'Purchase_Unit']) else 'pack')
+                        
+                        default_pack_size = 1.0
+                        try:
+                            default_pack_size = float(ingredients_df.loc[row_idx, 'Pack_Size']) if 'Pack_Size' in ingredients_df.columns and pd.notna(ingredients_df.loc[row_idx, 'Pack_Size']) else 1.0
+                            if default_pack_size <= 0: 
+                                default_pack_size = 1.0
+                        except Exception:
+                            default_pack_size = 1.0
+                            
+                        # Extract the submitted pack size override from the browser form
+                        pack_size = default_pack_size
+                        if idx_entry < len(pack_sizes) and str(pack_sizes[idx_entry]).strip():
+                            try:
+                                user_override = float(pack_sizes[idx_entry])
+                                if user_override > 0:
+                                    pack_size = user_override
+                            except (ValueError, TypeError):
+                                pack_size = default_pack_size
+                                
+                        # Calculate exact base atomic units from submitted pack size
+                        base_qty = packs_received * pack_size
+                        incoming_unit_price = total_line_cost / base_qty if base_qty > 0 else 0.0
                         
                         try:
-                            old_unit_cost = float(pd.to_numeric(ingredients_df.loc[idx[0], cost_price_col], errors='coerce') or 0.0)
+                            old_unit_cost = float(pd.to_numeric(ingredients_df.loc[row_idx, cost_price_col], errors='coerce') or 0.0)
                         except Exception:
                             old_unit_cost = 0.0
                         
+                        # Moving weighted-average adaptive costing per base unit
                         if current_stock_bal <= 0 or old_unit_cost <= 0:
                             new_weighted_cost = incoming_unit_price
                         else:
                             total_old_value = current_stock_bal * old_unit_cost
-                            new_weighted_cost = (total_old_value + total_line_cost) / (current_stock_bal + qty)
+                            new_weighted_cost = (total_old_value + total_line_cost) / (current_stock_bal + base_qty)
                         
-                        ingredients_df.loc[idx[0], cost_price_col] = round(new_weighted_cost, 2)
-                        ingredients_df.loc[idx[0], 'Current_Stock'] = current_stock_bal + qty
+                        ingredients_df.loc[row_idx, cost_price_col] = round(new_weighted_cost, 4)
+                        ingredients_df.loc[row_idx, 'Current_Stock'] = current_stock_bal + base_qty
+                        
+                        if 'Purchase_Cost' in ingredients_df.columns:
+                            ingredients_df.loc[row_idx, 'Purchase_Cost'] = round(new_weighted_cost * default_pack_size, 2)
                         
                         total_delivery_expense += total_line_cost
                         
-                        display_qty = int(qty) if qty % 1 == 0 else qty
-                        item_summaries.append(f"{display_qty:,}x {ing_name} (Total: PHP {total_line_cost:,.2f})")
+                        display_qty = int(packs_received) if packs_received % 1 == 0 else packs_received
+                        is_override = abs(pack_size - default_pack_size) > 0.001
+                        override_note = f" (Substitute: {pack_size:g} {base_unit})" if is_override else ""
+                        item_summaries.append(f"{display_qty:,}x {purchase_unit} of {ing_name}{override_note} (Total: PHP {total_line_cost:,.2f})")
                         
                         new_row = {
                             'Audit_ID': f"RCV{datetime.now().strftime('%M%S')}{logged_count}",
                             'Date': date_str,
                             'Ingredient_Name': ing_name,
                             'Theoretical': current_stock_bal,
-                            'Physical': current_stock_bal + qty,
-                            'Variance': qty,
-                            'Notes': f"Intake Cost: PHP {incoming_unit_price:,.2f}/unit | {meta_notes}"
+                            'Physical': current_stock_bal + base_qty,
+                            'Variance': base_qty,
+                            'Notes': f"Intake Cost: PHP {incoming_unit_price:,.4f}/{base_unit} ({display_qty} {purchase_unit} = {base_qty:g} {base_unit}){override_note} | {meta_notes}"
                         }
                         audit_ledger_df = pd.concat([audit_ledger_df, pd.DataFrame([new_row])], ignore_index=True)
                         logged_count += 1
@@ -120,7 +146,7 @@ def web_inventory_tab(username):
                             'Amount': total_delivery_expense,
                             'Category': 'Supplier Deliveries',
                             'Payment_Method': payment_method,
-                            'Notes': f"Auto-weighted cost matrix recalculated cleanly via column handle: {cost_price_col}."
+                            'Notes': f"Auto-weighted cost matrix recalculated cleanly via column handle: {cost_price_col} with pack-to-base conversion."
                         })
                     
                     feedback_msg = f"Success: Processed delivery for {logged_count} items from supplier: {supplier}. Financial invoice total of PHP {total_delivery_expense:,.2f} pushed to accounting."

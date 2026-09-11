@@ -1,4 +1,4 @@
-# routes/ingredients.py
+# routes/ingredients.py - Enterprise Raw Materials & Prepped Sub-Assembly Controller
 from flask import Blueprint, request, redirect, session, render_template, flash
 from modules.database import InventoryDB
 import pandas as pd
@@ -9,11 +9,9 @@ ingredients_bp = Blueprint('ingredients', __name__)
 def web_ingredients_tab(username):
     username = username.lower().strip()
     
-    # 🔒 1. Session Authentication Check
     if session.get('logged_in_user') != username: 
         return redirect('/login')
         
-    # 🔒 2. Role-Based Access Guard (Restricted strictly to Platform Owner Admin)
     if session.get('staff_role') != 'Platform Owner Admin':
         flash('Unauthorized access: Ingredients management is strictly reserved for Platform Owner Admins.', 'danger')
         return redirect(f"/portal/{username}")
@@ -24,21 +22,49 @@ def web_ingredients_tab(username):
         action = request.form.get('action_type')
         ingredient_id = request.form.get('ingredient_id')
         
-        # 1. Action to register a brand new ingredient
+        # 1. ACTION: REGISTER NEW INGREDIENT WITH TWO-TIER PACK CONVERSION
         if action == 'add_ingredient':
+            base_unit = request.form.get('unit', 'g').strip()
+            purchase_unit = request.form.get('purchase_unit', 'pack').strip()
+            
+            try:
+                pack_size = float(request.form.get('pack_size', 1.0) or 1.0)
+                if pack_size <= 0: pack_size = 1.0
+            except ValueError:
+                pack_size = 1.0
+                
+            try:
+                purchase_cost = float(request.form.get('purchase_cost', 0.0) or 0.0)
+            except ValueError:
+                purchase_cost = 0.0
+                
+            try:
+                cost_per_base = float(request.form.get('cost', 0.0) or 0.0)
+            except ValueError:
+                cost_per_base = 0.0
+                
+            # If pack price was entered, auto-calculate exact base unit cost
+            if purchase_cost > 0 and (cost_per_base == 0 or request.form.get('auto_calc') == 'yes'):
+                cost_per_base = purchase_cost / pack_size
+            elif cost_per_base > 0 and purchase_cost == 0:
+                purchase_cost = cost_per_base * pack_size
+
             db.add_ingredient({
                 'Ingredient_ID': db.generate_ingredient_id(),
                 'Ingredient_Name': request.form.get('name'),
                 'Category': request.form.get('category', 'General'),
-                'Unit': request.form.get('unit', 'pcs'),
+                'Unit': base_unit,
+                'Purchase_Unit': purchase_unit,
+                'Pack_Size': pack_size,
+                'Purchase_Cost': purchase_cost,
                 'Current_Stock': float(request.form.get('stock', 0) or 0),
                 'Min_Stock': float(request.form.get('min_stock', 0) or 0),
-                'Cost_Per_Unit': float(request.form.get('cost', 0) or 0),
+                'Cost_Per_Unit': cost_per_base,
                 'Active': 'Yes',
-                'Ingredient_Type': request.form.get('ingredient_type', 'RAW')  # Captures item type classification
+                'Ingredient_Type': request.form.get('ingredient_type', 'RAW')
             })
             
-        # 2. Action to quick-add stock quantity
+        # 2. ACTION: QUICK STOCK INTAKE
         elif action == 'add_stock':
             additional = float(request.form.get('quantity', 0) or 0)
             df = db.read_tab('Ingredients')
@@ -48,39 +74,62 @@ def web_ingredients_tab(username):
                     current = float(row.iloc[0].get('Current_Stock', 0) or 0)
                     db.update_ingredient(ingredient_id, {'Current_Stock': current + additional})
                     
-        # 3. Action to modify existing ingredient details
+        # 3. ACTION: MODIFY EXISTING INGREDIENT CONVERSION METRICS
         elif action == 'edit_ingredient':
             if ingredient_id:
+                base_unit = request.form.get('unit', 'g').strip()
+                purchase_unit = request.form.get('purchase_unit', 'pack').strip()
+                
+                try:
+                    pack_size = float(request.form.get('pack_size', 1.0) or 1.0)
+                    if pack_size <= 0: pack_size = 1.0
+                except ValueError:
+                    pack_size = 1.0
+                    
+                try:
+                    purchase_cost = float(request.form.get('purchase_cost', 0.0) or 0.0)
+                except ValueError:
+                    purchase_cost = 0.0
+                    
+                try:
+                    cost_per_base = float(request.form.get('cost', 0.0) or 0.0)
+                except ValueError:
+                    cost_per_base = 0.0
+
+                if purchase_cost > 0:
+                    cost_per_base = purchase_cost / pack_size
+                elif cost_per_base > 0 and purchase_cost == 0:
+                    purchase_cost = cost_per_base * pack_size
+
                 db.update_ingredient(ingredient_id, {
                     'Ingredient_Name': request.form.get('name'),
                     'Category': request.form.get('category', 'General'),
-                    'Unit': request.form.get('unit'),
+                    'Unit': base_unit,
+                    'Purchase_Unit': purchase_unit,
+                    'Pack_Size': pack_size,
+                    'Purchase_Cost': purchase_cost,
                     'Min_Stock': float(request.form.get('min_stock', 0) or 0),
-                    'Cost_Per_Unit': float(request.form.get('cost', 0) or 0),
-                    'Ingredient_Type': request.form.get('ingredient_type', 'RAW')  # Preserves or changes type
+                    'Cost_Per_Unit': cost_per_base,
+                    'Ingredient_Type': request.form.get('ingredient_type', 'RAW')
                 })
                 
-        # 4. Action to permanently erase an ingredient row
+        # 4. ACTION: ARCHIVE OR DELETE INGREDIENT
         elif action == 'delete_ingredient':
             if ingredient_id:
                 success, msg = db.delete_ingredient(ingredient_id)
                 if not success:
-                    # If blocked by recipe safety check, pass error message to screen parameters
                     return redirect(f"/portal/{username}/ingredients?error={msg}")
         
-        if hasattr(db, 'update_all_product_costs'):
-            db.update_all_product_costs()
-
+        db.update_all_product_costs()
         return redirect(f"/portal/{username}/ingredients?type=" + request.form.get('ingredient_type', 'RAW'))
 
-    # ===== GET DATA & APPLY GRID FILTERS =====
+    # ===== GET DATA & APPLY FILTERS =====
     df = db.get_inventory_status()
     
     categories = []
     ingredients_list = []
     total_count = 0
 
-    # Read selected inner sub-tab requested (Defaults to Bulk Raw Materials)
     current_type = request.args.get('type', 'RAW').upper().strip()
     if current_type not in ['RAW', 'PREPPED']:
         current_type = 'RAW'
@@ -89,38 +138,35 @@ def web_ingredients_tab(username):
         df['Min_Stock'] = pd.to_numeric(df['Min_Stock'], errors='coerce').fillna(0.0)
         df['Cost_Per_Unit'] = pd.to_numeric(df['Cost_Per_Unit'], errors='coerce').fillna(0.0)
         df['Current_Stock'] = pd.to_numeric(df['Current_Stock'], errors='coerce').fillna(0.0)
+        df['Pack_Size'] = pd.to_numeric(df['Pack_Size'], errors='coerce').fillna(1.0)
+        df['Purchase_Cost'] = pd.to_numeric(df['Purchase_Cost'], errors='coerce').fillna(0.0)
         
         if 'Ingredient_Type' not in df.columns:
             df['Ingredient_Type'] = 'RAW'
+        if 'Purchase_Unit' not in df.columns:
+            df['Purchase_Unit'] = df['Unit']
             
-        # Build master category list choices dynamically from database values
         if 'Category' in df.columns:
             categories = sorted([c for c in df['Category'].dropna().unique() if c])
 
-        # Read layout filter requests
         search = request.args.get('search', '').lower()
         status = request.args.get('status', 'All')
         category = request.args.get('category', 'All')
         sort_by = request.args.get('sort_by', 'name')
         order = request.args.get('order', 'asc')
 
-        # Filter 1: Isolate active selection sub-tab dataset 
         df = df[df['Ingredient_Type'] == current_type]
 
-        # Filter 2: Apply Search Rule
         if search:
             df = df[df['Ingredient_Name'].str.lower().str.contains(search) | 
                     df['Ingredient_ID'].str.lower().str.contains(search)]
             
-        # Filter 3: Apply Status Rule (Normal / Low Stock / Critical)
         if status != 'All':
             df = df[df['Status'] == status]
 
-        # Filter 4: Apply Category Selection Rule
         if category != 'All':
             df = df[df['Category'] == category]
 
-        # Filter 5: Sorting Order Rules
         ascending = (order == 'asc')
         sort_map = {
             'name': 'Ingredient_Name', 

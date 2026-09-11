@@ -21,11 +21,11 @@
     .modal-custom-header { border-bottom: 1px solid #3f3f46; padding: 15px 20px; }
     .modal-custom-footer { border-top: 1px solid #3f3f46; padding: 15px 20px; }
     .form-label-custom { font-size: 12px; font-weight: 700; color: #f1f5f9; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 5px; }
+    .high-contrast-muted { color: #94a3b8 !important; }
     .text-high-contrast-muted { color: #cbd5e1 !important; }
 </style>
 
 <div class="container-fluid p-0">
-    
     <div class="d-flex justify-content-between align-items-center mb-4">
         <h1 class="inventory-title-block">Inventory Ledger Control</h1>
         <div class="d-flex gap-2">
@@ -92,8 +92,8 @@
                             <tr>
                                 <th style="width: 100px;">ID</th>
                                 <th>Item Name Description</th>
-                                <th>Category</th>
-                                <th class="text-end">Current Value Balances</th>
+                                <th>Commercial Packaging</th>
+                                <th class="text-end">Current Base Stock</th>
                                 <th class="text-end">Par Min</th>
                                 <th class="text-end" style="width: 130px;">Status Alerts</th>
                             </tr>
@@ -103,11 +103,17 @@
                             <tr>
                                 <td class="font-monospace text-info fw-bold">{{ item.Ingredient_ID }}</td>
                                 <td class="fw-bold text-white">{{ item.Ingredient_Name }}</td>
-                                <td><span class="badge bg-dark border border-secondary text-white fw-bold">{{ item.Category }}</span></td>
+                                <td>
+                                    {% if item.Pack_Size and item.Pack_Size > 1 %}
+                                        <span class="badge bg-dark border border-secondary text-info fw-bold">1 {{ item.Purchase_Unit|capitalize }} = {{ item.Pack_Size }} {{ item.Unit }}</span>
+                                    {% else %}
+                                        <span class="high-contrast-muted small font-monospace">Standard (1:1)</span>
+                                    {% endif %}
+                                </td>
                                 <td class="text-end fw-bold font-monospace text-white">
                                     {{ "{:,.2f}".format(item.Current_Stock) }} <span class="text-high-contrast-muted small">{{ item.Unit }}</span>
                                 </td>
-                                <td class="text-end font-monospace text-high-contrast-muted">{{ "{:,.2f}".format(item.Par_Level or 0.0) }}</td>
+                                <td class="text-end font-monospace text-high-contrast-muted">{{ "{:,.2f}".format(item.Min_Stock or 0.0) }} {{ item.Unit }}</td>
                                 <td class="text-end">
                                     {% if item.Status == 'Low Stock' %}
                                         <span class="status-badge bg-danger text-white shadow-sm">LOW STOCK</span>
@@ -138,7 +144,6 @@
                     <input type="date" name="filter_date" value="{{ current_filter_date }}" class="form-control form-control-sm bg-dark text-white border-secondary font-monospace" onchange="this.form.submit()">
                 </form>
 
-                <!-- DYNAMICALLY FORMATTED DELIVERIES & AUDITS -->
                 <div class="stream-header">Supply Receipts & Audits</div>
                 <div class="stream-card-container">
                     {% for log in delivery_history %}
@@ -162,7 +167,6 @@
                     {% endfor %}
                 </div>
 
-                <!-- DYNAMICALLY FORMATTED PRODUCTION PREP LOGS -->
                 <div class="stream-header">Kitchen Prep Batches Log</div>
                 <div class="stream-card-container">
                     {% for batch in production_history %}
@@ -189,7 +193,6 @@
                     {% endfor %}
                 </div>
 
-                <!-- DYNAMICALLY FORMATTED KITCHEN SPOILAGE DISCARDS -->
                 <div class="stream-header">Kitchen Spoilage Discards</div>
                 <div class="stream-card-container">
                     {% for log in waste_history %}
@@ -219,10 +222,8 @@
                     </div>
                     {% endfor %}
                 </div>
-
             </div>
         </div>
-        
     </div>
 </div>
 
@@ -265,31 +266,47 @@
                     </div>
 
                     <div class="border-top border-secondary pt-3">
-                        <label class="form-label-custom mb-2 d-block text-info">Material Registration Rows Array</label>
+                        <label class="form-label-custom mb-2 d-block text-info">Material Delivery Invoices (Automatic Pack Conversion & Dynamic Overrides)</label>
                         <div id="modalReceiveRowsContainer">
-                            <div class="row g-2 mb-2 delivery-entry-row align-items-center">
-                                <div class="col-md-5">
-                                    <label class="small text-high-contrast-muted d-md-none fw-bold">Material Item:</label>
-                                    <select name="ingredient_id[]" required class="form-select bg-dark text-white border-secondary">
-                                        <option value="" disabled selected>Select wholesale raw item material...</option>
+                            <div class="row g-2 mb-3 delivery-entry-row align-items-center">
+                                <div class="col-md-4">
+                                    <label class="small text-high-contrast-muted fw-bold mb-1 d-block">Raw Material & Commercial Packaging:</label>
+                                    <select name="ingredient_id[]" required class="form-select bg-dark text-white border-secondary delivery-item-select" onchange="updateDeliveryRowMeta(this)">
+                                        <option value="" disabled selected>Select ingredient...</option>
                                         {% for item in inventory_status %}
-                                            <option value="{{ item.Ingredient_ID }}">{{ item.Ingredient_Name }} (in {{ item.Unit }})</option>
+                                            <option value="{{ item.Ingredient_ID }}" 
+                                                    data-unit="{{ item.Unit }}" 
+                                                    data-punit="{{ item.Purchase_Unit or 'pack' }}" 
+                                                    data-packsize="{{ item.Pack_Size or 1.0 }}" 
+                                                    data-pcost="{{ item.Purchase_Cost or (item.Cost_Per_Unit * (item.Pack_Size or 1.0)) }}">
+                                                {{ item.Ingredient_Name }} ({{ item.Purchase_Unit|capitalize or 'Pack' }})
+                                            </option>
                                         {% endfor %}
                                     </select>
                                 </div>
-                                <div class="col-md-3">
-                                    <label class="small text-high-contrast-muted d-md-none fw-bold">Quantity Received:</label>
-                                    <input type="number" name="quantity[]" step="0.001" min="0.001" placeholder="Quantity Received" required class="form-control bg-dark text-white border-secondary font-monospace">
-                                </div>
-                                <div class="col-md-3">
-                                    <label class="small text-high-contrast-muted d-md-none fw-bold">Purchase Price per Unit:</label>
+                                <div class="col-md-2">
+                                    <label class="small text-high-contrast-muted fw-bold mb-1 d-block">Pack Net Content:</label>
                                     <div class="input-group">
-                                        <span class="input-group-text bg-secondary border-secondary text-white small fw-bold">PHP</span>
-                                        <input type="number" name="purchase_price[]" step="0.01" min="0.00" placeholder="Purchase Price / Unit" required class="form-control bg-dark text-white border-secondary font-monospace">
+                                        <input type="number" name="pack_size[]" step="any" min="0.0001" placeholder="Size" required class="form-control bg-dark text-white border-secondary font-monospace delivery-pack-size" oninput="updateDeliveryRowMeta(this)">
+                                        <span class="input-group-text bg-secondary border-secondary text-white small pack-unit-badge" style="font-size: 11px;">base</span>
                                     </div>
                                 </div>
-                                <div class="col-md-1 text-end">
+                                <div class="col-md-2">
+                                    <label class="small text-high-contrast-muted fw-bold mb-1 d-block pack-qty-label">Packs In:</label>
+                                    <input type="number" name="quantity[]" step="any" min="0.001" placeholder="Packs count" required class="form-control bg-dark text-white border-secondary font-monospace delivery-pack-qty" oninput="updateDeliveryRowMeta(this)">
+                                </div>
+                                <div class="col-md-3">
+                                    <label class="small text-high-contrast-muted fw-bold mb-1 d-block">Total Line Cost:</label>
+                                    <div class="input-group">
+                                        <span class="input-group-text bg-secondary border-secondary text-white small fw-bold">PHP</span>
+                                        <input type="number" name="purchase_price[]" step="0.01" min="0.00" placeholder="Total cost" required class="form-control bg-dark text-white border-secondary font-monospace delivery-total-cost" oninput="updateDeliveryRowMeta(this)">
+                                    </div>
+                                </div>
+                                <div class="col-md-1 text-end align-self-end">
                                     <button type="button" class="btn btn-outline-danger border-secondary w-100" onclick="removeDeliveryRowItem(this)">X</button>
+                                </div>
+                                <div class="col-12 mt-1">
+                                    <div class="delivery-calc-summary text-info small" style="font-size: 11.5px; font-weight: 600;"></div>
                                 </div>
                             </div>
                         </div>
@@ -297,12 +314,11 @@
                             + Add Delivery Item Row
                         </button>
                     </div>
-
                 </div>
                 
                 <div class="modal-custom-footer text-end">
                     <button type="button" class="btn btn-sm btn-secondary me-2 fw-bold" data-bs-dismiss="modal">Cancel</button>
-                    <button type="submit" class="btn btn-sm btn-success fw-bold px-4">Commit Shipments to Warehouse Storage Balance Sheets</button>
+                    <button type="submit" class="btn btn-sm btn-success fw-bold px-4">Commit Shipments & Convert to Base Stock</button>
                 </div>
             </form>
         </div>
@@ -339,10 +355,7 @@
 
                     <div class="mb-3">
                         <label class="form-label-custom">Number of Batches Produced:</label>
-                        <input type="number" name="prep_quantity" step="0.1" min="0.1" required placeholder="e.g. 2.0 (Produces total calculated yield based on sub-recipe yield ratio)" class="form-control bg-dark text-white border-secondary font-monospace">
-                        <small class="text-high-contrast-muted d-block mt-1" style="font-size: 11.5px;">
-                            Automatic Yield & Deduction: System calculates raw material deductions and credits inventory balance by multiplying your batch count against the formula yield ratio.
-                        </small>
+                        <input type="number" name="prep_quantity" step="0.1" min="0.1" required placeholder="e.g. 2.0 (Produces calculated yield from formula)" class="form-control bg-dark text-white border-secondary font-monospace">
                     </div>
                 </div>
                 
@@ -378,7 +391,7 @@
                     </div>
 
                     <div style="max-height: 280px; overflow-y: auto; padding-right:4px;">
-                        <label class="form-label-custom mb-2 text-warning">Input Physical Quantities Found on Shelf:</label>
+                        <label class="form-label-custom mb-2 text-warning">Input Physical Quantities Found on Shelf (in Base Units):</label>
                         {% for item in inventory_status %}
                         <div class="row g-2 align-items-center mb-2 p-2 rounded" style="background: rgba(255,255,255,0.01); border: 1px solid #2d2d3f;">
                             <div class="col-md-7">
@@ -422,7 +435,7 @@
                 <input type="hidden" name="action_type" value="log_waste">
                 
                 <div class="modal-custom-header">
-                    <h5 class="fw-bold m-0 text-white">Log Structural Material Spoilage or Operational Waste</h5>
+                    <h5 class="fw-bold m-0 text-white">Log Material Spoilage or Operational Waste</h5>
                 </div>
                 
                 <div class="modal-body p-4">
@@ -462,7 +475,7 @@
                     </div>
 
                     <div id="wasteIngredientListBlock" class="border-top border-secondary pt-2">
-                        <label class="form-label-custom text-white-50">Bulk Materials Loss Roster:</label>
+                        <label class="form-label-custom text-white-50">Bulk Materials Loss Roster (in Recipe Base Units):</label>
                         <div id="ingredientWasteRowsContainer">
                             <div class="row g-2 mb-2 waste-ing-row align-items-center">
                                 <div class="col-md-7">
@@ -474,7 +487,7 @@
                                     </select>
                                 </div>
                                 <div class="col-md-4">
-                                    <input type="number" name="quantity[]" step="0.001" min="0.001" placeholder="Quantity Lost in Base Unit (e.g., 0.1 for 100g)" class="form-control bg-dark text-white border-secondary font-monospace">
+                                    <input type="number" name="quantity[]" step="0.001" min="0.001" placeholder="Quantity Lost in Base Units" class="form-control bg-dark text-white border-secondary font-monospace">
                                 </div>
                                 <div class="col-md-1 text-end">
                                     <button type="button" class="btn btn-outline-danger border-secondary w-100" onclick="removeWasteRowItem(this, 'waste-ing-row')">X</button>
@@ -499,7 +512,7 @@
                                     </select>
                                 </div>
                                 <div class="col-md-4">
-                                    <input type="number" name="product_quantity[]" step="0.001" min="0.001" placeholder="Portion / Units Lost (e.g. 1.0 or 0.5)" class="form-control bg-dark text-white border-secondary font-monospace">
+                                    <input type="number" name="product_quantity[]" step="0.001" min="0.001" placeholder="Portion / Units Lost" class="form-control bg-dark text-white border-secondary font-monospace">
                                 </div>
                                 <div class="col-md-1 text-end">
                                     <button type="button" class="btn btn-outline-danger border-secondary w-100" onclick="removeWasteRowItem(this, 'waste-prod-row')">X</button>
@@ -510,7 +523,6 @@
                             + Add Menu Loss Row
                         </button>
                     </div>
-
                 </div>
                 
                 <div class="modal-custom-footer text-end">
@@ -523,6 +535,59 @@
 </div>
 
 <script>
+function updateDeliveryRowMeta(node) {
+    const row = node.closest('.delivery-entry-row');
+    const select = row.querySelector('.delivery-item-select');
+    const packSizeInput = row.querySelector('.delivery-pack-size');
+    const packUnitBadge = row.querySelector('.pack-unit-badge');
+    const packInput = row.querySelector('.delivery-pack-qty');
+    const costInput = row.querySelector('.delivery-total-cost');
+    const summary = row.querySelector('.delivery-calc-summary');
+    const packLabel = row.querySelector('.pack-qty-label');
+    
+    const selectedOption = select.options[select.selectedIndex];
+    if (!selectedOption || !selectedOption.value) {
+        summary.innerHTML = "";
+        return;
+    }
+    
+    const baseUnit = selectedOption.getAttribute('data-unit') || 'pcs';
+    const purchaseUnit = selectedOption.getAttribute('data-punit') || 'pack';
+    const defaultPackSize = parseFloat(selectedOption.getAttribute('data-packsize')) || 1.0;
+    const defaultPackCost = parseFloat(selectedOption.getAttribute('data-pcost')) || 0.0;
+    
+    if (node === select || !packSizeInput.value) {
+        packSizeInput.value = defaultPackSize;
+    }
+    packUnitBadge.textContent = baseUnit;
+    
+    packLabel.textContent = `Packs In (${purchaseUnit}s):`;
+    packInput.placeholder = `Count of ${purchaseUnit}s`;
+    
+    const currentPackSize = parseFloat(packSizeInput.value) || defaultPackSize;
+    const packs = parseFloat(packInput.value) || 0.0;
+    
+    if (packs > 0 && (!costInput.value || costInput.value === '0')) {
+        if (defaultPackCost > 0) {
+            costInput.value = (packs * defaultPackCost).toFixed(2);
+        }
+    }
+    
+    const totalCost = parseFloat(costInput.value) || 0.0;
+    const baseAdded = packs * currentPackSize;
+    const baseCost = baseAdded > 0 ? (totalCost / baseAdded) : 0.0;
+    
+    if (packs > 0) {
+        let note = `Converting ${packs} ${purchaseUnit}(s) of ${currentPackSize} ${baseUnit} = <b class="text-success">+${baseAdded.toLocaleString()} ${baseUnit}</b> added to stock | Effective: <b class="text-info">PHP ${baseCost.toFixed(4)}/${baseUnit}</b>`;
+        if (Math.abs(currentPackSize - defaultPackSize) > 0.001) {
+            note += ` <span class="badge bg-warning text-dark ms-1">Substitute Packaging Override</span>`;
+        }
+        summary.innerHTML = note;
+    } else {
+        summary.innerHTML = `Default: 1 ${purchaseUnit} = ${defaultPackSize} ${baseUnit} (Editable for substitute brands)`;
+    }
+}
+
 function calculateVariance(input) {
     const container = input.closest('.row').querySelector('.variance-container');
     const display = container.querySelector('.variance-display');
@@ -559,6 +624,8 @@ function addNewDeliveryRowItem() {
         const newRow = templateRow.cloneNode(true);
         newRow.querySelector('select').selectedIndex = 0;
         newRow.querySelectorAll('input').forEach(input => input.value = '');
+        newRow.querySelector('.pack-unit-badge').textContent = 'base';
+        newRow.querySelector('.delivery-calc-summary').innerHTML = '';
         container.appendChild(newRow);
     }
 }
