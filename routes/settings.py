@@ -1,4 +1,4 @@
-# routes/settings.py - Enterprise Settings Engine with Multi-Entity CSV Sync, Backup & Restore
+# routes/settings.py - Enterprise Settings Engine with Multi-Entity CSV Sync, Auto-Cost Reconciliation & Backup
 from flask import Blueprint, request, redirect, session, render_template, send_file
 from modules.database import InventoryDB
 import sqlite3
@@ -25,6 +25,65 @@ def ensure_staff_table_exists(client_db_path):
     """)
     conn.commit()
     conn.close()
+
+def heal_database_integrity(conn):
+    """
+    Guarantees structural integrity across recipes, types, and mathematical pricing:
+    1. Restores prepped items missing from the Ingredients table.
+    2. Reasserts PREPPED status for items defined in Prep_Recipes.
+    3. Enforces Cost_Per_Unit = Purchase_Cost / Pack_Size for all RAW wholesale goods.
+    """
+    cursor = conn.cursor()
+    try:
+        # 1. Restore any prepped items missing from the Ingredients registry
+        cursor.execute("""
+            SELECT DISTINCT Prepped_Ingredient_ID FROM Prep_Recipes
+            WHERE Prepped_Ingredient_ID NOT IN (SELECT Ingredient_ID FROM Ingredients)
+        """)
+        orphaned_ids = [r[0] for r in cursor.fetchall() if r and r[0]]
+        for orphan_id in orphaned_ids:
+            cursor.execute("""
+                INSERT INTO Ingredients (
+                    Ingredient_ID, Ingredient_Name, Unit, Category, 
+                    Ingredient_Type, Active, Current_Stock, Min_Stock, Cost_Per_Unit
+                ) VALUES (?, ?, 'g', 'Prep', 'PREPPED', 'Yes', 0.0, 0.0, 0.0)
+            """, (orphan_id, orphan_id))
+
+        # 2. Reassert PREPPED classification for all sub-recipes
+        cursor.execute("""
+            UPDATE Ingredients 
+            SET Ingredient_Type = 'PREPPED'
+            WHERE Ingredient_ID IN (SELECT DISTINCT Prepped_Ingredient_ID FROM Prep_Recipes)
+        """)
+
+        # 3. Heal RAW ingredient Cost_Per_Unit mathematical desynchronization:
+        # If Purchase_Cost > 0 and Pack_Size > 0, Cost_Per_Unit MUST equal Purchase_Cost / Pack_Size.
+        cursor.execute("""
+            UPDATE Ingredients
+            SET Cost_Per_Unit = ROUND(Purchase_Cost / Pack_Size, 4)
+            WHERE (Ingredient_Type IS NULL OR UPPER(Ingredient_Type) = 'RAW')
+              AND Purchase_Cost > 0 
+              AND Pack_Size > 0
+              AND (
+                  Cost_Per_Unit IS NULL 
+                  OR Cost_Per_Unit <= 0 
+                  OR ABS(Cost_Per_Unit - (Purchase_Cost / Pack_Size)) > 0.0001
+              )
+        """)
+
+        # 4. If Cost_Per_Unit > 0 but Purchase_Cost is 0 or NULL for RAW items:
+        cursor.execute("""
+            UPDATE Ingredients
+            SET Purchase_Cost = ROUND(Cost_Per_Unit * Pack_Size, 2)
+            WHERE (Ingredient_Type IS NULL OR UPPER(Ingredient_Type) = 'RAW')
+              AND Cost_Per_Unit > 0
+              AND (Purchase_Cost IS NULL OR Purchase_Cost <= 0)
+              AND Pack_Size > 0
+        """)
+
+        conn.commit()
+    except Exception as e:
+        print(f"Database healing warning: {e}")
 
 @settings_bp.route('/portal/<username>/settings', methods=['GET', 'POST'])
 def web_settings_tab(username):
@@ -145,13 +204,17 @@ def web_settings_tab(username):
             else:
                 try:
                     uploaded_file.save(client_db_path)
+                    conn = sqlite3.connect(client_db_path)
+                    heal_database_integrity(conn)
+                    conn.close()
+                    client_db.update_all_product_costs()
                     feedback_msg = "System Restoration Successful: The database file has been successfully hot-swapped."
                     alert_type = "success"
                 except Exception as e:
                     feedback_msg = f"Restoration Fault during file overwrite sequencing: {str(e)}"
                     alert_type = "danger"
 
-        # 7. BULK CSV IMPORT (INGREDIENTS, PRODUCTS, AND RECIPES)
+        # 7. BULK CSV IMPORT (SAFE UPSERT, COLLISION SHIELD & COST RECONCILIATION)
         elif action == 'bulk_import':
             target_table = request.form.get('import_target')
             uploaded_file = request.files.get('csv_file')
@@ -163,7 +226,6 @@ def web_settings_tab(username):
                 try:
                     stream = io.StringIO(uploaded_file.stream.read().decode("utf-8-sig"), newline=None)
                     df = pd.read_csv(stream)
-                    
                     conn = sqlite3.connect(client_db_path, timeout=20.0)
 
                     # ===== SCENARIO A: RECIPES IMPORT =====
@@ -231,8 +293,6 @@ def web_settings_tab(username):
                                 continue
 
                             unit_val = str(row[unit_col]).strip() if unit_col and pd.notna(row.get(unit_col)) else ing_id_to_default_unit.get(resolved_iid, 'pcs')
-
-                            # Normalize grams and milliliters into base inventory units
                             stored_qty = qty_val
 
                             if resolved_pid not in recipes_by_product:
@@ -286,30 +346,44 @@ def web_settings_tab(username):
                             feedback_msg = "Error: No valid recipe rows found in CSV. Please verify that your Product and Ingredient names or IDs match existing catalog records."
                             alert_type = "danger"
 
-                    # ===== SCENARIO B: INGREDIENTS OR PRODUCTS IMPORT =====
+                    # ===== SCENARIO B: INGREDIENTS OR PRODUCTS SAFE UPSERT =====
                     else:
                         cursor = conn.cursor()
-                        target_table_name = 'Ingredients' if target_table == 'ingredients' else 'Products'
-                        id_col = 'Ingredient_ID' if target_table == 'ingredients' else 'Product_ID'
-                        name_col = 'Ingredient_Name' if target_table == 'ingredients' else 'Product_Name'
-                        prefix = "ING" if target_table == 'ingredients' else "PROD"
+                        is_ingredients = (target_table == 'ingredients')
+                        target_table_name = 'Ingredients' if is_ingredients else 'Products'
+                        id_col = 'Ingredient_ID' if is_ingredients else 'Product_ID'
+                        name_col = 'Ingredient_Name' if is_ingredients else 'Product_Name'
+                        prefix = "ING" if is_ingredients else "PROD"
                         
                         cursor.execute(f"PRAGMA table_info({target_table_name})")
                         valid_cols = [row[1] for row in cursor.fetchall()]
-                        
-                        # Automated database deduplication sweep
-                        cursor.execute(f"""
-                            DELETE FROM {target_table_name}
-                            WHERE rowid NOT IN (
-                                SELECT MIN(rowid)
-                                FROM {target_table_name}
-                                GROUP BY {id_col}
-                            )
-                        """)
-                        conn.commit()
-                        
+
+                        # Build existing index maps
+                        if is_ingredients:
+                            cursor.execute("SELECT Ingredient_ID, LOWER(TRIM(Ingredient_Name)), Ingredient_Type FROM Ingredients")
+                            existing_rows = cursor.fetchall()
+                            name_to_id = {r[1]: r[0] for r in existing_rows if r and r[1]}
+                            id_to_type = {r[0]: (r[2] or 'RAW') for r in existing_rows if r and r[0]}
+                            occupied_ids = set(id_to_type.keys())
+                        else:
+                            cursor.execute("SELECT Product_ID, LOWER(TRIM(Product_Name)) FROM Products")
+                            existing_rows = cursor.fetchall()
+                            name_to_id = {r[1]: r[0] for r in existing_rows if r and r[1]}
+                            occupied_ids = set(r[0] for r in existing_rows if r and r[0])
+
+                        # Determine the next available ID sequence
+                        cursor.execute(f"SELECT {id_col} FROM {target_table_name} WHERE {id_col} LIKE '{prefix}%'")
+                        existing_ids = [r[0] for r in cursor.fetchall() if r and r[0]]
+                        nums = []
+                        for eid in existing_ids:
+                            try:
+                                nums.append(int(eid.replace(prefix, '')))
+                            except ValueError:
+                                pass
+                        next_seq_num = max(nums) + 1 if nums else 1
+
                         processed_count = 0
-                        
+
                         for _, row in df.iterrows():
                             row_dict = {k: v for k, v in row.items() if pd.notna(v)}
                             
@@ -317,54 +391,89 @@ def web_settings_tab(username):
                             if not name_val or name_val.lower() == 'nan': 
                                 continue
                             
-                            item_id = str(row_dict.get(id_col, '')).strip()
-                            
-                            if not item_id or item_id.lower() in ['nan', 'none', 'null', '']:
-                                cursor.execute(f"SELECT {id_col} FROM {target_table_name} WHERE {name_col} = ?", (name_val,))
-                                name_match = cursor.fetchone()
-                                
-                                if name_match:
-                                    item_id = name_match[0]
-                                    row_dict[id_col] = item_id
-                                else:
-                                    cursor.execute(f"SELECT {id_col} FROM {target_table_name} WHERE {id_col} LIKE '{prefix}%'")
-                                    existing_ids = [r[0] for r in cursor.fetchall() if r and r[0]]
-                                    nums = []
-                                    for eid in existing_ids:
-                                        try:
-                                            nums.append(int(eid.replace(prefix, '')))
-                                        except ValueError:
-                                            pass
-                                    next_num = max(nums) + 1 if nums else 1
-                                    item_id = f"{prefix}{next_num:04d}"
-                                    row_dict[id_col] = item_id
+                            clean_name = name_val.lower()
+                            csv_id = str(row_dict.get(id_col, '')).strip()
+
+                            # STRICT COMMERCIAL PACKAGING CONSISTENCY ENGINE
+                            if is_ingredients:
+                                try:
+                                    p_cost = float(pd.to_numeric(row_dict.get('Purchase_Cost', 0.0), errors='coerce') or 0.0)
+                                except (ValueError, TypeError):
+                                    p_cost = 0.0
                                     
-                            insert_data = {k: v for k, v in row_dict.items() if k in valid_cols}
+                                try:
+                                    p_size = float(pd.to_numeric(row_dict.get('Pack_Size', 1.0), errors='coerce') or 1.0)
+                                    if p_size <= 0: 
+                                        p_size = 1.0
+                                except (ValueError, TypeError):
+                                    p_size = 1.0
+                                    
+                                try:
+                                    c_unit = float(pd.to_numeric(row_dict.get('Cost_Per_Unit', 0.0), errors='coerce') or 0.0)
+                                except (ValueError, TypeError):
+                                    c_unit = 0.0
+
+                                row_dict['Pack_Size'] = p_size
+                                
+                                # Force exact math: Cost_Per_Unit MUST equal Purchase_Cost / Pack_Size
+                                if p_cost > 0:
+                                    row_dict['Purchase_Cost'] = p_cost
+                                    row_dict['Cost_Per_Unit'] = round(p_cost / p_size, 4)
+                                elif c_unit > 0:
+                                    row_dict['Cost_Per_Unit'] = c_unit
+                                    row_dict['Purchase_Cost'] = round(c_unit * p_size, 2)
                             
-                            cursor.execute(f"SELECT COUNT(*) FROM {target_table_name} WHERE {id_col} = ?", (item_id,))
-                            exists = cursor.fetchone()[0] > 0
-                            
-                            if exists:
-                                update_cols = [k for k in insert_data.keys() if k != id_col]
+                            # 1. MATCH BY NAME (PROTECTS EXISTING FOREIGN KEYS)
+                            if clean_name in name_to_id:
+                                target_id = name_to_id[clean_name]
+                                
+                                if is_ingredients:
+                                    is_prepped = (id_to_type.get(target_id) == 'PREPPED')
+                                    if is_prepped and 'Ingredient_Type' in row_dict and row_dict['Ingredient_Type'] != 'PREPPED':
+                                        del row_dict['Ingredient_Type']
+
+                                update_cols = [k for k in row_dict.keys() if k in valid_cols and k != id_col]
                                 if update_cols:
                                     set_clause = ", ".join([f"{k} = ?" for k in update_cols])
-                                    update_values = tuple([insert_data[k] for k in update_cols] + [item_id])
+                                    update_values = tuple([row_dict[k] for k in update_cols] + [target_id])
                                     cursor.execute(f"UPDATE {target_table_name} SET {set_clause} WHERE {id_col} = ?", update_values)
+
+                            # 2. BRAND NEW ITEM (WITH ID COLLISION SHIELD)
                             else:
+                                if csv_id and csv_id in occupied_ids:
+                                    target_id = f"{prefix}{next_seq_num:03d}"
+                                    next_seq_num += 1
+                                elif csv_id and csv_id.lower() not in ['nan', 'none', 'null', '']:
+                                    target_id = csv_id
+                                else:
+                                    target_id = f"{prefix}{next_seq_num:03d}"
+                                    next_seq_num += 1
+
+                                row_dict[id_col] = target_id
+                                occupied_ids.add(target_id)
+                                name_to_id[clean_name] = target_id
+
+                                if is_ingredients and 'Ingredient_Type' not in row_dict:
+                                    row_dict['Ingredient_Type'] = 'RAW'
+
+                                insert_data = {k: v for k, v in row_dict.items() if k in valid_cols}
                                 cols = ", ".join(insert_data.keys())
                                 placeholders = ", ".join(["?"] * len(insert_data))
                                 values = tuple(insert_data.values())
                                 cursor.execute(f"INSERT INTO {target_table_name} ({cols}) VALUES ({placeholders})", values)
-                                
+
                             processed_count += 1
-                        
+
+                        # 3. RUN DATABASE INTEGRITY RECONCILIATION
+                        heal_database_integrity(conn)
+
                         conn.commit()
                         conn.close()
-                        
+
                         client_db.update_all_product_costs()
-                        feedback_msg = f"Success: Bulk synced {processed_count} records into the {target_table_name} database."
+                        feedback_msg = f"Success: Safely processed {processed_count} records into {target_table_name}. Packaging costs mathematically verified and sub-recipes preserved."
                         alert_type = "success"
-                    
+
                 except Exception as e:
                     feedback_msg = f"CSV Format Error: {str(e)}"
                     alert_type = "danger"
@@ -394,7 +503,7 @@ def web_settings_tab(username):
                 feedback_msg = f"Template Generation Error: {str(e)}"
                 alert_type = "danger"
 
-        # 9. EXPORT CSV DATA (CORRECTED ROUTING FOR RECIPES)
+        # 9. EXPORT CSV DATA
         elif action == 'export_csv':
             export_target = request.form.get('export_target')
             
@@ -419,8 +528,6 @@ def web_settings_tab(username):
                     
                     if not df.empty and 'Quantity_Required' in df.columns:
                         df['Quantity_Required'] = pd.to_numeric(df['Quantity_Required'], errors='coerce').fillna(0.0)
-                        mask = df['Unit'].astype(str).str.lower().str.strip().isin(['g', 'ml'])
-                        df.loc[mask, 'Quantity_Required'] = (df.loc[mask, 'Quantity_Required'] * 1000.0).round(4)
                 elif export_target == 'ingredients':
                     df = pd.read_sql("SELECT * FROM Ingredients", conn)
                     conn.close()
@@ -491,7 +598,9 @@ def web_settings_tab(username):
 
         return redirect(f"/portal/{username}/settings?msg={feedback_msg}&alert_type={alert_type}")
 
+    # ===== GET METHOD: HEAL INTEGRITY ON VIEW =====
     conn = sqlite3.connect(client_db_path)
+    heal_database_integrity(conn)
     staff_df = pd.read_sql("SELECT * FROM Staff_Accounts", conn)
     conn.close()
     

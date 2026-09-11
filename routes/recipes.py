@@ -2,18 +2,38 @@
 from flask import Blueprint, request, redirect, session, render_template, flash
 from modules.database import InventoryDB
 import pandas as pd
+import numpy as np
 
 recipes_bp = Blueprint('recipes', __name__)
+
+def normalize_recipe_qty(qty, selected_unit, base_unit):
+    """Normalizes recipe input quantity into the ingredient's actual database base unit."""
+    try:
+        qty = float(qty)
+    except (ValueError, TypeError):
+        qty = 0.0
+        
+    s_unit = str(selected_unit).strip().lower()
+    b_unit = str(base_unit).strip().lower()
+
+    if b_unit == 'g':
+        return (qty * 1000.0, 'g') if s_unit == 'kg' else (qty, 'g')
+    elif b_unit in ['ml', 'l']:
+        if b_unit == 'ml':
+            return (qty * 1000.0, 'ml') if s_unit == 'l' else (qty, 'ml')
+        elif b_unit == 'l':
+            return (qty / 1000.0, 'L') if s_unit == 'ml' else (qty, 'L')
+    elif b_unit == 'kg':
+        return (qty / 1000.0, 'kg') if s_unit == 'g' else (qty, 'kg')
+    return (qty, selected_unit)
 
 @recipes_bp.route('/portal/<username>/recipes', methods=['GET', 'POST'])
 def web_recipes_tab(username):
     username = username.lower().strip()
     
-    # 1. Session Authentication Check
     if session.get('logged_in_user') != username: 
         return redirect('/login')
         
-    # 2. Role-Based Access Guard
     if session.get('staff_role') != 'Platform Owner Admin':
         flash('Unauthorized access: Recipes management is strictly reserved for Platform Owner Admins.', 'danger')
         return redirect(f"/portal/{username}")
@@ -24,7 +44,6 @@ def web_recipes_tab(username):
     if current_tab not in ['product', 'prep']:
         current_tab = 'product'
 
-    # Guarantees variables exist across all execution paths
     recipe_data = []
     grouped_recipes = {}
     categories = []
@@ -44,20 +63,27 @@ def web_recipes_tab(username):
             qtys = request.form.getlist('quantity[]')
             units = request.form.getlist('unit[]')
             
-            batch_yield_val = float(request.form.get('batch_yield', 1.0) or 1.0)
-            if batch_yield_val <= 0:
+            try:
+                batch_yield_val = float(request.form.get('batch_yield', 1.0) or 1.0)
+                if batch_yield_val <= 0:
+                    batch_yield_val = 1.0
+            except ValueError:
                 batch_yield_val = 1.0
             
+            ingredients_df = db.read_tab('Ingredients')
+            base_unit_map = {}
+            if not ingredients_df.empty:
+                base_unit_map = dict(zip(ingredients_df['Ingredient_ID'].astype(str), ingredients_df['Unit'].astype(str)))
+
             recipe_items = []
             for i, q, u in zip(ing_ids, qtys, units):
                 if i and q:
-                    val = float(q)
-                    if u in ['g', 'ml']:
-                        val = val / 1000.0
+                    b_unit = base_unit_map.get(str(i), u)
+                    norm_qty, norm_unit = normalize_recipe_qty(q, u, b_unit)
                     recipe_items.append({
                         'ingredient_id': i,
-                        'quantity': val,
-                        'unit': u
+                        'quantity': norm_qty,
+                        'unit': norm_unit
                     })
             
             if recipe_type == 'product':
@@ -107,10 +133,13 @@ def web_recipes_tab(username):
     ing_lookup = {}
     if not ingredients_df.empty:
         for _, ing in ingredients_df.iterrows():
+            cost_val = pd.to_numeric(ing.get('Cost_Per_Unit', 0.0), errors='coerce')
+            if pd.isna(cost_val) or np.isnan(cost_val):
+                cost_val = 0.0
             ing_lookup[str(ing['Ingredient_ID'])] = {
                 'name': ing['Ingredient_Name'],
                 'base_unit': ing['Unit'],
-                'cost': float(ing['Cost_Per_Unit'] or 0),
+                'cost': float(cost_val),
                 'type': ing.get('Ingredient_Type', 'RAW')
             }
 
@@ -137,27 +166,22 @@ def web_recipes_tab(username):
             if df is not None and not df.empty:
                 for _, row in df.iterrows():
                     ing_id = str(row.get('Ingredient_ID'))
-                    qty = float(row.get('Quantity_Required', 0))
+                    qty = float(pd.to_numeric(row.get('Quantity_Required', 0), errors='coerce') or 0.0)
                     unit = row.get('Unit', '')
                     
-                    lookup = ing_lookup.get(ing_id, {'name': row.get('Ingredient_Name'), 'base_unit': '', 'cost': float(row.get('Cost_Per_Unit', 0))})
+                    lookup = ing_lookup.get(ing_id, {'name': row.get('Ingredient_Name'), 'base_unit': '', 'cost': float(row.get('Cost_Per_Unit', 0) or 0.0)})
                     cost = lookup['cost']
-                    
                     total = qty * cost
                     total_cost += total
-                    
-                    display_qty = qty
-                    if unit in ['g', 'ml']:
-                        display_qty = qty * 1000.0
 
                     items.append({
-                        'ID': ing_id, 'Name': lookup['name'], 'Qty': display_qty, 
+                        'ID': ing_id, 'Name': lookup['name'], 'Qty': qty, 
                         'Unit': unit, 'Base_Unit': lookup['base_unit'], 'Cost': cost, 'Total': total
                     })
             
-            selling_price = float(p.get('Selling_Price', 0))
+            selling_price = float(pd.to_numeric(p.get('Selling_Price', 0), errors='coerce') or 0.0)
             profit = selling_price - total_cost
-            margin = (profit / selling_price * 100) if selling_price > 0 else 0
+            margin = (profit / selling_price * 100) if selling_price > 0 else 0.0
             
             parent_item_name = str(p.get('Parent_Item') or p.get('Product_Name') or 'Uncategorized').strip()
             variant_item_name = str(p.get('Variant_Name') or 'Regular').strip()
@@ -188,41 +212,50 @@ def web_recipes_tab(username):
             items = []
             total_cost = 0.0
             existing_yield = 1.0
+            base_unit = str(ing_row.get('Unit', 'g'))
             
             if not prep_recipes_df.empty:
                 sub_formula = prep_recipes_df[prep_recipes_df['Prepped_Ingredient_ID'] == ing_id]
                 
                 if not sub_formula.empty and 'Batch_Yield' in sub_formula.columns:
                     try:
-                        existing_yield = float(sub_formula['Batch_Yield'].iloc[0])
-                    except:
-                        pass
+                        y_val = float(sub_formula['Batch_Yield'].iloc[0])
+                        if y_val > 0:
+                            existing_yield = y_val
+                    except (ValueError, TypeError):
+                        existing_yield = 1.0
 
                 for _, row in sub_formula.iterrows():
                     raw_id = str(row.get('Raw_Ingredient_ID'))
-                    qty = float(row.get('Quantity_Required', 0))
+                    qty = float(pd.to_numeric(row.get('Quantity_Required', 0), errors='coerce') or 0.0)
                     unit = row.get('Unit', '')
                     
                     lookup = ing_lookup.get(raw_id, {'name': 'Unknown Raw Material', 'base_unit': '', 'cost': 0.0})
                     cost = lookup['cost']
-                    
                     total = qty * cost
                     total_cost += total
-                    
-                    display_qty = qty
-                    if unit in ['g', 'ml']:
-                        display_qty = qty * 1000.0
 
                     items.append({
-                        'ID': raw_id, 'Name': lookup['name'], 'Qty': display_qty, 
+                        'ID': raw_id, 'Name': lookup['name'], 'Qty': qty, 
                         'Unit': unit, 'Base_Unit': lookup['base_unit'], 'Cost': cost, 'Total': total
                     })
             
+            amortized_cost = (total_cost / existing_yield) if existing_yield > 0 else 0.0
+            if pd.isna(amortized_cost) or np.isnan(amortized_cost):
+                amortized_cost = 0.0
+
             recipe_obj = {
-                'Product_Name': ing_row['Ingredient_Name'], 'Product_ID': ing_id, 
-                'Category': ing_row.get('Category', 'General') or 'General', 'Selling_Price': float(ing_row['Cost_Per_Unit'] or 0), 
-                'Items': items, 'Total_Cost': total_cost, 'Profit': 0.0, 'Margin': 0.0,
-                'Batch_Yield': existing_yield
+                'Product_Name': ing_row['Ingredient_Name'], 
+                'Product_ID': ing_id, 
+                'Base_Unit': base_unit,
+                'Category': ing_row.get('Category', 'General') or 'General', 
+                'Selling_Price': amortized_cost, 
+                'Items': items, 
+                'Total_Cost': total_cost, 
+                'Profit': 0.0, 
+                'Margin': 0.0,
+                'Batch_Yield': existing_yield,
+                'Amortized_Cost': amortized_cost
             }
 
             recipe_data.append(recipe_obj)

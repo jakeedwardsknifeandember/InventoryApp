@@ -1,7 +1,8 @@
-# routes/inventory.py - Stock Inventory Module with Dynamic Delivery Pack Override & Adaptive Costing
+# routes/inventory.py - Stock Inventory Module with Dynamic Packaging & Dual-Input Yield Prep Engine
 from flask import Blueprint, request, redirect, session, render_template
 from modules.database import InventoryDB
 import pandas as pd
+import json
 from datetime import datetime
 
 inventory_bp = Blueprint('inventory', __name__)
@@ -37,7 +38,7 @@ def web_inventory_tab(username):
             ingredients_df['Ingredient_ID'] = ingredients_df['Ingredient_ID'].astype(str)
             ingredients_df['Current_Stock'] = pd.to_numeric(ingredients_df['Current_Stock'], errors='coerce').fillna(0.0)
 
-            # 1. PROCESS SUPPLY DELIVERIES (DYNAMIC PACK OVERRIDE & ADAPTIVE COSTING)
+            # 1. PROCESS SUPPLY DELIVERIES (WITH DYNAMIC PACK OVERRIDE & ADAPTIVE COSTING)
             if action == 'receive_stock':
                 ing_ids = request.form.getlist('ingredient_id[]')
                 quantities = request.form.getlist('quantity[]')
@@ -82,7 +83,7 @@ def web_inventory_tab(username):
                         except Exception:
                             default_pack_size = 1.0
                             
-                        # Extract the submitted pack size override from the browser form
+                        # Dynamic packaging override
                         pack_size = default_pack_size
                         if idx_entry < len(pack_sizes) and str(pack_sizes[idx_entry]).strip():
                             try:
@@ -92,7 +93,6 @@ def web_inventory_tab(username):
                             except (ValueError, TypeError):
                                 pack_size = default_pack_size
                                 
-                        # Calculate exact base atomic units from submitted pack size
                         base_qty = packs_received * pack_size
                         incoming_unit_price = total_line_cost / base_qty if base_qty > 0 else 0.0
                         
@@ -152,73 +152,92 @@ def web_inventory_tab(username):
                     feedback_msg = f"Success: Processed delivery for {logged_count} items from supplier: {supplier}. Financial invoice total of PHP {total_delivery_expense:,.2f} pushed to accounting."
                     alert_type = "success"
 
-            # 2. PROCESS KITCHEN PRODUCTION PREP LOGS
+            # 2. DUAL-INPUT PROPORTIONAL YIELD KITCHEN PREP ENGINE
             elif action == 'log_production_prep':
                 prep_ing_id = request.form.get('prep_ingredient_id')
-                prep_qty_str = request.form.get('prep_quantity', '0')
                 prepped_by = request.form.get('prepped_by', '').strip()
+                actual_produced_str = request.form.get('actual_yield_produced', '').strip()
+                prep_batches_str = request.form.get('prep_quantity', '').strip()
                 
-                if not prep_ing_id or not prepped_by or float(prep_qty_str or 0) <= 0:
-                    return redirect(f"/portal/{username}/inventory?type=PREPPED&error=Production Error: Target portion item, valid count, and cook identity are mandatory.")
+                if not prep_ing_id or not prepped_by:
+                    return redirect(f"/portal/{username}/inventory?type=PREPPED&error=Production Error: Target portion item and cook identity are mandatory.")
                 
-                prep_batches = float(prep_qty_str)
                 prep_recipes_df = client_db.read_tab('Prep_Recipes')
-                
                 formula_df = prep_recipes_df[prep_recipes_df['Prepped_Ingredient_ID'] == str(prep_ing_id)] if prep_recipes_df is not None and not prep_recipes_df.empty else pd.DataFrame()
                 
                 if formula_df.empty:
-                    return redirect(f"/portal/{username}/inventory?type=PREPPED&error=Configuration Error: No kitchen prep instructions found for this item. Build its sub-recipe framework first.")
+                    return redirect(f"/portal/{username}/inventory?type=PREPPED&error=Configuration Error: No recipe formula found for this item. Build its sub-recipe blueprint first.")
                 
+                # Determine standard master recipe yield
+                standard_yield = 0.0
+                if 'Batch_Yield' in formula_df.columns and pd.notna(formula_df['Batch_Yield'].iloc[0]) and float(formula_df['Batch_Yield'].iloc[0] or 0) > 0:
+                    standard_yield = float(formula_df['Batch_Yield'].iloc[0])
+                else:
+                    standard_yield = pd.to_numeric(formula_df['Quantity_Required'], errors='coerce').fillna(0.0).sum()
+                    if standard_yield <= 0:
+                        standard_yield = 1.0
+
+                # Compute exact scaling ratio based on actual yield produced vs batch multiplier
+                total_yield_produced = 0.0
+                prep_batches = 0.0
+                
+                try:
+                    actual_val = float(actual_produced_str) if actual_produced_str else 0.0
+                except ValueError:
+                    actual_val = 0.0
+                    
+                try:
+                    batches_val = float(prep_batches_str) if prep_batches_str else 0.0
+                except ValueError:
+                    batches_val = 0.0
+                    
+                if actual_val > 0:
+                    total_yield_produced = actual_val
+                    prep_batches = actual_val / standard_yield if standard_yield > 0 else 1.0
+                elif batches_val > 0:
+                    prep_batches = batches_val
+                    total_yield_produced = batches_val * standard_yield
+                else:
+                    return redirect(f"/portal/{username}/inventory?type=PREPPED&error=Input Error: Provide either actual yield produced or number of batches.")
+
+                # Check inventory availability across all constituent components
                 insufficient_stocks = []
                 for _, row in formula_df.iterrows():
                     raw_id = str(row['Raw_Ingredient_ID'])
-                    req_qty = float(row['Quantity_Required'] or 0)
+                    req_qty = float(pd.to_numeric(row['Quantity_Required'], errors='coerce') or 0.0)
                     total_needed = req_qty * prep_batches
                     
                     raw_idx = ingredients_df[ingredients_df['Ingredient_ID'] == raw_id].index
                     if not raw_idx.empty:
                         avail = float(ingredients_df.loc[raw_idx[0], 'Current_Stock'])
+                        unit_str = str(ingredients_df.loc[raw_idx[0], 'Unit'] if 'Unit' in ingredients_df.columns else '')
                         if avail < total_needed:
                             r_name = ingredients_df.loc[raw_idx[0], 'Ingredient_Name']
-                            insufficient_stocks.append(f"{r_name} (Need: {total_needed}, Available: {avail})")
+                            insufficient_stocks.append(f"{r_name} (Need: {total_needed:,.2f} {unit_str}, Available: {avail:,.2f} {unit_str})")
                     else:
-                        insufficient_stocks.append(f"Raw Material Component ID {raw_id} missing from register.")
+                        insufficient_stocks.append(f"Raw Component ID {raw_id} missing from register.")
                 
                 if insufficient_stocks:
-                    error_details = ", ".join(insufficient_stocks)
-                    return redirect(f"/portal/{username}/inventory?type=PREPPED&error=Shortage Warning: Cannot complete prep run. Raw stock deficit: {error_details}")
-                
-                yield_per_batch = 0.0
-                if 'Batch_Yield' in formula_df.columns and pd.notna(formula_df['Batch_Yield'].iloc[0]) and float(formula_df['Batch_Yield'].iloc[0] or 0) > 0:
-                    yield_per_batch = float(formula_df['Batch_Yield'].iloc[0])
-                elif 'Yield_Per_Batch' in formula_df.columns and pd.notna(formula_df['Yield_Per_Batch'].iloc[0]) and float(formula_df['Yield_Per_Batch'].iloc[0] or 0) > 0:
-                    yield_per_batch = float(formula_df['Yield_Per_Batch'].iloc[0])
-                else:
-                    target_idx = ingredients_df[ingredients_df['Ingredient_ID'] == str(prep_ing_id)].index
-                    if not target_idx.empty and 'Batch_Yield' in ingredients_df.columns and pd.notna(ingredients_df.loc[target_idx[0], 'Batch_Yield']) and float(ingredients_df.loc[target_idx[0], 'Batch_Yield'] or 0) > 0:
-                        yield_per_batch = float(ingredients_df.loc[target_idx[0], 'Batch_Yield'])
-                
-                if yield_per_batch <= 0:
-                    yield_per_batch = pd.to_numeric(formula_df['Quantity_Required'], errors='coerce').fillna(0.0).sum()
-                    if yield_per_batch <= 0:
-                        yield_per_batch = 1.0
-
-                total_yield_produced = prep_batches * yield_per_batch
-
-                logged_count = 0
-                batch_id = f"PRP{datetime.now().strftime('%H%M%S')}"
-                meta_notes = f"Batch Production by {prepped_by}"
+                    error_details = "; ".join(insufficient_stocks)
+                    return redirect(f"/portal/{username}/inventory?type=PREPPED&error=Shortage Warning: Cannot complete prep run. Deficits: {error_details}")
                 
                 target_idx = ingredients_df[ingredients_df['Ingredient_ID'] == str(prep_ing_id)].index
-                target_name = ingredients_df.loc[target_idx[0], 'Ingredient_Name'] if not target_idx.empty else "Portioned Component"
+                target_name = ingredients_df.loc[target_idx[0], 'Ingredient_Name'] if not target_idx.empty else "Prepped Item"
+                target_unit = ingredients_df.loc[target_idx[0], 'Unit'] if not target_idx.empty and 'Unit' in ingredients_df.columns else "units"
                 
+                logged_count = 0
+                batch_id = f"PRP{datetime.now().strftime('%H%M%S')}"
+                meta_notes = f"Prepped by {prepped_by}"
+                
+                # Deduct raw ingredients proportionally
                 for _, row in formula_df.iterrows():
                     raw_id = str(row['Raw_Ingredient_ID'])
-                    req_qty = float(row['Quantity_Required'] or 0)
+                    req_qty = float(pd.to_numeric(row['Quantity_Required'], errors='coerce') or 0.0)
                     total_deducted = req_qty * prep_batches
                     
                     raw_idx = ingredients_df[ingredients_df['Ingredient_ID'] == raw_id].index
                     current_raw_stock = float(ingredients_df.loc[raw_idx[0], 'Current_Stock'])
+                    raw_unit = str(ingredients_df.loc[raw_idx[0], 'Unit'] if 'Unit' in ingredients_df.columns else '')
                     ingredients_df.loc[raw_idx[0], 'Current_Stock'] = current_raw_stock - total_deducted
                     
                     raw_log_row = {
@@ -228,11 +247,12 @@ def web_inventory_tab(username):
                         'Theoretical': current_raw_stock,
                         'Physical': current_raw_stock - total_deducted,
                         'Variance': -total_deducted,
-                        'Notes': f"Consumed to manufacture {total_yield_produced:g} units ({int(prep_batches) if prep_batches % 1 == 0 else prep_batches} batch/es) of {target_name} | {meta_notes}"
+                        'Notes': f"Consumed {total_deducted:,.2f} {raw_unit} to produce {total_yield_produced:,.2f} {target_unit} ({prep_batches:.3f} batch eq.) of {target_name} | {meta_notes}"
                     }
                     audit_ledger_df = pd.concat([audit_ledger_df, pd.DataFrame([raw_log_row])], ignore_index=True)
                     logged_count += 1
                 
+                # Credit the finished prepped component balance
                 current_prep_stock = float(ingredients_df.loc[target_idx[0], 'Current_Stock'])
                 ingredients_df.loc[target_idx[0], 'Current_Stock'] = current_prep_stock + total_yield_produced
                 
@@ -243,7 +263,7 @@ def web_inventory_tab(username):
                     'Theoretical': current_prep_stock,
                     'Physical': current_prep_stock + total_yield_produced,
                     'Variance': total_yield_produced,
-                    'Notes': f"Yielded output ({total_yield_produced:g} units across {int(prep_batches) if prep_batches % 1 == 0 else prep_batches} batch/es) | {meta_notes}"
+                    'Notes': f"Yielded output +{total_yield_produced:,.2f} {target_unit} ({prep_batches:.3f} batch eq.) | {meta_notes}"
                 }
                 audit_ledger_df = pd.concat([audit_ledger_df, pd.DataFrame([prep_credit_row])], ignore_index=True)
                 logged_count += 1
@@ -251,10 +271,10 @@ def web_inventory_tab(username):
                 if logged_count > 0:
                     client_db.save_tab('Ingredients', ingredients_df)
                     client_db.save_tab('Inventory_Audit_Log', audit_ledger_df)
-                    feedback_msg = f"Kitchen Prep Logged: Converted warehouse elements into {total_yield_produced:g} units of {target_name} ({int(prep_batches) if prep_batches % 1 == 0 else prep_batches} batch/es) successfully."
+                    feedback_msg = f"Kitchen Prep Logged: Successfully produced {total_yield_produced:,.2f} {target_unit} of {target_name} ({prep_batches:.3f} batch equivalent)."
                     alert_type = "success"
 
-            # 3. PROCESS ENHANCED BIFURCATED WASTE ENGINE
+            # 3. PROCESS BIFURCATED SPOILAGE DISCARD ENGINE
             elif action == 'log_waste':
                 waste_target = request.form.get('waste_target_type')
                 wasted_by = request.form.get('wasted_by', '').strip()
@@ -413,10 +433,10 @@ def web_inventory_tab(username):
         inventory_df = inventory_df[inventory_df['Ingredient_Type'] == current_type]
         
         if 'Category' in inventory_df.columns:
-            categories = sorted([c for c in inventory_df['Category'].dropna().unique() if c])
+            categories = sorted([c for c in inventory_df['Category'].dropna().unique() if str(c).strip()])
         if search_query:
-            inventory_df = inventory_df[inventory_df['Ingredient_Name'].str.lower().str.contains(search_query) | 
-                                         inventory_df['Ingredient_ID'].str.lower().str.contains(search_query)]
+            inventory_df = inventory_df[inventory_df['Ingredient_Name'].astype(str).str.lower().str.contains(search_query) | 
+                                         inventory_df['Ingredient_ID'].astype(str).str.lower().str.contains(search_query)]
         if category_filter != 'All':
             inventory_df = inventory_df[inventory_df['Category'] == category_filter]
             
@@ -488,10 +508,53 @@ def web_inventory_tab(username):
                     'name': ing_name, 'variance': variance
                 })
 
+    # ENRICHED PREPPED COMPONENT PAYLOAD FOR DUAL-INPUT SCALING
     full_ingredients_pool = client_db.read_tab('Ingredients')
+    prep_recipes_df = client_db.read_tab('Prep_Recipes')
     prepped_dropdown_options = []
+    
     if not full_ingredients_pool.empty:
-        prepped_dropdown_options = full_ingredients_pool[full_ingredients_pool['Ingredient_Type'] == 'PREPPED'].to_dict(orient='records')
+        prepped_rows = full_ingredients_pool[full_ingredients_pool['Ingredient_Type'] == 'PREPPED']
+        for _, p_row in prepped_rows.iterrows():
+            p_id = str(p_row['Ingredient_ID'])
+            p_name = str(p_row['Ingredient_Name'])
+            p_unit = str(p_row.get('Unit', 'g'))
+            p_yield = 1.0
+            p_components = []
+            
+            if prep_recipes_df is not None and not prep_recipes_df.empty:
+                f_df = prep_recipes_df[prep_recipes_df['Prepped_Ingredient_ID'] == p_id]
+                if not f_df.empty:
+                    if 'Batch_Yield' in f_df.columns and pd.notna(f_df['Batch_Yield'].iloc[0]) and float(f_df['Batch_Yield'].iloc[0] or 0) > 0:
+                        p_yield = float(f_df['Batch_Yield'].iloc[0])
+                    else:
+                        p_yield = pd.to_numeric(f_df['Quantity_Required'], errors='coerce').fillna(0.0).sum()
+                        if p_yield <= 0:
+                            p_yield = 1.0
+                            
+                    for _, comp in f_df.iterrows():
+                        raw_id = str(comp['Raw_Ingredient_ID'])
+                        raw_match = full_ingredients_pool[full_ingredients_pool['Ingredient_ID'] == raw_id]
+                        c_name = raw_match['Ingredient_Name'].values[0] if not raw_match.empty else raw_id
+                        c_stock = float(raw_match['Current_Stock'].values[0]) if not raw_match.empty else 0.0
+                        c_unit = str(raw_match['Unit'].values[0]) if not raw_match.empty and 'Unit' in raw_match.columns else str(comp.get('Unit', ''))
+                        
+                        p_components.append({
+                            'raw_id': raw_id,
+                            'name': c_name,
+                            'qty_per_batch': float(comp.get('Quantity_Required', 0.0) or 0.0),
+                            'unit': c_unit,
+                            'current_stock': c_stock
+                        })
+
+            prepped_dropdown_options.append({
+                'Ingredient_ID': p_id,
+                'Ingredient_Name': p_name,
+                'Unit': p_unit,
+                'Batch_Yield': p_yield,
+                'has_formula': len(p_components) > 0,
+                'components': p_components
+            })
 
     return render_template(
         'inventory.html',
@@ -503,6 +566,7 @@ def web_inventory_tab(username):
         waste_history=waste_history_list,
         production_history=production_history_list,
         prepped_options=prepped_dropdown_options,
+        prepped_options_json=json.dumps(prepped_dropdown_options),
         current_type=current_type,
         msg=request.args.get('msg', feedback_msg),
         alert_type=alert_type,

@@ -2,7 +2,6 @@
 
 {% block content %}
 <style>
-    /* EXECUTIVE DARK-MODE MODAL FORMS CONTRAST RE-ENGINEERING */
     .modal-content label {
         color: #e2e8f0 !important;
         font-weight: 700 !important;
@@ -20,7 +19,6 @@
         color: #94a3b8 !important;
     }
     
-    /* NAVIGATION PILLS AND BUTTON OVERRIDES */
     .nav-tabs .nav-link { color: #cbd5e1; border: none; font-weight: 600; padding: 12px 20px; transition: all 0.2s ease; }
     .nav-tabs .nav-link:hover { color: #ffffff; background: #222226; border-radius: 6px 6px 0 0; }
     .nav-tabs .nav-link.active { color: #3b82f6 !important; background: #2b2b2b !important; border-bottom: 3px solid #3b82f6 !important; border-radius: 6px 6px 0 0; }
@@ -45,8 +43,6 @@
         margin-right: 6px;
         font-weight: bold;
     }
-    
-    /* HIGH-CONTRAST SUBTEXT OVERRIDES FOR SCANNABILITY */
     .high-contrast-subtext {
         color: #cbd5e1 !important;
         font-weight: 500;
@@ -184,7 +180,7 @@
                             </div>
                         </button>
                         {% else %}
-                        <div class="text-center text-muted py-4">No active directory nodes logged for this workspace selection view.</div>
+                        <div class="text-center text-muted py-4">No kitchen prepped components found. Register them under Ingredients first.</div>
                         {% endfor %}
                     {% endif %}
                 </div>
@@ -199,7 +195,7 @@
                     
                     <div id="blankViewerStateCard" class="text-center py-5">
                         <h4 class="text-muted mt-4">No Active Item Selected</h4>
-                        <p class="text-secondary">Select an entry from the left sidebar directory index to view its exact recipe composition matrix breakdown.</p>
+                        <p class="text-secondary">Select an entry from the left sidebar directory index to view its formula breakdown.</p>
                     </div>
 
                     {% for r in recipe_data %}
@@ -221,9 +217,9 @@
                             <thead>
                                 <tr class="text-secondary font-monospace" style="font-size: 13px;">
                                     <th>INGREDIENT CONSTITUENT COMPONENT</th>
-                                    <th>QTY METRIC</th>
+                                    <th>QTY REQUIRED</th>
                                     <th>UNIT</th>
-                                    <th>COST / UNIT BASE</th>
+                                    <th>COST / BASE UNIT</th>
                                     <th class="text-end">LINE ITEM COST</th>
                                 </tr>
                             </thead>
@@ -231,14 +227,14 @@
                                 {% for item in r['Items'] %}
                                 <tr>
                                     <td class="text-white fw-bold">{{ item['Name'] }} <small class="high-contrast-subtext font-monospace">({{ item['ID'] }})</small></td>
-                                    <td class="text-light">{{ item['Qty'] }}</td>
+                                    <td class="text-light font-monospace">{{ item['Qty'] }}</td>
                                     <td><span class="badge bg-secondary">{{ item['Unit'] }}</span></td>
-                                    <td class="text-light">₱{{ "%.2f"|format(item['Cost']) }} / {{ item['Base_Unit'] }}</td>
-                                    <td class="text-end text-warning fw-bold">₱{{ "%.2f"|format(item['Total']) }}</td>
+                                    <td class="text-light font-monospace">₱{{ "%.4f"|format(item['Cost']) }} / {{ item['Base_Unit'] }}</td>
+                                    <td class="text-end text-warning fw-bold font-monospace">₱{{ "%.2f"|format(item['Total']) }}</td>
                                 </tr>
                                 {% else %}
                                 <tr>
-                                    <td colspan="5" class="text-center text-muted py-4">No structural specifications mapped to this ledger yet. Click edit recipe above to initialize parameters.</td>
+                                    <td colspan="5" class="text-center text-muted py-4">No ingredients mapped to this formula yet. Click "Edit Formula" above to add ingredients.</td>
                                 </tr>
                                 {% endfor %}
                             </tbody>
@@ -256,13 +252,13 @@
                                 <div class="col-4">
                                     <div class="p-3 rounded border border-secondary" style="background-color: #222222;">
                                         <span class="d-block text-info fw-bold text-uppercase mb-1" style="font-size: 11px; letter-spacing: 0.5px;">Batch Output Yield</span>
-                                        <h3 class="m-0 text-info fw-bold">{{ r['Batch_Yield'] }} Servings</h3>
+                                        <h3 class="m-0 text-info fw-bold">{{ r['Batch_Yield'] }} {{ r['Base_Unit'] }}</h3>
                                     </div>
                                 </div>
                                 <div class="col-4">
                                     <div class="p-3 rounded border border-secondary" style="background-color: #222222;">
                                         <span class="d-block text-success fw-bold text-uppercase mb-1" style="font-size: 11px; letter-spacing: 0.5px;">Final Amortized Cost / Unit</span>
-                                        <h3 class="m-0 text-success fw-bold">₱{{ "%.2f"|format(r['Selling_Price']) }}</h3>
+                                        <h3 class="m-0 text-success fw-bold font-monospace">₱{{ "%.4f"|format(r['Amortized_Cost'] or 0.0) }} <small style="font-size:12px;">/ {{ r['Base_Unit'] }}</small></h3>
                                     </div>
                                 </div>
                                 {% endif %}
@@ -309,14 +305,14 @@
                         {% if current_tab == 'product' %}Select Target Retail Menu Item Profile:{% else %}Select Target Kitchen Prepped Component Profile:{% endif %}
                     </label>
                     <select name="product_id" class="form-select bg-secondary text-white border-0 mb-4" required>
-                        <option value="" disabled selected>Choose target workspace directory profile...</option>
+                        <option value="" disabled selected>Choose target profile...</option>
                         {% if current_tab == 'product' %}
                             {% for prod in all_products %}
                                 <option value="{{ prod.Product_ID }}">{{ prod.Product_Name }} ({{ prod.Product_ID }})</option>
                             {% endfor %}
                         {% else %}
                             {% for prep_ing in unallocated_prepped_items %}
-                                <option value="{{ prep_ing.Ingredient_ID }}">{{ prep_ing.Ingredient_Name }} ({{ prep_ing.Ingredient_ID }})</option>
+                                <option value="{{ prep_ing.Ingredient_ID }}">{{ prep_ing.Ingredient_Name }} (in {{ prep_ing.Unit }})</option>
                             {% endfor %}
                         {% endif %}
                     </select>
@@ -324,15 +320,17 @@
                     {% if current_tab == 'prep' %}
                     <div class="p-3 mb-4 rounded border border-info" style="background-color: #172554;">
                         <label class="form-label fw-bold text-info" style="font-size:13px !important;">TOTAL BATCH OUTPUT YIELD VOLUME:</label>
-                        <input type="number" step="any" name="batch_yield" class="form-control text-white fw-bold mb-1" style="background:#1e1e24;" value="1.0" min="0.001" required>
-                        <small class="high-contrast-subtext d-block" style="font-size:11px;">Type in how many single portions, servings, or mL this entire ingredient combination yields. The system automatically divides your total raw expense costs over this index to get your true per-unit cost.</small>
+                        <input type="number" step="any" name="batch_yield" class="form-control text-white fw-bold mb-1 font-monospace" style="background:#1e1e24;" value="1.0" min="0.0001" required>
+                        <small class="high-contrast-subtext d-block" style="font-size:11.5px;">
+                            Example: If 980g of raw onions produces 850g of usable diced onions after peeling and trimming, type <b>850</b> here. The system will automatically absorb the 130g prep waste into the per-gram unit cost.
+                        </small>
                     </div>
                     {% endif %}
 
                     <div class="row text-secondary fw-bold mb-2 font-monospace" style="font-size: 12px;">
                         <div class="col-5">INGREDIENT STOCK MATERIAL COMPONENT</div>
                         <div class="col-3">QTY REQUIRED</div>
-                        <div class="col-3">MEASUREMENT UNIT AUTO-SCALE</div>
+                        <div class="col-3">MEASUREMENT UNIT</div>
                         <div class="col-1"></div>
                     </div>
                     
@@ -347,7 +345,7 @@
     </div>
 </div>
 
-<!-- POPUP WORKSPACE MODAL -->
+<!-- POPUP EDIT MODAL -->
 {% for r in recipe_data %}
 <div class="modal fade" id="editModal{{ r['Product_ID'] }}" tabindex="-1">
     <div class="modal-dialog modal-lg">
@@ -364,16 +362,21 @@
                     
                     {% if current_tab == 'prep' %}
                     <div class="p-3 mb-4 rounded border border-info" style="background-color: #172554;">
-                        <label class="form-label fw-bold text-info" style="font-size:13px !important;">TOTAL BATCH OUTPUT YIELD VOLUME:</label>
-                        <input type="number" step="any" name="batch_yield" class="form-control text-white fw-bold mb-1" style="background:#1e1e24;" value="{{ r['Batch_Yield'] }}" min="0.001" required>
-                        <small class="high-contrast-subtext d-block" style="font-size:11px;">Update how many portions, servings, or mL this recipe yields. Amortization formulas recalculate margins live upon submission.</small>
+                        <label class="form-label fw-bold text-info" style="font-size:13px !important;">TOTAL BATCH OUTPUT YIELD VOLUME (in {{ r['Base_Unit'] }}):</label>
+                        <div class="input-group mb-1">
+                            <input type="number" step="any" name="batch_yield" class="form-control text-white fw-bold font-monospace" style="background:#1e1e24;" value="{{ r['Batch_Yield'] }}" min="0.0001" required>
+                            <span class="input-group-text bg-secondary border-secondary text-white font-monospace">{{ r['Base_Unit'] }}</span>
+                        </div>
+                        <small class="high-contrast-subtext d-block" style="font-size:11.5px;">
+                            Example: If 980g of raw onions produces 850g of usable diced onions after peeling and trimming, type <b>850</b> here. The system will automatically absorb the 130g prep waste into the per-gram unit cost.
+                        </small>
                     </div>
                     {% endif %}
 
                     <div class="row text-secondary fw-bold mb-2 font-monospace" style="font-size: 12px;">
                         <div class="col-5">INGREDIENT CONSTITUENT COMPONENT</div>
                         <div class="col-3">QTY REQUIRED</div>
-                        <div class="col-3">MEASUREMENT UNIT AUTO-SCALE</div>
+                        <div class="col-3">MEASUREMENT UNIT</div>
                         <div class="col-1"></div>
                     </div>
                     <div id="recipeRows{{ r['Product_ID'] }}">
@@ -387,7 +390,7 @@
                                 </select>
                             </div>
                             <div class="col-3">
-                                <input type="number" step="any" name="quantity[]" class="form-control bg-light border-0 text-dark fw-bold" value="{{ item.Qty }}" required>
+                                <input type="number" step="any" name="quantity[]" class="form-control bg-light border-0 text-dark fw-bold font-monospace" value="{{ item.Qty }}" required>
                             </div>
                             <div class="col-3">
                                 <select name="unit[]" class="form-select bg-secondary text-white border-0 unit-selector-node" required>
@@ -430,20 +433,20 @@ function toggleRecipeParentVariants(index) {
 }
 
 function synchronizeRowMeasurementUnitOptions(selectElement) {
-    const row = selectElement.parentElement.parentElement;
+    const row = selectElement.closest('.tracking-ingredient-row-block');
     const activeOption = selectElement.options[selectElement.selectedIndex];
-    const nativeUnit = activeOption.getAttribute('data-native-unit') || 'pcs';
+    const nativeUnit = (activeOption.getAttribute('data-native-unit') || 'pcs').trim().toLowerCase();
     const unitDropdown = row.querySelector('.unit-selector-node');
     
-    const previousSelectionValue = unitDropdown.value;
+    const previousSelectionValue = (unitDropdown.value || '').trim().toLowerCase();
     unitDropdown.innerHTML = '';
     
-    if (nativeUnit === 'kg' || nativeUnit === 'g') {
-        unitDropdown.innerHTML = `<option value="kg">kg</option><option value="g">g</option>`;
-        unitDropdown.value = (previousSelectionValue === 'g' || previousSelectionValue === 'kg') ? previousSelectionValue : 'kg';
-    } else if (nativeUnit === 'L' || nativeUnit === 'ml') {
-        unitDropdown.innerHTML = `<option value="L">L</option><option value="ml">ml</option>`;
-        unitDropdown.value = (previousSelectionValue === 'ml' || previousSelectionValue === 'L') ? previousSelectionValue : 'L';
+    if (nativeUnit === 'g' || nativeUnit === 'kg') {
+        unitDropdown.innerHTML = `<option value="g">g</option><option value="kg">kg</option>`;
+        unitDropdown.value = (previousSelectionValue === 'kg') ? 'kg' : 'g';
+    } else if (nativeUnit === 'ml' || nativeUnit === 'l') {
+        unitDropdown.innerHTML = `<option value="ml">ml</option><option value="L">L</option>`;
+        unitDropdown.value = (previousSelectionValue === 'l') ? 'L' : 'ml';
     } else {
         unitDropdown.innerHTML = `<option value="${nativeUnit}">${nativeUnit}</option>`;
         unitDropdown.value = nativeUnit;
@@ -462,7 +465,7 @@ function appendDynamicIngredientInputRow(containerElementId) {
                 </select>
             </div>
             <div class="col-3">
-                <input type="number" step="any" name="quantity[]" class="form-control bg-light border-0 text-dark fw-bold" placeholder="0.00" required>
+                <input type="number" step="any" name="quantity[]" class="form-control bg-light border-0 text-dark fw-bold font-monospace" placeholder="0.00" required>
             </div>
             <div class="col-3">
                 <select name="unit[]" class="form-select bg-secondary text-white border-0 unit-selector-node" required>

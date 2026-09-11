@@ -26,6 +26,13 @@
         padding: 12px;
         margin-bottom: 15px;
     }
+    .prepped-info-card {
+        background: #172554;
+        border: 1px solid #3b82f6;
+        border-radius: 6px;
+        padding: 12px;
+        margin-bottom: 15px;
+    }
     .nav-tabs .nav-link { color: #94a3b8; border: none; font-weight: 600; padding: 12px 20px; transition: all 0.2s ease; }
     .nav-tabs .nav-link:hover { color: #cbd5e1; background: #222226; border-radius: 6px 6px 0 0; }
     .nav-tabs .nav-link.active { color: #3b82f6 !important; background: #2b2b2b !important; border-bottom: 3px solid #3b82f6 !important; border-radius: 6px 6px 0 0; }
@@ -132,7 +139,9 @@
                 <td class="text-white fw-bold">{{ i.Ingredient_Name }}</td>
                 <td class="text-light"><span class="badge bg-dark border border-secondary text-light">{{ i.Category }}</span></td>
                 <td>
-                    {% if i.Pack_Size and i.Pack_Size > 1 %}
+                    {% if i.Ingredient_Type == 'PREPPED' %}
+                        <span class="badge bg-info text-dark fw-bold">In-House Prep</span>
+                    {% elif i.Pack_Size and i.Pack_Size > 1 %}
                         <span class="badge bg-primary text-white fw-bold">1 {{ i.Purchase_Unit|capitalize }} = {{ i.Pack_Size }} {{ i.Unit }}</span>
                     {% else %}
                         <span class="high-contrast-muted small font-monospace">Standard (1:1)</span>
@@ -144,7 +153,7 @@
                 <td class="text-light font-monospace">{{ "%.2f"|format(i.Min_Stock) }} {{ i.Unit }}</td>
                 <td class="text-light font-monospace">
                     <span class="fw-bold text-info">PHP {{ "%.4f"|format(i.Cost_Per_Unit) }}</span> / {{ i.Unit }}
-                    {% if i.Purchase_Cost and i.Purchase_Cost > 0 and i.Pack_Size > 1 %}
+                    {% if i.Purchase_Cost and i.Purchase_Cost > 0 and i.Pack_Size > 1 and i.Ingredient_Type != 'PREPPED' %}
                         <div class="high-contrast-muted small" style="font-size: 11px;">(PHP {{ "%.2f"|format(i.Purchase_Cost) }} / {{ i.Purchase_Unit }})</div>
                     {% endif %}
                 </td>
@@ -171,6 +180,7 @@
     </table>
 </div>
 
+<!-- ADD MODAL -->
 <div class="modal fade" id="addModal" tabindex="-1">
     <div class="modal-dialog modal-lg">
         <div class="modal-content bg-dark text-white border-secondary">
@@ -184,62 +194,64 @@
                     <div class="row g-3 mb-3">
                         <div class="col-md-6">
                             <label class="form-label">Classification Type:</label>
-                            <select name="ingredient_type" class="form-select bg-secondary text-white border-0" required>
+                            <select name="ingredient_type" id="addIngredientTypeSelect" class="form-select bg-secondary text-white border-0" required onchange="toggleAddIngredientTypeUI()">
                                 <option value="RAW" {% if current_type == 'RAW' %}selected{% endif %}>Raw Wholesale Material (Purchased Bulk Goods)</option>
                                 <option value="PREPPED" {% if current_type == 'PREPPED' %}selected{% endif %}>Kitchen Line Prepped Component (Sub-Recipe Yield)</option>
                             </select>
                         </div>
                         <div class="col-md-6">
                             <label class="form-label">Ingredient Name:</label>
-                            <input type="text" id="addIngredientNameInput" name="name" class="form-control bg-secondary text-white border-0" oninput="checkDuplicateNameAdd(this)" required autocomplete="off" placeholder="e.g., BUTTER, FRESH MILK">
+                            <input type="text" id="addIngredientNameInput" name="name" class="form-control bg-secondary text-white border-0" oninput="checkDuplicateNameAdd(this)" required autocomplete="off" placeholder="e.g., RAW ONIONS, SLICED ONIONS">
                             <div id="addNameErrorMsg" class="mt-1" style="display: none; color: #ff4d4d; font-size: 12px; font-weight: bold;">Notice: This name is already registered.</div>
                         </div>
                     </div>
 
-                    <div class="mb-3">
-                        <label class="form-label">Category:</label>
-                        <div class="input-group">
-                            <select name="category" id="addIngCategorySelect" class="form-select bg-secondary text-white border-0 ingredient-category-dropdown" required>
-                                <option value="" disabled selected>Choose category...</option>
-                                {% for c in categories %}
-                                <option value="{{ c }}">{{ c }}</option>
-                                {% endfor %}
-                            </select>
-                            <button class="btn btn-primary fw-bold px-3" type="button" onclick="showInlineInput('addIngCategoryDiv')">+</button>
+                    <div class="row g-3 mb-3">
+                        <div class="col-md-6">
+                            <label class="form-label">Category:</label>
+                            <div class="input-group">
+                                <select name="category" id="addIngCategorySelect" class="form-select bg-secondary text-white border-0 ingredient-category-dropdown" required>
+                                    <option value="" disabled selected>Choose category...</option>
+                                    {% for c in categories %}
+                                    <option value="{{ c }}">{{ c }}</option>
+                                    {% endfor %}
+                                </select>
+                                <button class="btn btn-primary fw-bold px-3" type="button" onclick="showInlineInput('addIngCategoryDiv')">+</button>
+                            </div>
+                            <div id="addIngCategoryDiv" class="input-group mt-2 px-2 py-2 rounded shadow-sm" style="display: none; background-color: #1e1e1e; border: 1px solid #3d3d3d;">
+                                <input type="text" id="addIngCategoryInput" class="form-control bg-dark text-white border-secondary" placeholder="Enter new category name..." autocomplete="off">
+                                <button class="btn btn-success fw-bold px-3" type="button" onclick="confirmInlineItem('addIngCategorySelect', 'addIngCategoryInput', 'addIngCategoryDiv', 'ingredient-category-dropdown')">Save</button>
+                                <button class="btn btn-secondary fw-bold px-2" type="button" onclick="hideInlineInput('addIngCategoryDiv', 'addIngCategoryInput')">Cancel</button>
+                            </div>
                         </div>
-                        <div id="addIngCategoryDiv" class="input-group mt-2 px-2 py-2 rounded shadow-sm" style="display: none; background-color: #1e1e1e; border: 1px solid #3d3d3d;">
-                            <input type="text" id="addIngCategoryInput" class="form-control bg-dark text-white border-secondary" placeholder="Enter new category name..." autocomplete="off">
-                            <button class="btn btn-success fw-bold px-3" type="button" onclick="confirmInlineItem('addIngCategorySelect', 'addIngCategoryInput', 'addIngCategoryDiv', 'ingredient-category-dropdown')">Save</button>
-                            <button class="btn btn-secondary fw-bold px-2" type="button" onclick="hideInlineInput('addIngCategoryDiv', 'addIngCategoryInput')">Cancel</button>
+                        <div class="col-md-6">
+                            <label class="form-label text-warning">Recipe Base Unit (Usage Unit):</label>
+                            <select name="unit" id="addBaseUnitSelect" class="form-select bg-dark text-white border-secondary" required onchange="calculateBaseCostAdd()">
+                                <option value="g" selected>Grams (g)</option>
+                                <option value="mL">Milliliters (mL)</option>
+                                <option value="pcs">Pieces (pcs)</option>
+                                <option value="portion">Portion</option>
+                                <option value="serving">Serving</option>
+                            </select>
                         </div>
                     </div>
 
-                    <div class="conversion-card">
+                    <!-- RAW INGREDIENT SUPPLIER PACKAGING CARD -->
+                    <div id="addRawConversionCard" class="conversion-card">
                         <div class="d-flex justify-content-between align-items-center mb-2">
                             <span class="text-info fw-bold" style="font-size: 13px;">Commercial Packaging & Recipe Unit Conversion Matrix</span>
-                            <span class="badge bg-secondary text-light">Automatic Costing</span>
+                            <span class="badge bg-secondary text-light">Wholesale Goods</span>
                         </div>
                         
                         <div class="row g-2 mb-2">
-                            <div class="col-md-4">
-                                <label class="text-warning">1. Recipe Base Unit (Usage):</label>
-                                <select name="unit" id="addBaseUnitSelect" class="form-select bg-dark text-white border-secondary" required onchange="calculateBaseCostAdd()">
-                                    <option value="g" selected>Grams (g)</option>
-                                    <option value="mL">Milliliters (mL)</option>
-                                    <option value="pcs">Pieces (pcs)</option>
-                                    <option value="kg">Kilograms (kg)</option>
-                                    <option value="L">Liters (L)</option>
-                                    <option value="portion">Portion</option>
-                                </select>
+                            <div class="col-md-6">
+                                <label>Purchase Packaging Unit:</label>
+                                <input type="text" name="purchase_unit" id="addPurchaseUnitInput" class="form-control bg-dark text-white border-secondary" placeholder="e.g. Block, Can, Sack, Pack" value="Pack" oninput="calculateBaseCostAdd()">
                             </div>
-                            <div class="col-md-4">
-                                <label>2. Purchase Packaging Unit:</label>
-                                <input type="text" name="purchase_unit" id="addPurchaseUnitInput" class="form-control bg-dark text-white border-secondary" placeholder="e.g. Block, Can, Bottle, Sack" value="Block" required oninput="calculateBaseCostAdd()">
-                            </div>
-                            <div class="col-md-4">
-                                <label>3. Pack Size (Net Content):</label>
+                            <div class="col-md-6">
+                                <label>Pack Size (Net Content):</label>
                                 <div class="input-group">
-                                    <input type="number" step="any" min="0.0001" name="pack_size" id="addPackSizeInput" class="form-control bg-dark text-white border-secondary font-monospace" placeholder="e.g. 250" value="250" required oninput="calculateBaseCostAdd()">
+                                    <input type="number" step="any" min="0.0001" name="pack_size" id="addPackSizeInput" class="form-control bg-dark text-white border-secondary font-monospace" placeholder="e.g. 980" value="980" oninput="calculateBaseCostAdd()">
                                     <span class="input-group-text bg-secondary border-secondary text-white small" id="addPackSizeLabel">g</span>
                                 </div>
                             </div>
@@ -250,26 +262,34 @@
                                 <label>Commercial Pack Purchase Price (PHP):</label>
                                 <div class="input-group">
                                     <span class="input-group-text bg-secondary border-secondary text-white fw-bold">PHP</span>
-                                    <input type="number" step="any" min="0.00" name="purchase_cost" id="addPurchaseCostInput" class="form-control bg-dark text-white border-secondary font-monospace" placeholder="e.g. 97.00" value="97.00" required oninput="calculateBaseCostAdd()">
+                                    <input type="number" step="any" min="0.00" name="purchase_cost" id="addPurchaseCostInput" class="form-control bg-dark text-white border-secondary font-monospace" placeholder="e.g. 149.00" value="149.00" oninput="calculateBaseCostAdd()">
                                 </div>
                             </div>
                             <div class="col-md-6">
                                 <label class="text-success fw-bold">Auto-Calculated Cost per Base Unit (PHP):</label>
                                 <div class="input-group">
                                     <span class="input-group-text bg-success border-success text-white fw-bold">PHP</span>
-                                    <input type="number" step="any" name="cost" id="addBaseCostInput" class="form-control bg-dark text-white border-success fw-bold font-monospace" readonly value="0.3880">
+                                    <input type="number" step="any" name="cost" id="addBaseCostInput" class="form-control bg-dark text-white border-success fw-bold font-monospace" readonly value="0.1520">
                                 </div>
                             </div>
                         </div>
 
                         <div class="high-contrast-muted small mt-2" id="addConversionFormulaText" style="font-size: 11.5px;">
-                            Formula: 1 Block of 250 g @ PHP 97.00 = <b class="text-success">PHP 0.3880 per gram (g)</b>
+                            Formula: 1 Pack of 980 g @ PHP 149.00 = <b class="text-success">PHP 0.1520 per gram (g)</b>
                         </div>
+                    </div>
+
+                    <!-- PREPPED ITEM INFORMATIONAL CARD -->
+                    <div id="addPreppedInfoCard" class="prepped-info-card" style="display: none;">
+                        <b class="text-info">Kitchen Line Prepped Component:</b>
+                        <p class="small text-light mb-0 mt-1">
+                            This item is prepared in-house. It does not have supplier packaging or purchase pricing. Its unit cost will be calculated automatically from its raw materials and yield volume in the <b>Recipes</b> tab (Kitchen Prep Recipes).
+                        </p>
                     </div>
 
                     <div class="row g-2 mb-2">
                         <div class="col-md-6">
-                            <label>Initial Opening Stock (in Recipe Base Units):</label>
+                            <label>Initial Opening Stock (in Base Units):</label>
                             <input type="number" step="any" name="stock" class="form-control bg-secondary text-white border-0 font-monospace" required value="0">
                         </div>
                         <div class="col-md-6">
@@ -279,13 +299,14 @@
                     </div>
                 </div>
                 <div class="modal-footer border-secondary">
-                    <button type="submit" id="addIngredientSubmitBtn" class="btn btn-success text-white fw-bold w-100 py-2">Commit Ingredient & Conversion Formula</button>
+                    <button type="submit" id="addIngredientSubmitBtn" class="btn btn-success text-white fw-bold w-100 py-2">Commit Master Ingredient Record</button>
                 </div>
             </form>
         </div>
     </div>
 </div>
 
+<!-- EDIT MODALS -->
 {% for i in ingredients %}
 <div class="modal fade" id="addStockModal{{ i.Ingredient_ID }}" tabindex="-1">
     <div class="modal-dialog modal-sm">
@@ -324,7 +345,7 @@
                     <div class="row g-3 mb-3">
                         <div class="col-md-6">
                             <label class="form-label">Classification Type:</label>
-                            <select name="ingredient_type" class="form-select bg-secondary text-white border-0" required>
+                            <select name="ingredient_type" id="editIngredientTypeSelect{{ i.Ingredient_ID }}" class="form-select bg-secondary text-white border-0" required onchange="toggleEditIngredientTypeUI('{{ i.Ingredient_ID }}')">
                                 <option value="RAW" {% if i.Ingredient_Type == 'RAW' %}selected{% endif %}>Raw Wholesale Material (Purchased Bulk Goods)</option>
                                 <option value="PREPPED" {% if i.Ingredient_Type == 'PREPPED' %}selected{% endif %}>Kitchen Line Prepped Component (Sub-Recipe Yield)</option>
                             </select>
@@ -336,52 +357,54 @@
                         </div>
                     </div>
 
-                    <div class="mb-3">
-                        <label class="form-label">Category:</label>
-                        <div class="input-group">
-                            <select name="category" id="editIngCategorySelect{{ i.Ingredient_ID }}" class="form-select bg-secondary text-white border-0 ingredient-category-dropdown" required>
-                                {% for c in categories %}
-                                <option value="{{ c }}" {% if i.Category == c %}selected{% endif %}>{{ c }}</option>
-                                {% endfor %}
-                                {% if i.Category not in categories and i.Category %}
-                                <option value="{{ i.Category }}" selected>{{ i.Category }}</option>
-                                {% endif %}
-                            </select>
-                            <button class="btn btn-primary fw-bold px-3" type="button" onclick="showInlineInput('editIngCategoryDiv{{ i.Ingredient_ID }}')">+</button>
+                    <div class="row g-3 mb-3">
+                        <div class="col-md-6">
+                            <label class="form-label">Category:</label>
+                            <div class="input-group">
+                                <select name="category" id="editIngCategorySelect{{ i.Ingredient_ID }}" class="form-select bg-secondary text-white border-0 ingredient-category-dropdown" required>
+                                    {% for c in categories %}
+                                    <option value="{{ c }}" {% if i.Category == c %}selected{% endif %}>{{ c }}</option>
+                                    {% endfor %}
+                                    {% if i.Category not in categories and i.Category %}
+                                    <option value="{{ i.Category }}" selected>{{ i.Category }}</option>
+                                    {% endif %}
+                                </select>
+                                <button class="btn btn-primary fw-bold px-3" type="button" onclick="showInlineInput('editIngCategoryDiv{{ i.Ingredient_ID }}')">+</button>
+                            </div>
+                            <div id="editIngCategoryDiv{{ i.Ingredient_ID }}" class="input-group mt-2 px-2 py-2 rounded shadow-sm" style="display: none; background-color: #1e1e1e; border: 1px solid #3d3d3d;">
+                                <input type="text" id="editIngCategoryInput{{ i.Ingredient_ID }}" class="form-control bg-dark text-white border-secondary" placeholder="Enter new category..." autocomplete="off">
+                                <button class="btn btn-success fw-bold px-3" type="button" onclick="confirmInlineItem('editIngCategorySelect{{ i.Ingredient_ID }}', 'editIngCategoryInput{{ i.Ingredient_ID }}', 'editIngCategoryDiv{{ i.Ingredient_ID }}', 'ingredient-category-dropdown')">Save</button>
+                                <button class="btn btn-secondary fw-bold px-2" type="button" onclick="hideInlineInput('editIngCategoryDiv{{ i.Ingredient_ID }}', 'editIngCategoryInput{{ i.Ingredient_ID }}')">Cancel</button>
+                            </div>
                         </div>
-                        <div id="editIngCategoryDiv{{ i.Ingredient_ID }}" class="input-group mt-2 px-2 py-2 rounded shadow-sm" style="display: none; background-color: #1e1e1e; border: 1px solid #3d3d3d;">
-                            <input type="text" id="editIngCategoryInput{{ i.Ingredient_ID }}" class="form-control bg-dark text-white border-secondary" placeholder="Enter new category..." autocomplete="off">
-                            <button class="btn btn-success fw-bold px-3" type="button" onclick="confirmInlineItem('editIngCategorySelect{{ i.Ingredient_ID }}', 'editIngCategoryInput{{ i.Ingredient_ID }}', 'editIngCategoryDiv{{ i.Ingredient_ID }}', 'ingredient-category-dropdown')">Save</button>
-                            <button class="btn btn-secondary fw-bold px-2" type="button" onclick="hideInlineInput('editIngCategoryDiv{{ i.Ingredient_ID }}', 'editIngCategoryInput{{ i.Ingredient_ID }}')">Cancel</button>
+                        <div class="col-md-6">
+                            <label class="form-label text-warning">Recipe Base Unit (Usage Unit):</label>
+                            <select name="unit" id="editBaseUnitSelect{{ i.Ingredient_ID }}" class="form-select bg-dark text-white border-secondary" required onchange="calculateBaseCostEdit('{{ i.Ingredient_ID }}')">
+                                <option value="g" {% if i.Unit == 'g' %}selected{% endif %}>Grams (g)</option>
+                                <option value="mL" {% if i.Unit == 'mL' %}selected{% endif %}>Milliliters (mL)</option>
+                                <option value="pcs" {% if i.Unit == 'pcs' %}selected{% endif %}>Pieces (pcs)</option>
+                                <option value="portion" {% if i.Unit == 'portion' %}selected{% endif %}>Portion</option>
+                                <option value="serving" {% if i.Unit == 'serving' %}selected{% endif %}>Serving</option>
+                            </select>
                         </div>
                     </div>
 
-                    <div class="conversion-card">
+                    <!-- RAW INGREDIENT CONVERSION CARD -->
+                    <div id="editRawConversionCard{{ i.Ingredient_ID }}" class="conversion-card" {% if i.Ingredient_Type == 'PREPPED' %}style="display: none;"{% endif %}>
                         <div class="d-flex justify-content-between align-items-center mb-2">
                             <span class="text-info fw-bold" style="font-size: 13px;">Commercial Packaging & Recipe Unit Conversion Matrix</span>
-                            <span class="badge bg-secondary text-light">Automatic Costing</span>
+                            <span class="badge bg-secondary text-light">Wholesale Goods</span>
                         </div>
                         
                         <div class="row g-2 mb-2">
-                            <div class="col-md-4">
-                                <label class="text-warning">1. Recipe Base Unit (Usage):</label>
-                                <select name="unit" id="editBaseUnitSelect{{ i.Ingredient_ID }}" class="form-select bg-dark text-white border-secondary" required onchange="calculateBaseCostEdit('{{ i.Ingredient_ID }}')">
-                                    <option value="g" {% if i.Unit == 'g' %}selected{% endif %}>Grams (g)</option>
-                                    <option value="mL" {% if i.Unit == 'mL' %}selected{% endif %}>Milliliters (mL)</option>
-                                    <option value="pcs" {% if i.Unit == 'pcs' %}selected{% endif %}>Pieces (pcs)</option>
-                                    <option value="kg" {% if i.Unit == 'kg' %}selected{% endif %}>Kilograms (kg)</option>
-                                    <option value="L" {% if i.Unit == 'L' %}selected{% endif %}>Liters (L)</option>
-                                    <option value="portion" {% if i.Unit == 'portion' %}selected{% endif %}>Portion</option>
-                                </select>
+                            <div class="col-md-6">
+                                <label>Purchase Packaging Unit:</label>
+                                <input type="text" name="purchase_unit" id="editPurchaseUnitInput{{ i.Ingredient_ID }}" class="form-control bg-dark text-white border-secondary" value="{{ i.Purchase_Unit or 'pack' }}" oninput="calculateBaseCostEdit('{{ i.Ingredient_ID }}')">
                             </div>
-                            <div class="col-md-4">
-                                <label>2. Purchase Packaging Unit:</label>
-                                <input type="text" name="purchase_unit" id="editPurchaseUnitInput{{ i.Ingredient_ID }}" class="form-control bg-dark text-white border-secondary" value="{{ i.Purchase_Unit or 'pack' }}" required oninput="calculateBaseCostEdit('{{ i.Ingredient_ID }}')">
-                            </div>
-                            <div class="col-md-4">
-                                <label>3. Pack Size (Net Content):</label>
+                            <div class="col-md-6">
+                                <label>Pack Size (Net Content):</label>
                                 <div class="input-group">
-                                    <input type="number" step="any" min="0.0001" name="pack_size" id="editPackSizeInput{{ i.Ingredient_ID }}" class="form-control bg-dark text-white border-secondary font-monospace" value="{{ i.Pack_Size or 1.0 }}" required oninput="calculateBaseCostEdit('{{ i.Ingredient_ID }}')">
+                                    <input type="number" step="any" min="0.0001" name="pack_size" id="editPackSizeInput{{ i.Ingredient_ID }}" class="form-control bg-dark text-white border-secondary font-monospace" value="{{ i.Pack_Size or 1.0 }}" oninput="calculateBaseCostEdit('{{ i.Ingredient_ID }}')">
                                     <span class="input-group-text bg-secondary border-secondary text-white small" id="editPackSizeLabel{{ i.Ingredient_ID }}">{{ i.Unit }}</span>
                                 </div>
                             </div>
@@ -392,7 +415,7 @@
                                 <label>Commercial Pack Purchase Price (PHP):</label>
                                 <div class="input-group">
                                     <span class="input-group-text bg-secondary border-secondary text-white fw-bold">PHP</span>
-                                    <input type="number" step="any" min="0.00" name="purchase_cost" id="editPurchaseCostInput{{ i.Ingredient_ID }}" class="form-control bg-dark text-white border-secondary font-monospace" value="{{ i.Purchase_Cost or (i.Cost_Per_Unit * (i.Pack_Size or 1.0)) }}" required oninput="calculateBaseCostEdit('{{ i.Ingredient_ID }}')">
+                                    <input type="number" step="any" min="0.00" name="purchase_cost" id="editPurchaseCostInput{{ i.Ingredient_ID }}" class="form-control bg-dark text-white border-secondary font-monospace" value="{{ i.Purchase_Cost or (i.Cost_Per_Unit * (i.Pack_Size or 1.0)) }}" oninput="calculateBaseCostEdit('{{ i.Ingredient_ID }}')">
                                 </div>
                             </div>
                             <div class="col-md-6">
@@ -409,6 +432,14 @@
                         </div>
                     </div>
 
+                    <!-- PREPPED ITEM INFORMATIONAL CARD -->
+                    <div id="editPreppedInfoCard{{ i.Ingredient_ID }}" class="prepped-info-card" {% if i.Ingredient_Type != 'PREPPED' %}style="display: none;"{% endif %}>
+                        <b class="text-info">Kitchen Line Prepped Component:</b>
+                        <p class="small text-light mb-0 mt-1">
+                            This item is prepared in-house. It does not have supplier packaging or purchase pricing. Its current live formula cost is <b>PHP {{ "%.4f"|format(i.Cost_Per_Unit) }} / {{ i.Unit }}</b> (recalculated in the <b>Recipes</b> tab).
+                        </p>
+                    </div>
+
                     <div class="row g-2 mb-2">
                         <div class="col-md-12">
                             <label>Minimum Reorder Par Level (in Base Units):</label>
@@ -417,7 +448,7 @@
                     </div>
                 </div>
                 <div class="modal-footer border-secondary">
-                    <button type="submit" id="editIngredientSubmitBtn{{ i.Ingredient_ID }}" class="btn btn-warning text-dark fw-bold w-100 py-2">Save Conversion Updates & Recalculate Formulas</button>
+                    <button type="submit" id="editIngredientSubmitBtn{{ i.Ingredient_ID }}" class="btn btn-warning text-dark fw-bold w-100 py-2">Save Conversion Updates</button>
                 </div>
             </form>
         </div>
@@ -426,6 +457,18 @@
 {% endfor %}
 
 <script>
+function toggleAddIngredientTypeUI() {
+    const isPrepped = document.getElementById('addIngredientTypeSelect').value === 'PREPPED';
+    document.getElementById('addRawConversionCard').style.display = isPrepped ? 'none' : 'block';
+    document.getElementById('addPreppedInfoCard').style.display = isPrepped ? 'block' : 'none';
+}
+
+function toggleEditIngredientTypeUI(ingId) {
+    const isPrepped = document.getElementById('editIngredientTypeSelect' + ingId).value === 'PREPPED';
+    document.getElementById('editRawConversionCard' + ingId).style.display = isPrepped ? 'none' : 'block';
+    document.getElementById('editPreppedInfoCard' + ingId).style.display = isPrepped ? 'block' : 'none';
+}
+
 function calculateBaseCostAdd() {
     const baseUnit = document.getElementById('addBaseUnitSelect').value;
     const purchaseUnit = document.getElementById('addPurchaseUnitInput').value.trim() || 'pack';
@@ -458,6 +501,7 @@ function calculateBaseCostEdit(ingId) {
 
 document.addEventListener('DOMContentLoaded', () => {
     calculateBaseCostAdd();
+    toggleAddIngredientTypeUI();
 });
 
 const globalMasterIngredientNames = [
