@@ -160,13 +160,14 @@
             <tbody id="ingredientsTableBody">
                 {% for i in ingredients %}
                 <tr class="ingredient-data-row"
+                    id="row-{{ i.Ingredient_ID }}"
                     data-id="{{ i.Ingredient_ID|lower }}"
                     data-name="{{ i.Ingredient_Name|lower }}"
                     data-category="{{ i.Category|lower }}"
                     data-status="{{ i.Status }}"
                     data-packaging="{{ (i.Purchase_Unit ~ ' ' ~ i.Pack_Size)|lower }}">
                     <td class="text-info font-monospace fw-bold">{{ i.Ingredient_ID }}</td>
-                    <td class="text-white fw-bold">{{ i.Ingredient_Name }}</td>
+                    <td class="text-white fw-bold row-col-name">{{ i.Ingredient_Name }}</td>
                     <td><span class="badge bg-dark border border-secondary text-light">{{ i.Category }}</span></td>
                     <td>
                         {% if i.Ingredient_Type == 'PREPPED' %}
@@ -347,7 +348,7 @@
 <div class="modal fade" id="addStockModal{{ i.Ingredient_ID }}" tabindex="-1">
     <div class="modal-dialog modal-sm modal-dialog-centered">
         <div class="modal-content bg-dark text-white border-secondary">
-            <form method="post">
+            <form method="post" data-async="true" data-modal-id="addStockModal{{ i.Ingredient_ID }}" data-ing-id="{{ i.Ingredient_ID }}">
                 <input type="hidden" name="action_type" value="add_stock">
                 <input type="hidden" name="ingredient_id" value="{{ i.Ingredient_ID }}">
                 <input type="hidden" name="ingredient_type" value="{{ i.Ingredient_Type }}">
@@ -370,7 +371,7 @@
 <div class="modal fade" id="editModal{{ i.Ingredient_ID }}" tabindex="-1">
     <div class="modal-dialog modal-lg modal-dialog-centered">
         <div class="modal-content bg-dark text-white border-secondary">
-            <form method="post">
+            <form method="post" data-async="true" data-modal-id="editModal{{ i.Ingredient_ID }}" data-ing-id="{{ i.Ingredient_ID }}">
                 <input type="hidden" name="action_type" value="edit_ingredient">
                 <input type="hidden" name="ingredient_id" value="{{ i.Ingredient_ID }}">
                 <div class="modal-header border-secondary">
@@ -507,10 +508,28 @@ document.addEventListener("DOMContentLoaded", () => {
     const statusSelect = document.getElementById('liveStatusSelect');
     const categorySelect = document.getElementById('liveCategorySelect');
 
-    // Instant keystroke search without pressing enter
-    searchInput.addEventListener('input', applyInstantFilters);
-    statusSelect.addEventListener('change', applyInstantFilters);
-    categorySelect.addEventListener('change', applyInstantFilters);
+    // Restore user filter state from session storage
+    const savedSearch = sessionStorage.getItem('ingredient_search');
+    const savedStatus = sessionStorage.getItem('ingredient_status');
+    const savedCategory = sessionStorage.getItem('ingredient_category');
+
+    if (savedSearch !== null && savedSearch !== '') searchInput.value = savedSearch;
+    if (savedStatus !== null && savedStatus !== '') statusSelect.value = savedStatus;
+    if (savedCategory !== null && savedCategory !== '') categorySelect.value = savedCategory;
+
+    // Instant keystroke search with storage sync
+    searchInput.addEventListener('input', () => {
+        sessionStorage.setItem('ingredient_search', searchInput.value);
+        applyInstantFilters();
+    });
+    statusSelect.addEventListener('change', () => {
+        sessionStorage.setItem('ingredient_status', statusSelect.value);
+        applyInstantFilters();
+    });
+    categorySelect.addEventListener('change', () => {
+        sessionStorage.setItem('ingredient_category', categorySelect.value);
+        applyInstantFilters();
+    });
 
     // Attach click listeners to all sortable table headers
     document.querySelectorAll('th.sortable-col').forEach(th => {
@@ -521,8 +540,8 @@ document.addEventListener("DOMContentLoaded", () => {
         });
     });
 
-    // Run initial filter check
     applyInstantFilters();
+    attachAsyncFormHandlers();
 });
 
 function applyInstantFilters() {
@@ -556,11 +575,9 @@ function applyInstantFilters() {
         }
     });
 
-    // Update row counter badge
     const visibleCounter = document.getElementById('visibleRowCount');
     if (visibleCounter) visibleCounter.innerText = visibleCount;
 
-    // Toggle live "No matching records" placeholder
     const noMatchesRow = document.getElementById('noMatchesLiveRow');
     if (noMatchesRow) {
         noMatchesRow.style.display = (visibleCount === 0 && rows.length > 0) ? "" : "none";
@@ -568,6 +585,9 @@ function applyInstantFilters() {
 }
 
 function resetLiveFilters() {
+    sessionStorage.removeItem('ingredient_search');
+    sessionStorage.removeItem('ingredient_status');
+    sessionStorage.removeItem('ingredient_category');
     document.getElementById('liveSearchInput').value = '';
     document.getElementById('liveStatusSelect').value = 'All';
     document.getElementById('liveCategorySelect').value = 'All';
@@ -575,7 +595,119 @@ function resetLiveFilters() {
 }
 
 // ==========================================
-// 2. COLUMN HEADER CLICK SORTING ENGINE
+// 2. ASYNC ZERO-RELOAD MODAL FORM SUBMITTER
+// ==========================================
+function attachAsyncFormHandlers() {
+    const forms = document.querySelectorAll('form[data-async="true"]');
+    forms.forEach(form => {
+        if (form.getAttribute('data-listener-attached') === 'true') return;
+        form.setAttribute('data-listener-attached', 'true');
+
+        form.addEventListener('submit', async function(e) {
+            e.preventDefault();
+            
+            const submitBtn = form.querySelector('button[type="submit"]');
+            const originalBtnText = submitBtn ? submitBtn.innerHTML : '';
+            if (submitBtn) {
+                submitBtn.disabled = true;
+                submitBtn.innerHTML = 'Saving...';
+            }
+
+            const formData = new FormData(form);
+            const ingId = form.getAttribute('data-ing-id');
+            const modalId = form.getAttribute('data-modal-id');
+
+            try {
+                const response = await fetch(window.location.href, {
+                    method: 'POST',
+                    body: formData
+                });
+
+                if (response.ok) {
+                    const htmlText = await response.text();
+                    const parser = new DOMParser();
+                    const doc = parser.parseFromString(htmlText, 'text/html');
+
+                    // 1. Hot-swap the updated table row in DOM without full reload
+                    const newRow = doc.getElementById('row-' + ingId);
+                    const currentRow = document.getElementById('row-' + ingId);
+
+                    if (newRow && currentRow) {
+                        currentRow.innerHTML = newRow.innerHTML;
+                        for (let attr of newRow.attributes) {
+                            currentRow.setAttribute(attr.name, attr.value);
+                        }
+                        
+                        // Subtle visual pulse indicating successful update
+                        currentRow.style.transition = 'background-color 0.4s ease';
+                        currentRow.style.backgroundColor = '#164e63';
+                        setTimeout(() => {
+                            currentRow.style.backgroundColor = '';
+                        }, 1200);
+                    } else if (!newRow && currentRow) {
+                        currentRow.remove();
+                    }
+
+                    // 2. Hot-swap modal contents so repeated edits carry newest database values
+                    const newModal = doc.getElementById(modalId);
+                    const currentModal = document.getElementById(modalId);
+                    if (newModal && currentModal) {
+                        const modalBodyNew = newModal.querySelector('.modal-body');
+                        const modalBodyCurrent = currentModal.querySelector('.modal-body');
+                        if (modalBodyNew && modalBodyCurrent) {
+                            modalBodyCurrent.innerHTML = modalBodyNew.innerHTML;
+                        }
+                    }
+
+                    // 3. Smoothly dismiss modal window
+                    const modalEl = document.getElementById(modalId);
+                    if (modalEl) {
+                        const modalInstance = bootstrap.Modal.getInstance(modalEl) || new bootstrap.Modal(modalEl);
+                        modalInstance.hide();
+                    }
+
+                    // 4. Preserve search and filtering state on updated table
+                    applyInstantFilters();
+                    showToastNotification("Ingredient updated successfully!");
+                } else {
+                    form.submit();
+                }
+            } catch (err) {
+                form.submit();
+            } finally {
+                if (submitBtn) {
+                    submitBtn.disabled = false;
+                    submitBtn.innerHTML = originalBtnText;
+                }
+            }
+        });
+    });
+}
+
+function showToastNotification(message) {
+    let toast = document.getElementById('floatingToastAlert');
+    if (!toast) {
+        toast = document.createElement('div');
+        toast.id = 'floatingToastAlert';
+        toast.style.cssText = 'position:fixed; bottom:24px; right:24px; z-index:99999; background:#10b981; color:#ffffff; padding:12px 22px; border-radius:6px; font-weight:700; font-size:13.5px; box-shadow:0 10px 25px rgba(0,0,0,0.5); opacity:0; transition:opacity 0.25s ease, transform 0.25s ease; transform:translateY(15px); pointer-events:none;';
+        document.body.appendChild(toast);
+    }
+    toast.innerText = message;
+    toast.style.display = 'block';
+    setTimeout(() => {
+        toast.style.opacity = '1';
+        toast.style.transform = 'translateY(0)';
+    }, 10);
+    
+    setTimeout(() => {
+        toast.style.opacity = '0';
+        toast.style.transform = 'translateY(15px)';
+        setTimeout(() => { toast.style.display = 'none'; }, 250);
+    }, 2500);
+}
+
+// ==========================================
+// 3. COLUMN HEADER CLICK SORTING ENGINE
 // ==========================================
 function handleHeaderSort(colIndex, colType, clickedHeader) {
     if (currentSortCol === colIndex) {
@@ -585,7 +717,6 @@ function handleHeaderSort(colIndex, colType, clickedHeader) {
         currentSortOrder = 'asc';
     }
 
-    // Update UI Indicators on all headers
     document.querySelectorAll('th.sortable-col').forEach(th => {
         th.classList.remove('sort-active');
         const indicator = th.querySelector('.sort-indicator');
@@ -598,7 +729,6 @@ function handleHeaderSort(colIndex, colType, clickedHeader) {
         activeIndicator.innerText = (currentSortOrder === 'asc') ? '▲' : '▼';
     }
 
-    // Perform DOM Row Sorting
     const tbody = document.getElementById('ingredientsTableBody');
     const rows = Array.from(tbody.querySelectorAll('.ingredient-data-row'));
 
@@ -622,16 +752,14 @@ function handleHeaderSort(colIndex, colType, clickedHeader) {
         }
     });
 
-    // Re-append sorted rows to table body
     rows.forEach(row => tbody.appendChild(row));
     
-    // Ensure placeholder stays at bottom
     const noMatchesRow = document.getElementById('noMatchesLiveRow');
     if (noMatchesRow) tbody.appendChild(noMatchesRow);
 }
 
 // ==========================================
-// 3. PACKAGING FORMULA CALCULATORS
+// 4. PACKAGING FORMULA CALCULATORS
 // ==========================================
 function toggleAddIngredientTypeUI() {
     const isPrepped = document.getElementById('addIngredientTypeSelect').value === 'PREPPED';

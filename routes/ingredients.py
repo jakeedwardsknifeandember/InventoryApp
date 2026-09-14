@@ -2,8 +2,103 @@
 from flask import Blueprint, request, redirect, session, render_template, flash
 from modules.database import InventoryDB
 import pandas as pd
+import sqlite3
+from collections import defaultdict
 
 ingredients_bp = Blueprint('ingredients', __name__)
+
+def heal_duplicate_ingredients(client_db_path):
+    """
+    Automatically detects and merges case-insensitive duplicate ingredients
+    (e.g., 'CONDENSED MILK' and 'Condensed Milk', 'BROWN SUGAR' and 'Brown Sugar'):
+    1. Sums their combined physical inventory stock into one master record.
+    2. Re-points all Recipes, Modifier_Recipes, and Prep_Recipes to the master ID.
+    3. Purges the duplicate record, breaking UI validation deadlocks.
+    """
+    try:
+        conn = sqlite3.connect(client_db_path, timeout=20.0)
+        cursor = conn.cursor()
+        cursor.execute("SELECT Ingredient_ID, Ingredient_Name, Current_Stock, Cost_Per_Unit, Purchase_Cost, Pack_Size FROM Ingredients")
+        rows = cursor.fetchall()
+        
+        grouped = defaultdict(list)
+        for r in rows:
+            norm_name = str(r[1]).strip().lower()
+            grouped[norm_name].append({
+                'id': str(r[0]),
+                'name': str(r[1]),
+                'stock': float(r[2] or 0.0),
+                'cost': float(r[3] or 0.0),
+                'p_cost': float(r[4] or 0.0),
+                'pack_size': float(r[5] or 1.0)
+            })
+            
+        for name, items in grouped.items():
+            if len(items) > 1:
+                # Prefer standard Title Case over ALL CAPS as primary master record
+                primary = items[0]
+                for it in items:
+                    if it['name'] != it['name'].upper() and it['name'][0].isupper():
+                        primary = it
+                        break
+                
+                duplicates = [it for it in items if it['id'] != primary['id']]
+                combined_stock = sum(it['stock'] for it in items)
+                
+                best_cost = primary['cost']
+                best_pcost = primary['p_cost']
+                best_pack = primary['pack_size']
+                for it in items:
+                    if it['cost'] > 0 and best_cost == 0:
+                        best_cost = it['cost']
+                        best_pcost = it['p_cost']
+                        best_pack = it['pack_size']
+
+                # Update master record with consolidated stock and packaging metrics
+                cursor.execute("""
+                    UPDATE Ingredients 
+                    SET Current_Stock = ?, Cost_Per_Unit = ?, Purchase_Cost = ?, Pack_Size = ?
+                    WHERE Ingredient_ID = ?
+                """, (combined_stock, best_cost, best_pcost, best_pack, primary['id']))
+
+                for dup in duplicates:
+                    dup_id = dup['id']
+                    
+                    # 1. Repoint Finished Product Recipes
+                    cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='Recipes'")
+                    if cursor.fetchone():
+                        cursor.execute("SELECT Product_ID FROM Recipes WHERE Ingredient_ID = ?", (dup_id,))
+                        for (pid,) in cursor.fetchall():
+                            cursor.execute("SELECT COUNT(*) FROM Recipes WHERE Product_ID = ? AND Ingredient_ID = ?", (pid, primary['id']))
+                            if cursor.fetchone()[0] == 0:
+                                cursor.execute("UPDATE Recipes SET Ingredient_ID = ? WHERE Product_ID = ? AND Ingredient_ID = ?", (primary['id'], pid, dup_id))
+                            else:
+                                cursor.execute("DELETE FROM Recipes WHERE Product_ID = ? AND Ingredient_ID = ?", (pid, dup_id))
+
+                    # 2. Repoint Modifier Add-on Recipes
+                    cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='Modifier_Recipes'")
+                    if cursor.fetchone():
+                        cursor.execute("SELECT Modifier_ID FROM Modifier_Recipes WHERE Ingredient_ID = ?", (dup_id,))
+                        for (mid,) in cursor.fetchall():
+                            cursor.execute("SELECT COUNT(*) FROM Modifier_Recipes WHERE Modifier_ID = ? AND Ingredient_ID = ?", (mid, primary['id']))
+                            if cursor.fetchone()[0] == 0:
+                                cursor.execute("UPDATE Modifier_Recipes SET Ingredient_ID = ? WHERE Modifier_ID = ? AND Ingredient_ID = ?", (primary['id'], mid, dup_id))
+                            else:
+                                cursor.execute("DELETE FROM Modifier_Recipes WHERE Modifier_ID = ? AND Ingredient_ID = ?", (mid, dup_id))
+
+                    # 3. Repoint Kitchen Prep Blueprints
+                    cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='Prep_Recipes'")
+                    if cursor.fetchone():
+                        cursor.execute("UPDATE Prep_Recipes SET Raw_Ingredient_ID = ? WHERE Raw_Ingredient_ID = ?", (primary['id'], dup_id))
+                        cursor.execute("UPDATE Prep_Recipes SET Prepped_Ingredient_ID = ? WHERE Prepped_Ingredient_ID = ?", (primary['id'], dup_id))
+
+                    # 4. Remove redundant duplicate shell
+                    cursor.execute("DELETE FROM Ingredients WHERE Ingredient_ID = ?", (dup_id,))
+                    
+        conn.commit()
+        conn.close()
+    except Exception as e:
+        print(f"Duplicate healing warning: {e}")
 
 @ingredients_bp.route('/portal/<username>/ingredients', methods=['GET', 'POST'])
 def web_ingredients_tab(username):
@@ -16,7 +111,9 @@ def web_ingredients_tab(username):
         flash('Unauthorized access: Ingredients management is strictly reserved for Platform Owner Admins.', 'danger')
         return redirect(f"/portal/{username}")
     
-    db = InventoryDB(f"data/client_{username}.db")
+    client_db_path = f"data/client_{username}.db"
+    heal_duplicate_ingredients(client_db_path)
+    db = InventoryDB(client_db_path)
 
     if request.method == 'POST':
         action = request.form.get('action_type')
@@ -120,9 +217,11 @@ def web_ingredients_tab(username):
                     return redirect(f"/portal/{username}/ingredients?error={msg}")
         
         db.update_all_product_costs()
+        heal_duplicate_ingredients(client_db_path)
         return redirect(f"/portal/{username}/ingredients?type=" + request.form.get('ingredient_type', 'RAW'))
 
     # ===== GET DATA =====
+    heal_duplicate_ingredients(client_db_path)
     df = db.get_inventory_status()
     
     categories = []
