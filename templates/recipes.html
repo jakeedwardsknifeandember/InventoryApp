@@ -218,7 +218,7 @@
                             <h5 class="m-0 fw-bold">Formula Overview: {{ r['Product_Name'] }} <small class="text-info font-monospace ms-1">({{ r['Product_ID'] }})</small></h5>
                             <div class="d-flex gap-2">
                                 <button class="btn btn-sm btn-primary fw-bold px-3" data-bs-toggle="modal" data-bs-target="#editModal{{ r['Product_ID'] }}">Edit Formula</button>
-                                <form method="post" class="d-inline" onsubmit="return confirm('Permanently delete {{ r['Product_Name'] }} ({{ r['Product_ID'] }}) from the prepped components registry and purge its blueprint?');">
+                                <form method="post" class="d-inline" onsubmit="return confirm('Permanently delete {{ r['Product_Name'] }} ({{ r['Product_ID'] }})?');">
                                     <input type="hidden" name="action_type" value="delete_recipe">
                                     <input type="hidden" name="recipe_type" value="{{ current_tab }}">
                                     <input type="hidden" name="product_id" value="{{ r['Product_ID'] }}">
@@ -446,6 +446,15 @@ function toggleRecipeParentVariants(index) {
     }
 }
 
+function openRecipeParentVariants(index) {
+    const childRows = document.querySelectorAll('.child-group-' + index);
+    const caret = document.getElementById('caret-' + index);
+    childRows.forEach(row => {
+        row.style.display = 'block';
+    });
+    if (caret) caret.textContent = '^';
+}
+
 function synchronizeRowMeasurementUnitOptions(selectElement) {
     const row = selectElement.closest('.tracking-ingredient-row-block');
     const activeOption = selectElement.options[selectElement.selectedIndex];
@@ -631,7 +640,7 @@ document.addEventListener("DOMContentLoaded", function() {
         if (buttonToClick) {
             const pIndex = buttonToClick.getAttribute('data-parent-index');
             if (pIndex) {
-                toggleRecipeParentVariants(pIndex);
+                openRecipeParentVariants(pIndex);
             }
         }
     }
@@ -641,14 +650,14 @@ document.addEventListener("DOMContentLoaded", function() {
         if (buttonToClick) {
             const pIndex = buttonToClick.getAttribute('data-parent-index');
             if (pIndex) {
-                toggleRecipeParentVariants(pIndex);
+                openRecipeParentVariants(pIndex);
             }
         }
     }
 
     if (buttonToClick) {
         buttonToClick.click();
-        buttonToClick.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        buttonToClick.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
     }
 });
 </script>

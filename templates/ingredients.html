@@ -39,6 +39,31 @@
     
     .high-contrast-muted { color: #94a3b8 !important; }
     .high-contrast-unit { color: #cbd5e1 !important; font-weight: 600; }
+
+    /* SORTABLE TABLE HEADER STYLING */
+    th.sortable-col {
+        cursor: pointer;
+        user-select: none;
+        transition: background-color 0.15s ease, color 0.15s ease;
+        white-space: nowrap;
+    }
+    th.sortable-col:hover {
+        background-color: #24242e !important;
+        color: #60a5fa !important;
+    }
+    .sort-indicator {
+        display: inline-block;
+        margin-left: 6px;
+        font-size: 11px;
+        color: #64748b;
+    }
+    th.sortable-col.sort-active {
+        color: #38bdf8 !important;
+    }
+    th.sortable-col.sort-active .sort-indicator {
+        color: #38bdf8 !important;
+        font-weight: bold;
+    }
 </style>
 
 <div class="d-flex justify-content-between align-items-center mb-3">
@@ -54,140 +79,151 @@
 
 <ul class="nav nav-tabs border-bottom border-secondary mb-3">
     <li class="nav-item">
-        <a class="nav-link {% if current_type == 'RAW' %}active{% endif %}" href="?type=RAW&search={{ current_search }}&status={{ current_status }}&category={{ current_category }}&sort_by={{ current_sort }}&order={{ current_order }}">Wholesale Raw Materials</a>
+        <a class="nav-link {% if current_type == 'RAW' %}active{% endif %}" href="?type=RAW">Wholesale Raw Materials</a>
     </li>
     <li class="nav-item">
-        <a class="nav-link {% if current_type == 'PREPPED' %}active{% endif %}" href="?type=PREPPED&search={{ current_search }}&status={{ current_status }}&category={{ current_category }}&sort_by={{ current_sort }}&order={{ current_order }}">Kitchen Prepped / Portioned Components</a>
+        <a class="nav-link {% if current_type == 'PREPPED' %}active{% endif %}" href="?type=PREPPED">Kitchen Prepped / Portioned Components</a>
     </li>
 </ul>
 
-<div class="content-card mb-3 p-3" style="background-color: #2b2b2b;">
-    <form method="GET" class="row gx-2 gy-3 align-items-center">
-        <input type="hidden" name="type" value="{{ current_type }}">
-        
-        <div class="col-md-4 d-flex align-items-center">
-            <label class="text-light me-2 mb-0">Search:</label>
-            <input type="text" name="search" value="{{ current_search }}" class="form-control bg-dark text-white border-secondary" placeholder="ID or Name..." autocomplete="off">
+<!-- REAL-TIME FILTER TOOLBAR (SEARCH, STATUS, CATEGORY ONLY) -->
+<div class="content-card mb-3 p-3" style="background-color: #2b2b2b; border-radius: 6px;">
+    <div class="row gx-2 gy-2 align-items-center">
+        <div class="col-md-5">
+            <label class="text-light me-2 mb-1 small fw-bold">Live Instant Search:</label>
+            <input type="text" id="liveSearchInput" class="form-control bg-dark text-white border-secondary" placeholder="Type ingredient name, ID, or package..." autocomplete="off">
         </div>
         
-        <div class="col-md-4 d-flex align-items-center">
-            <label class="text-light me-2 mb-0">Sort by:</label>
-            <select name="sort_by" class="form-select bg-primary text-white border-primary" style="width: auto;" onchange="this.form.submit()">
-                <option value="name" {% if current_sort == 'name' %}selected{% endif %}>Name</option>
-                <option value="id" {% if current_sort == 'id' %}selected{% endif %}>ID</option>
-                <option value="category" {% if current_sort == 'category' %}selected{% endif %}>Category</option>
-                <option value="stock" {% if current_sort == 'stock' %}selected{% endif %}>Current Stock</option>
-                <option value="cost" {% if current_sort == 'cost' %}selected{% endif %}>Cost/Unit</option>
-            </select>
-            <select name="order" class="form-select bg-primary text-white border-primary ms-2" style="width: auto;" onchange="this.form.submit()">
-                <option value="asc" {% if current_order == 'asc' %}selected{% endif %}>Asc</option>
-                <option value="desc" {% if current_order == 'desc' %}selected{% endif %}>Desc</option>
+        <div class="col-md-3">
+            <label class="text-light me-2 mb-1 small fw-bold">Status:</label>
+            <select id="liveStatusSelect" class="form-select bg-primary text-white border-primary">
+                <option value="All" selected>All Status Alerts</option>
+                <option value="Normal">Normal</option>
+                <option value="Low Stock">Low Stock</option>
+                <option value="Critical">Critical</option>
             </select>
         </div>
 
-        <div class="w-100 d-none d-md-block m-0"></div>
-
-        <div class="col-md-3 d-flex align-items-center">
-            <label class="text-light me-2 mb-0">Status:</label>
-            <select name="status" class="form-select bg-primary text-white border-primary" onchange="this.form.submit()">
-                <option value="All" {% if current_status == 'All' %}selected{% endif %}>All Status Alerts</option>
-                <option value="Normal" {% if current_status == 'Normal' %}selected{% endif %}>Normal</option>
-                <option value="Low Stock" {% if current_status == 'Low Stock' %}selected{% endif %}>Low Stock</option>
-                <option value="Critical" {% if current_status == 'Critical' %}selected{% endif %}>Critical</option>
-            </select>
-        </div>
-
-        <div class="col-md-3 d-flex align-items-center">
-            <label class="text-light me-2 mb-0">Category:</label>
-            <select name="category" class="form-select bg-primary text-white border-primary" onchange="this.form.submit()">
-                <option value="All" {% if current_category == 'All' %}selected{% endif %}>All Categories</option>
+        <div class="col-md-3">
+            <label class="text-light me-2 mb-1 small fw-bold">Category:</label>
+            <select id="liveCategorySelect" class="form-select bg-primary text-white border-primary">
+                <option value="All" selected>All Categories</option>
                 {% for c in categories %}
-                <option value="{{ c }}" {% if current_category == c %}selected{% endif %}>{{ c }}</option>
+                <option value="{{ c }}">{{ c }}</option>
                 {% endfor %}
             </select>
         </div>
 
-        <div class="col-md-auto ms-auto d-flex align-items-end">
-            <a href="/portal/{{ username }}/ingredients?type={{ current_type }}" class="btn btn-secondary fw-bold px-4">Clear Filters</a>
+        <div class="col-md-1 text-end align-self-end">
+            <button type="button" onclick="resetLiveFilters()" class="btn btn-secondary fw-bold w-100">Clear</button>
         </div>
-    </form>
+    </div>
 </div>
 
-<div class="rounded px-3 py-2 mb-3 text-end" style="background-color: #1e1e2e; border: 1px solid #3f3f46; color: #94a3b8; font-size: 13.5px; font-weight: 600;">
-    Total Items in This View: <span class="text-white fw-bold">{{ total_count }}</span> rows
+<div class="rounded px-3 py-2 mb-3 text-end font-monospace" style="background-color: #1e1e2e; border: 1px solid #3f3f46; color: #94a3b8; font-size: 13px; font-weight: 600;">
+    Showing <span id="visibleRowCount" class="text-white fw-bold">{{ ingredients|length }}</span> of <span id="totalRowCount" class="text-info fw-bold">{{ ingredients|length }}</span> rows
 </div>
 
-<div class="content-card">
-    <table class="table table-dark table-hover align-middle" style="background-color: transparent;">
-        <thead>
-            <tr>
-                <th class="text-white">ID</th>
-                <th class="text-white">Name</th>
-                <th class="text-white">Category</th>
-                <th class="text-white">Commercial Packaging</th>
-                <th class="text-white">Base Stock</th>
-                <th class="text-white">Min Par</th>
-                <th class="text-white">Cost / Base Unit</th>
-                <th class="text-white">Status</th>
-                <th class="text-white text-end">Actions</th>
-            </tr>
-        </thead>
-        <tbody>
-            {% for i in ingredients %}
-            <tr>
-                <td class="text-light font-monospace">{{ i.Ingredient_ID }}</td>
-                <td class="text-white fw-bold">{{ i.Ingredient_Name }}</td>
-                <td class="text-light"><span class="badge bg-dark border border-secondary text-light">{{ i.Category }}</span></td>
-                <td>
-                    {% if i.Ingredient_Type == 'PREPPED' %}
-                        <span class="badge bg-info text-dark fw-bold">In-House Prep</span>
-                    {% elif i.Pack_Size and i.Pack_Size > 1 %}
-                        <span class="badge bg-primary text-white fw-bold">1 {{ i.Purchase_Unit|capitalize }} = {{ i.Pack_Size }} {{ i.Unit }}</span>
-                    {% else %}
-                        <span class="high-contrast-muted small font-monospace">Standard (1:1)</span>
-                    {% endif %}
-                </td>
-                <td class="text-success fw-bold font-monospace">
-                    {{ "%.2f"|format(i.Current_Stock) }} <span class="high-contrast-unit small">{{ i.Unit }}</span>
-                </td>
-                <td class="text-light font-monospace">{{ "%.2f"|format(i.Min_Stock) }} {{ i.Unit }}</td>
-                <td class="text-light font-monospace">
-                    <span class="fw-bold text-info">PHP {{ "%.4f"|format(i.Cost_Per_Unit) }}</span> / {{ i.Unit }}
-                    {% if i.Purchase_Cost and i.Purchase_Cost > 0 and i.Pack_Size > 1 and i.Ingredient_Type != 'PREPPED' %}
-                        <div class="high-contrast-muted small" style="font-size: 11px;">(PHP {{ "%.2f"|format(i.Purchase_Cost) }} / {{ i.Purchase_Unit }})</div>
-                    {% endif %}
-                </td>
-                <td>
-                    <span class="badge {{ 'bg-success' if i.Status == 'Normal' else ('bg-warning text-dark' if i.Status == 'Low Stock' else 'bg-danger') }} px-3 py-2">
-                        {{ i.Status }}
-                    </span>
-                </td>
-                <td class="text-end">
-                    <button class="btn btn-sm btn-info text-white fw-bold me-1" data-bs-toggle="modal" data-bs-target="#addStockModal{{ i.Ingredient_ID }}">Add Qty</button>
-                    <button class="btn btn-sm btn-primary fw-bold me-1" data-bs-toggle="modal" data-bs-target="#editModal{{ i.Ingredient_ID }}">Edit</button>
-                    
-                    <form method="post" style="display: inline;" onsubmit="return confirm('Are you sure you want to permanently delete {{ i.Ingredient_Name }}?');">
-                        <input type="hidden" name="action_type" value="delete_ingredient">
-                        <input type="hidden" name="ingredient_id" value="{{ i.Ingredient_ID }}">
-                        <button type="submit" class="btn btn-sm btn-danger fw-bold">Delete</button>
-                    </form>
-                </td>
-            </tr>
-            {% else %}
-            <tr><td colspan="9" class="text-center high-contrast-muted py-4">No ingredient records found.</td></tr>
-            {% endfor %}
-        </tbody>
-    </table>
+<!-- INGREDIENTS DATA TABLE WITH CLICK-TO-SORT HEADERS -->
+<div class="content-card p-0 overflow-hidden" style="border: 1px solid #3f3f46; border-radius: 6px;">
+    <div class="table-responsive">
+        <table class="table table-dark table-hover align-middle m-0" id="ingredientsMasterTable" style="background-color: transparent;">
+            <thead>
+                <tr style="background-color: #181820; border-bottom: 2px solid #3f3f46;">
+                    <th class="text-white sortable-col" data-col="0" data-type="text">
+                        ID <span class="sort-indicator">-</span>
+                    </th>
+                    <th class="text-white sortable-col" data-col="1" data-type="text">
+                        Name <span class="sort-indicator">-</span>
+                    </th>
+                    <th class="text-white sortable-col" data-col="2" data-type="text">
+                        Category <span class="sort-indicator">-</span>
+                    </th>
+                    <th class="text-white sortable-col" data-col="3" data-type="text">
+                        Commercial Packaging <span class="sort-indicator">-</span>
+                    </th>
+                    <th class="text-white sortable-col text-end" data-col="4" data-type="num">
+                        Base Stock <span class="sort-indicator">-</span>
+                    </th>
+                    <th class="text-white sortable-col text-end" data-col="5" data-type="num">
+                        Min Par <span class="sort-indicator">-</span>
+                    </th>
+                    <th class="text-white sortable-col text-end" data-col="6" data-type="num">
+                        Cost / Base Unit <span class="sort-indicator">-</span>
+                    </th>
+                    <th class="text-white sortable-col text-center" data-col="7" data-type="text">
+                        Status <span class="sort-indicator">-</span>
+                    </th>
+                    <th class="text-white text-end pe-4" style="cursor: default; user-select: none;">Actions</th>
+                </tr>
+            </thead>
+            <tbody id="ingredientsTableBody">
+                {% for i in ingredients %}
+                <tr class="ingredient-data-row"
+                    data-id="{{ i.Ingredient_ID|lower }}"
+                    data-name="{{ i.Ingredient_Name|lower }}"
+                    data-category="{{ i.Category|lower }}"
+                    data-status="{{ i.Status }}"
+                    data-packaging="{{ (i.Purchase_Unit ~ ' ' ~ i.Pack_Size)|lower }}">
+                    <td class="text-info font-monospace fw-bold">{{ i.Ingredient_ID }}</td>
+                    <td class="text-white fw-bold">{{ i.Ingredient_Name }}</td>
+                    <td><span class="badge bg-dark border border-secondary text-light">{{ i.Category }}</span></td>
+                    <td>
+                        {% if i.Ingredient_Type == 'PREPPED' %}
+                            <span class="badge bg-info text-dark fw-bold">In-House Prep</span>
+                        {% elif i.Pack_Size and i.Pack_Size > 1 %}
+                            <span class="badge bg-primary text-white fw-bold">1 {{ i.Purchase_Unit|capitalize }} = {{ i.Pack_Size }} {{ i.Unit }}</span>
+                        {% else %}
+                            <span class="high-contrast-muted small font-monospace">Standard (1:1)</span>
+                        {% endif %}
+                    </td>
+                    <td class="text-end text-success fw-bold font-monospace">
+                        {{ "%.2f"|format(i.Current_Stock) }} <span class="high-contrast-unit small">{{ i.Unit }}</span>
+                    </td>
+                    <td class="text-end text-light font-monospace">{{ "%.2f"|format(i.Min_Stock) }} {{ i.Unit }}</td>
+                    <td class="text-end text-light font-monospace">
+                        <span class="fw-bold text-info">PHP {{ "%.4f"|format(i.Cost_Per_Unit) }}</span> / {{ i.Unit }}
+                        {% if i.Purchase_Cost and i.Purchase_Cost > 0 and i.Pack_Size > 1 and i.Ingredient_Type != 'PREPPED' %}
+                            <div class="high-contrast-muted small" style="font-size: 11px;">(PHP {{ "%.2f"|format(i.Purchase_Cost) }} / {{ i.Purchase_Unit }})</div>
+                        {% endif %}
+                    </td>
+                    <td class="text-center">
+                        <span class="badge {{ 'bg-success' if i.Status == 'Normal' else ('bg-warning text-dark' if i.Status == 'Low Stock' else 'bg-danger') }} px-3 py-2">
+                            {{ i.Status }}
+                        </span>
+                    </td>
+                    <td class="text-end pe-4 text-nowrap">
+                        <button class="btn btn-sm btn-info text-white fw-bold me-1" data-bs-toggle="modal" data-bs-target="#addStockModal{{ i.Ingredient_ID }}">Add Qty</button>
+                        <button class="btn btn-sm btn-primary fw-bold me-1" data-bs-toggle="modal" data-bs-target="#editModal{{ i.Ingredient_ID }}">Edit</button>
+                        
+                        <form method="post" style="display: inline;" onsubmit="return confirm('Permanently delete {{ i.Ingredient_Name }}?');">
+                            <input type="hidden" name="action_type" value="delete_ingredient">
+                            <input type="hidden" name="ingredient_id" value="{{ i.Ingredient_ID }}">
+                            <button type="submit" class="btn btn-sm btn-danger fw-bold">Delete</button>
+                        </form>
+                    </td>
+                </tr>
+                {% else %}
+                <tr id="emptyStaticRow">
+                    <td colspan="9" class="text-center high-contrast-muted py-5">No ingredient records registered under this tab.</td>
+                </tr>
+                {% endfor %}
+                <tr id="noMatchesLiveRow" style="display: none;">
+                    <td colspan="9" class="text-center high-contrast-muted py-5">No ingredients match the active search and filter criteria.</td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
 </div>
 
-<!-- ADD MODAL -->
+<!-- ADD INGREDIENT MODAL -->
 <div class="modal fade" id="addModal" tabindex="-1">
-    <div class="modal-dialog modal-lg">
+    <div class="modal-dialog modal-lg modal-dialog-centered">
         <div class="modal-content bg-dark text-white border-secondary">
             <form method="post">
                 <input type="hidden" name="action_type" value="add_ingredient">
                 <div class="modal-header border-secondary">
-                    <h5 class="modal-title">Register New Ingredient Master Record</h5>
+                    <h5 class="modal-title fw-bold">Register New Ingredient Master Record</h5>
                     <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
                 </div>
                 <div class="modal-body">
@@ -283,7 +319,7 @@
                     <div id="addPreppedInfoCard" class="prepped-info-card" style="display: none;">
                         <b class="text-info">Kitchen Line Prepped Component:</b>
                         <p class="small text-light mb-0 mt-1">
-                            This item is prepared in-house. It does not have supplier packaging or purchase pricing. Its unit cost will be calculated automatically from its raw materials and yield volume in the <b>Recipes</b> tab (Kitchen Prep Recipes).
+                            This item is prepared in-house. It does not have supplier packaging or purchase pricing. Its unit cost is calculated automatically from its raw materials and yield volume in the <b>Recipes</b> tab (Kitchen Prep Recipes).
                         </p>
                     </div>
 
@@ -306,22 +342,22 @@
     </div>
 </div>
 
-<!-- EDIT MODALS -->
+<!-- EDIT & QUICK ADD MODALS -->
 {% for i in ingredients %}
 <div class="modal fade" id="addStockModal{{ i.Ingredient_ID }}" tabindex="-1">
-    <div class="modal-dialog modal-sm">
+    <div class="modal-dialog modal-sm modal-dialog-centered">
         <div class="modal-content bg-dark text-white border-secondary">
             <form method="post">
                 <input type="hidden" name="action_type" value="add_stock">
                 <input type="hidden" name="ingredient_id" value="{{ i.Ingredient_ID }}">
                 <input type="hidden" name="ingredient_type" value="{{ i.Ingredient_Type }}">
                 <div class="modal-header border-secondary">
-                    <h6 class="modal-title">Quick Add Stock: {{ i.Ingredient_Name }}</h6>
+                    <h6 class="modal-title fw-bold">Quick Add Stock: {{ i.Ingredient_Name }}</h6>
                     <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
                 </div>
                 <div class="modal-body">
                     <label class="form-label">Quantity to Add (in {{ i.Unit }}):</label>
-                    <input type="number" step="any" name="quantity" class="form-control bg-secondary text-white border-0 text-center fw-bold text-success" style="font-size: 20px;" required placeholder="0.00" autocomplete="off">
+                    <input type="number" step="any" name="quantity" class="form-control bg-secondary text-white border-0 text-center fw-bold text-success font-monospace" style="font-size: 20px;" required placeholder="0.00" autocomplete="off">
                 </div>
                 <div class="modal-footer border-secondary">
                     <button type="submit" class="btn btn-primary w-100 fw-bold">Confirm Injection</button>
@@ -332,13 +368,13 @@
 </div>
 
 <div class="modal fade" id="editModal{{ i.Ingredient_ID }}" tabindex="-1">
-    <div class="modal-dialog modal-lg">
+    <div class="modal-dialog modal-lg modal-dialog-centered">
         <div class="modal-content bg-dark text-white border-secondary">
             <form method="post">
                 <input type="hidden" name="action_type" value="edit_ingredient">
                 <input type="hidden" name="ingredient_id" value="{{ i.Ingredient_ID }}">
                 <div class="modal-header border-secondary">
-                    <h5 class="modal-title">Edit Ingredient: {{ i.Ingredient_Name }}</h5>
+                    <h5 class="modal-title fw-bold">Edit Ingredient: {{ i.Ingredient_Name }}</h5>
                     <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
                 </div>
                 <div class="modal-body">
@@ -457,6 +493,146 @@
 {% endfor %}
 
 <script>
+// ==========================================
+// 1. LIVE CLIENT-SIDE FILTER & SEARCH ENGINE
+// ==========================================
+let currentSortCol = 1;      // Default sorted by Name
+let currentSortOrder = 'asc'; // 'asc' or 'desc'
+
+document.addEventListener("DOMContentLoaded", () => {
+    calculateBaseCostAdd();
+    toggleAddIngredientTypeUI();
+
+    const searchInput = document.getElementById('liveSearchInput');
+    const statusSelect = document.getElementById('liveStatusSelect');
+    const categorySelect = document.getElementById('liveCategorySelect');
+
+    // Instant keystroke search without pressing enter
+    searchInput.addEventListener('input', applyInstantFilters);
+    statusSelect.addEventListener('change', applyInstantFilters);
+    categorySelect.addEventListener('change', applyInstantFilters);
+
+    // Attach click listeners to all sortable table headers
+    document.querySelectorAll('th.sortable-col').forEach(th => {
+        th.addEventListener('click', () => {
+            const colIndex = parseInt(th.getAttribute('data-col'));
+            const colType = th.getAttribute('data-type');
+            handleHeaderSort(colIndex, colType, th);
+        });
+    });
+
+    // Run initial filter check
+    applyInstantFilters();
+});
+
+function applyInstantFilters() {
+    const searchVal = document.getElementById('liveSearchInput').value.toLowerCase().trim();
+    const statusVal = document.getElementById('liveStatusSelect').value;
+    const catVal = document.getElementById('liveCategorySelect').value.toLowerCase();
+
+    const rows = document.querySelectorAll('.ingredient-data-row');
+    let visibleCount = 0;
+
+    rows.forEach(row => {
+        const idText = row.getAttribute('data-id') || '';
+        const nameText = row.getAttribute('data-name') || '';
+        const packText = row.getAttribute('data-packaging') || '';
+        const catText = row.getAttribute('data-category') || '';
+        const statusText = row.getAttribute('data-status') || '';
+
+        const matchesSearch = (searchVal === "") || 
+                              idText.includes(searchVal) || 
+                              nameText.includes(searchVal) || 
+                              packText.includes(searchVal);
+
+        const matchesStatus = (statusVal === "All") || (statusText === statusVal);
+        const matchesCat = (catVal === "all") || (catText === catVal);
+
+        if (matchesSearch && matchesStatus && matchesCat) {
+            row.style.display = "";
+            visibleCount++;
+        } else {
+            row.style.display = "none";
+        }
+    });
+
+    // Update row counter badge
+    const visibleCounter = document.getElementById('visibleRowCount');
+    if (visibleCounter) visibleCounter.innerText = visibleCount;
+
+    // Toggle live "No matching records" placeholder
+    const noMatchesRow = document.getElementById('noMatchesLiveRow');
+    if (noMatchesRow) {
+        noMatchesRow.style.display = (visibleCount === 0 && rows.length > 0) ? "" : "none";
+    }
+}
+
+function resetLiveFilters() {
+    document.getElementById('liveSearchInput').value = '';
+    document.getElementById('liveStatusSelect').value = 'All';
+    document.getElementById('liveCategorySelect').value = 'All';
+    applyInstantFilters();
+}
+
+// ==========================================
+// 2. COLUMN HEADER CLICK SORTING ENGINE
+// ==========================================
+function handleHeaderSort(colIndex, colType, clickedHeader) {
+    if (currentSortCol === colIndex) {
+        currentSortOrder = (currentSortOrder === 'asc') ? 'desc' : 'asc';
+    } else {
+        currentSortCol = colIndex;
+        currentSortOrder = 'asc';
+    }
+
+    // Update UI Indicators on all headers
+    document.querySelectorAll('th.sortable-col').forEach(th => {
+        th.classList.remove('sort-active');
+        const indicator = th.querySelector('.sort-indicator');
+        if (indicator) indicator.innerText = '-';
+    });
+
+    clickedHeader.classList.add('sort-active');
+    const activeIndicator = clickedHeader.querySelector('.sort-indicator');
+    if (activeIndicator) {
+        activeIndicator.innerText = (currentSortOrder === 'asc') ? '▲' : '▼';
+    }
+
+    // Perform DOM Row Sorting
+    const tbody = document.getElementById('ingredientsTableBody');
+    const rows = Array.from(tbody.querySelectorAll('.ingredient-data-row'));
+
+    rows.sort((rowA, rowB) => {
+        const cellA = rowA.children[colIndex];
+        const cellB = rowB.children[colIndex];
+
+        let valA = cellA ? cellA.innerText.trim() : '';
+        let valB = cellB ? cellB.innerText.trim() : '';
+
+        if (colType === 'num') {
+            const numA = parseFloat(valA.replace(/[^0-9.-]+/g, '')) || 0.0;
+            const numB = parseFloat(valB.replace(/[^0-9.-]+/g, '')) || 0.0;
+            return (currentSortOrder === 'asc') ? numA - numB : numB - numA;
+        } else {
+            valA = valA.toLowerCase();
+            valB = valB.toLowerCase();
+            if (valA < valB) return (currentSortOrder === 'asc') ? -1 : 1;
+            if (valA > valB) return (currentSortOrder === 'asc') ? 1 : -1;
+            return 0;
+        }
+    });
+
+    // Re-append sorted rows to table body
+    rows.forEach(row => tbody.appendChild(row));
+    
+    // Ensure placeholder stays at bottom
+    const noMatchesRow = document.getElementById('noMatchesLiveRow');
+    if (noMatchesRow) tbody.appendChild(noMatchesRow);
+}
+
+// ==========================================
+// 3. PACKAGING FORMULA CALCULATORS
+// ==========================================
 function toggleAddIngredientTypeUI() {
     const isPrepped = document.getElementById('addIngredientTypeSelect').value === 'PREPPED';
     document.getElementById('addRawConversionCard').style.display = isPrepped ? 'none' : 'block';
@@ -498,11 +674,6 @@ function calculateBaseCostEdit(ingId) {
     document.getElementById('editConversionFormulaText' + ingId).innerHTML = 
         `Formula: 1 ${purchaseUnit} of ${packSize} ${baseUnit} @ PHP ${purchaseCost.toFixed(2)} = <b class="text-success">PHP ${costPerBase.toFixed(4)} per ${baseUnit}</b>`;
 }
-
-document.addEventListener('DOMContentLoaded', () => {
-    calculateBaseCostAdd();
-    toggleAddIngredientTypeUI();
-});
 
 const globalMasterIngredientNames = [
     {% for i in ingredients %}

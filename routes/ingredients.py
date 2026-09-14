@@ -43,7 +43,6 @@ def web_ingredients_tab(username):
             except ValueError:
                 cost_per_base = 0.0
                 
-            # If pack price was entered, auto-calculate exact base unit cost
             if purchase_cost > 0 and (cost_per_base == 0 or request.form.get('auto_calc') == 'yes'):
                 cost_per_base = purchase_cost / pack_size
             elif cost_per_base > 0 and purchase_cost == 0:
@@ -123,12 +122,11 @@ def web_ingredients_tab(username):
         db.update_all_product_costs()
         return redirect(f"/portal/{username}/ingredients?type=" + request.form.get('ingredient_type', 'RAW'))
 
-    # ===== GET DATA & APPLY FILTERS =====
+    # ===== GET DATA =====
     df = db.get_inventory_status()
     
     categories = []
     ingredients_list = []
-    total_count = 0
 
     current_type = request.args.get('type', 'RAW').upper().strip()
     if current_type not in ['RAW', 'PREPPED']:
@@ -147,38 +145,13 @@ def web_ingredients_tab(username):
             df['Purchase_Unit'] = df['Unit']
             
         if 'Category' in df.columns:
-            categories = sorted([c for c in df['Category'].dropna().unique() if c])
-
-        search = request.args.get('search', '').lower()
-        status = request.args.get('status', 'All')
-        category = request.args.get('category', 'All')
-        sort_by = request.args.get('sort_by', 'name')
-        order = request.args.get('order', 'asc')
+            categories = sorted([c for c in df['Category'].dropna().unique() if str(c).strip()])
 
         df = df[df['Ingredient_Type'] == current_type]
 
-        if search:
-            df = df[df['Ingredient_Name'].str.lower().str.contains(search) | 
-                    df['Ingredient_ID'].str.lower().str.contains(search)]
-            
-        if status != 'All':
-            df = df[df['Status'] == status]
+        if 'Ingredient_Name' in df.columns:
+            df = df.sort_values('Ingredient_Name', ascending=True)
 
-        if category != 'All':
-            df = df[df['Category'] == category]
-
-        ascending = (order == 'asc')
-        sort_map = {
-            'name': 'Ingredient_Name', 
-            'stock': 'Current_Stock', 
-            'cost': 'Cost_Per_Unit',
-            'id': 'Ingredient_ID',
-            'category': 'Category'
-        }
-        col = sort_map.get(sort_by, 'name')
-        df = df.sort_values(col, ascending=ascending)
-
-        total_count = len(df)
         ingredients_list = df.to_dict('records')
 
     return render_template(
@@ -186,12 +159,6 @@ def web_ingredients_tab(username):
         username=username, 
         ingredients=ingredients_list, 
         categories=categories,
-        total_count=total_count,
         current_type=current_type,
-        error_msg=request.args.get('error', ''),
-        current_search=request.args.get('search', ''),
-        current_status=request.args.get('status', 'All'),
-        current_category=request.args.get('category', 'All'),
-        current_sort=request.args.get('sort_by', 'name'),
-        current_order=request.args.get('order', 'asc')
+        error_msg=request.args.get('error', '')
     )

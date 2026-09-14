@@ -1,4 +1,4 @@
-# routes/recipes.py - Advanced Recipes Studio Router Blueprint with Dynamic Parent-Variant Hierarchy
+# routes/recipes.py - Advanced Recipes Studio Router Blueprint with Active Item State Retention
 from flask import Blueprint, request, redirect, session, render_template, flash
 from modules.database import InventoryDB
 import sqlite3
@@ -17,7 +17,6 @@ def resolve_parent_and_variant(p):
     raw_parent = p.get('Parent_Item')
     raw_variant = p.get('Variant_Name')
     
-    # 1. Respect explicit database values if populated
     if raw_parent and str(raw_parent).strip().lower() not in ['nan', 'none', '', 'null']:
         parent = str(raw_parent).strip()
         variant = str(raw_variant).strip() if (raw_variant and str(raw_variant).strip().lower() not in ['nan', 'none', '', 'null']) else 'Regular'
@@ -25,21 +24,18 @@ def resolve_parent_and_variant(p):
 
     full_name = str(p.get('Product_Name') or '').strip()
     
-    # 2. Match Prefix Patterns: "Hot - Brown Sugar Coffee", "Iced- Americano Coffee", "Hot Cafe Mocha"
     prefix_match = re.match(r"^(Hot|Iced|Cold|Warm)\s*[-–—:]?\s*(.+)$", full_name, re.IGNORECASE)
     if prefix_match:
         variant = prefix_match.group(1).strip().capitalize()
         parent = prefix_match.group(2).strip()
         return parent, variant
 
-    # 3. Match Suffix Patterns: "Brown Sugar Coffee - Hot", "Americano (Iced)"
     suffix_match = re.match(r"^(.+?)\s*[-–—:(]\s*(Hot|Iced|Cold|Warm|12oz|16oz|22oz|Regular|Large)\)?$", full_name, re.IGNORECASE)
     if suffix_match:
         parent = suffix_match.group(1).strip()
         variant = suffix_match.group(2).strip().capitalize()
         return parent, variant
 
-    # 4. Standard Delimiter: "Product Family - Variant"
     delimiter_match = re.match(r"^([^-–—(]+)\s*[-–—]\s*(.+)$", full_name)
     if delimiter_match:
         part1 = delimiter_match.group(1).strip()
@@ -101,9 +97,9 @@ def web_recipes_tab(username):
     if request.method == 'POST':
         action = request.form.get('action_type')
         recipe_type = request.form.get('recipe_type', 'product').lower().strip()
-        target_id = request.form.get('product_id')
+        target_id = request.form.get('product_id', '').strip()
         
-        # SAVE / UPDATE FORMULA
+        # SAVE / UPDATE FORMULA (REDIRECTS WITH ACTIVE PRODUCT_ID)
         if action == 'save_recipe':
             ing_ids = request.form.getlist('ingredient_id[]')
             qtys = request.form.getlist('quantity[]')
@@ -155,7 +151,8 @@ def web_recipes_tab(username):
                 db.save_tab('Prep_Recipes', prep_df)
                 
             db.update_all_product_costs()
-            return redirect(f"/portal/{username}/recipes?tab={recipe_type}&msg=Formula specifications successfully saved.")
+            # Retain active product_id in redirect parameters
+            return redirect(f"/portal/{username}/recipes?tab={recipe_type}&product_id={target_id}&msg=Formula specifications successfully saved.")
             
         # DELETE SPECIFICATION OR INGREDIENT SHELL
         elif action == 'delete_recipe':
@@ -241,7 +238,7 @@ def web_recipes_tab(username):
         active_prod_df = products_df[products_df['Active'].astype(str).str.upper() == 'YES']
         all_products_list = active_prod_df.to_dict('records')
 
-    # SCENARIO A: PRODUCT RECIPES TAB (WITH PARENT-VARIANT FOLDERS)
+    # SCENARIO A: PRODUCT RECIPES TAB
     if current_tab == 'product':
         categories = sorted(list(set(p.get('Category', 'General') for p in all_products_list if p.get('Category')))) if all_products_list else []
         
@@ -270,7 +267,6 @@ def web_recipes_tab(username):
             profit = selling_price - total_cost
             margin = (profit / selling_price * 100) if selling_price > 0 else 0.0
             
-            # RESOLVE PARENT PRODUCT FAMILY & VARIANT LABEL
             parent_name, variant_name = resolve_parent_and_variant(p)
 
             recipe_obj = {
