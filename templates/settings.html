@@ -52,8 +52,24 @@
 <div class="module-subtitle">Manage system execution parameters, profile preferences, and role-based staff permissions fields.</div>
 
 {% if msg %}
-    <div class="alert-banner {% if 'Error' in msg %}alert-danger{% elif 'Sweep' in msg or 'Restoration' in msg or 'terminated' in msg %}alert-warning{% else %}alert-success{% endif %}">
+    <div class="alert-banner {% if 'Error' in msg %}alert-danger{% elif 'Sweep' in msg or 'Restoration' in msg or 'terminated' in msg or 'Notice' in msg or 'skipped' in msg %}alert-warning{% else %}alert-success{% endif %}">
         {{ msg }}
+    </div>
+{% endif %}
+
+{% if skipped_errors %}
+    <div class="alert-banner alert-warning" style="background: #242014; border: 1px solid #eab30866; color: #fef08a; margin-bottom: 25px;">
+        <div style="font-weight: bold; font-size: 14px; margin-bottom: 8px; color: #facc15;">
+            ⚠️ Unmatched Line Items (Skipped to Protect Database Integrity):
+        </div>
+        <p style="font-size: 12px; color: #cbd5e1; margin-bottom: 10px;">
+            The following lines in your CSV could not be matched to existing registered items. No duplicate or zero-cost phantom items were created. Please verify spelling or register them in their respective master catalog:
+        </p>
+        <ul style="margin: 0; padding-left: 20px; font-size: 12.5px; max-height: 180px; overflow-y: auto; font-family: monospace;">
+            {% for err in skipped_errors %}
+                <li style="margin-bottom: 3px;">{{ err }}</li>
+            {% endfor %}
+        </ul>
     </div>
 {% endif %}
 
@@ -225,9 +241,9 @@
         
         <div style="margin-top: 15px; padding-top: 15px; border-top: 1px dashed #3f3f46;">
             <p style="font-size: 12px; color: #cbd5e1; font-weight: bold; margin-bottom: 5px;">Formatting Instructions:</p>
-            <p style="font-size: 11px; color: #a1a1aa; margin-bottom: 5px;">* <b>Ingredients & Products:</b> To add entirely new items, leave the ID column blank. To bulk update existing items, keep the ID intact in your spreadsheet.</p>
+            <p style="font-size: 11px; color: #a1a1aa; margin-bottom: 5px;">* <b>Ingredients & Products:</b> To add entirely new items, leave the ID column blank. To bulk update existing items, keep the ID intact in your spreadsheet. Token-sorted matching automatically reconciles word order variations (e.g. "White Onion" vs "Onion White").</p>
             <p style="font-size: 11px; color: #a1a1aa; margin-bottom: 5px;">* <b>Menu Recipes:</b> Map Product_ID (or Product_Name), Ingredient_ID (or Ingredient_Name), Quantity_Required, and Unit (e.g., g, ml, pcs). Automatically updates retail food costs and profit margins.</p>
-            <p style="font-size: 11px; color: #a1a1aa; margin-bottom: 5px;">* <b>Kitchen Prep Recipes:</b> Map Prepped_ID (or Prepped_Name), Raw_Ingredient_ID (or Raw_Ingredient_Name), Quantity_Required, Unit, and Batch_Yield (e.g. 3424 g). Automatically calculates cost-per-UOM and registers prepped components.</p>
+            <p style="font-size: 11px; color: #a1a1aa; margin-bottom: 5px;">* <b>Kitchen Prep Recipes:</b> Map Prepped_ID (or Prepped_Name), Raw_Ingredient_ID (or Raw_Ingredient_Name), Quantity_Required, Unit, and Batch_Yield (e.g. 3424 g). Automatically calculates cost-per-UOM for in-house sub-assemblies.</p>
         </div>
     </div>
 

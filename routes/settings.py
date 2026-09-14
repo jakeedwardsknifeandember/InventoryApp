@@ -1,4 +1,4 @@
-# routes/settings.py - Enterprise Settings Engine with Multi-Encoding CSV Sync, Prep Sub-Recipes & Auto-Cost Reconciliation
+# routes/settings.py - Enterprise Settings Engine with Multi-Encoding CSV Sync, Token-Sorted Key Matching & Integrity Guard
 from flask import Blueprint, request, redirect, session, render_template, send_file
 from modules.database import InventoryDB
 import sqlite3
@@ -6,10 +6,92 @@ import pandas as pd
 from datetime import datetime
 import os
 import io
+import re
 
 settings_bp = Blueprint('settings', __name__)
 
 USER_DB_PATH = "data/users.db"
+
+def normalize_text_key(text):
+    """Normalizes string by removing punctuation, brackets, dashes, and collapsing multiple spaces."""
+    if not text or pd.isna(text):
+        return ""
+    s = str(text).strip().lower()
+    s = re.sub(r'[\-_–—\(\)\[\]:/\\,]', ' ', s)
+    return re.sub(r'\s+', ' ', s).strip()
+
+def token_sorted_key(text):
+    """
+    Bag-of-words token-sorted key.
+    Resolves word inversions automatically:
+      'Onion White' -> 'onion white'
+      'White Onion' -> 'onion white'
+      'Hot - Americano Coffee' -> 'americano coffee hot'
+    """
+    norm = normalize_text_key(text)
+    if not norm:
+        return ""
+    return " ".join(sorted(norm.split()))
+
+def alphanumeric_text_key(text):
+    """Strict alphanumeric key that strips all whitespace and punctuation."""
+    if not text or pd.isna(text):
+        return ""
+    return re.sub(r'[^a-zA-Z0-9]', '', str(text).lower())
+
+def build_entity_resolver(id_name_pairs):
+    """
+    Constructs a multi-stage entity resolver supporting exact ID, exact name,
+    normalized spacing, bag-of-words token sorting, and alphanumeric matching.
+    """
+    valid_ids = set()
+    exact_map = {}
+    norm_map = {}
+    token_map = {}
+    alpha_map = {}
+
+    for item_id, name in id_name_pairs:
+        if not item_id or pd.isna(item_id):
+            continue
+        iid = str(item_id).strip()
+        valid_ids.add(iid)
+        if name and pd.notna(name):
+            n = str(name).strip()
+            exact_map[n.lower()] = iid
+            norm_map[normalize_text_key(n)] = iid
+            token_map[token_sorted_key(n)] = iid
+            alpha_map[alphanumeric_text_key(n)] = iid
+
+    def resolve(val_id, val_name):
+        # 1. Direct ID match
+        if val_id and pd.notna(val_id):
+            v_id_str = str(val_id).strip()
+            if v_id_str in valid_ids:
+                return v_id_str
+
+        # 2. Resilient Name match
+        for cand in [val_id, val_name]:
+            if not cand or pd.isna(cand):
+                continue
+            c = str(cand).strip()
+            if not c:
+                continue
+            c_low = c.lower()
+            if c_low in exact_map:
+                return exact_map[c_low]
+            c_norm = normalize_text_key(c)
+            if c_norm in norm_map:
+                return norm_map[c_norm]
+            c_token = token_sorted_key(c)
+            if c_token in token_map:
+                return token_map[c_token]
+            c_alpha = alphanumeric_text_key(c)
+            if c_alpha in alpha_map:
+                return alpha_map[c_alpha]
+
+        return None
+
+    return valid_ids, resolve
 
 def ensure_staff_table_exists(client_db_path):
     conn = sqlite3.connect(client_db_path)
@@ -35,7 +117,6 @@ def heal_database_integrity(conn):
     """
     cursor = conn.cursor()
     try:
-        # 1. Restore any prepped items missing from the Ingredients registry
         cursor.execute("""
             SELECT DISTINCT Prepped_Ingredient_ID FROM Prep_Recipes
             WHERE Prepped_Ingredient_ID NOT IN (SELECT Ingredient_ID FROM Ingredients)
@@ -49,14 +130,12 @@ def heal_database_integrity(conn):
                 ) VALUES (?, ?, 'g', 'Prep', 'PREPPED', 'Yes', 0.0, 0.0, 0.0)
             """, (orphan_id, orphan_id))
 
-        # 2. Reassert PREPPED classification for all sub-recipes
         cursor.execute("""
             UPDATE Ingredients 
             SET Ingredient_Type = 'PREPPED'
             WHERE Ingredient_ID IN (SELECT DISTINCT Prepped_Ingredient_ID FROM Prep_Recipes)
         """)
 
-        # 3. Heal RAW ingredient Cost_Per_Unit mathematical desynchronization
         cursor.execute("""
             UPDATE Ingredients
             SET Cost_Per_Unit = ROUND(Purchase_Cost / Pack_Size, 4)
@@ -70,7 +149,6 @@ def heal_database_integrity(conn):
               )
         """)
 
-        # 4. If Cost_Per_Unit > 0 but Purchase_Cost is 0 or NULL for RAW items
         cursor.execute("""
             UPDATE Ingredients
             SET Purchase_Cost = ROUND(Cost_Per_Unit * Pack_Size, 2)
@@ -213,7 +291,7 @@ def web_settings_tab(username):
                     feedback_msg = f"Restoration Fault during file overwrite sequencing: {str(e)}"
                     alert_type = "danger"
 
-        # 7. BULK CSV IMPORT (MULTI-ENCODING RESILIENT PARSER)
+        # 7. BULK CSV IMPORT (MULTI-ENCODING, TOKEN-SORTED MATCHING & REPORTING)
         elif action == 'bulk_import':
             target_table = request.form.get('import_target')
             uploaded_file = request.files.get('csv_file')
@@ -226,7 +304,6 @@ def web_settings_tab(username):
                     raw_bytes = uploaded_file.stream.read()
                     decoded_text = None
 
-                    # Resilient encoding cascade: checks UTF-8 variations and Windows Excel ANSI encodings
                     for enc in ['utf-8-sig', 'utf-8', 'cp1252', 'latin-1', 'iso-8859-1']:
                         try:
                             decoded_text = raw_bytes.decode(enc)
@@ -255,11 +332,11 @@ def web_settings_tab(username):
                         products_db = pd.read_sql("SELECT Product_ID, Product_Name FROM Products", conn)
                         ingredients_db = pd.read_sql("SELECT Ingredient_ID, Ingredient_Name, Unit FROM Ingredients", conn)
 
-                        valid_prod_ids = set(products_db['Product_ID'].astype(str).str.strip())
-                        prod_name_to_id = {str(n).strip().lower(): str(pid).strip() for pid, n in zip(products_db['Product_ID'], products_db['Product_Name']) if pd.notna(n)}
+                        prod_pairs = list(zip(products_db['Product_ID'], products_db['Product_Name']))
+                        valid_prod_ids, resolve_product = build_entity_resolver(prod_pairs)
 
-                        valid_ing_ids = set(ingredients_db['Ingredient_ID'].astype(str).str.strip())
-                        ing_name_to_id = {str(n).strip().lower(): str(iid).strip() for iid, n in zip(ingredients_db['Ingredient_ID'], ingredients_db['Ingredient_Name']) if pd.notna(n)}
+                        ing_pairs = list(zip(ingredients_db['Ingredient_ID'], ingredients_db['Ingredient_Name']))
+                        valid_ing_ids, resolve_ingredient = build_entity_resolver(ing_pairs)
                         ing_id_to_default_unit = {str(iid).strip(): str(u).strip() for iid, u in zip(ingredients_db['Ingredient_ID'], ingredients_db['Unit']) if pd.notna(u)}
 
                         recipes_by_product = {}
@@ -268,32 +345,18 @@ def web_settings_tab(username):
                         for row_idx, row in df.iterrows():
                             raw_pid = str(row[pid_col]).strip() if pid_col and pd.notna(row.get(pid_col)) else ""
                             raw_pname = str(row[pname_col]).strip() if pname_col and pd.notna(row.get(pname_col)) else ""
-                            
-                            resolved_pid = None
-                            if raw_pid and raw_pid in valid_prod_ids:
-                                resolved_pid = raw_pid
-                            elif raw_pname and raw_pname.lower() in prod_name_to_id:
-                                resolved_pid = prod_name_to_id[raw_pname.lower()]
-                            elif raw_pid and raw_pid.lower() in prod_name_to_id:
-                                resolved_pid = prod_name_to_id[raw_pid.lower()]
 
+                            resolved_pid = resolve_product(raw_pid, raw_pname)
                             if not resolved_pid:
-                                skipped_rows.append(f"Row {row_idx+2}: Unknown Product '{raw_pid or raw_pname}'")
+                                skipped_rows.append(f"Row {row_idx+2}: Unknown Product '{raw_pname or raw_pid}' (not found in Products catalog)")
                                 continue
 
                             raw_iid = str(row[iid_col]).strip() if iid_col and pd.notna(row.get(iid_col)) else ""
                             raw_iname = str(row[iname_col]).strip() if iname_col and pd.notna(row.get(iname_col)) else ""
-                            
-                            resolved_iid = None
-                            if raw_iid and raw_iid in valid_ing_ids:
-                                resolved_iid = raw_iid
-                            elif raw_iname and raw_iname.lower() in ing_name_to_id:
-                                resolved_iid = ing_name_to_id[raw_iname.lower()]
-                            elif raw_iid and raw_iid.lower() in ing_name_to_id:
-                                resolved_iid = ing_name_to_id[raw_iid.lower()]
 
+                            resolved_iid = resolve_ingredient(raw_iid, raw_iname)
                             if not resolved_iid:
-                                skipped_rows.append(f"Row {row_idx+2}: Unknown Ingredient '{raw_iid or raw_iname}'")
+                                skipped_rows.append(f"Row {row_idx+2}: Unknown Ingredient '{raw_iname or raw_iid}' (not found in Ingredients catalog)")
                                 continue
 
                             try:
@@ -302,18 +365,17 @@ def web_settings_tab(username):
                                 qty_val = 0.0
 
                             if qty_val <= 0:
-                                skipped_rows.append(f"Row {row_idx+2}: Invalid quantity for {resolved_pid}")
+                                skipped_rows.append(f"Row {row_idx+2}: Invalid quantity ({qty_val}) for product {resolved_pid}")
                                 continue
 
                             unit_val = str(row[unit_col]).strip() if unit_col and pd.notna(row.get(unit_col)) else ing_id_to_default_unit.get(resolved_iid, 'pcs')
-                            stored_qty = qty_val
 
                             if resolved_pid not in recipes_by_product:
                                 recipes_by_product[resolved_pid] = []
 
                             recipes_by_product[resolved_pid].append({
                                 'ingredient_id': resolved_iid,
-                                'quantity': stored_qty,
+                                'quantity': qty_val,
                                 'unit': unit_val
                             })
 
@@ -350,13 +412,20 @@ def web_settings_tab(username):
                                 details=f"Bulk imported recipe matrices for {len(recipes_by_product)} products ({total_lines} lines)"
                             )
 
-                            feedback_msg = f"Success: Successfully imported recipes for {len(recipes_by_product)} products ({total_lines} components). Food costs recalculated."
+                            feedback_msg = f"Successfully imported recipes for {len(recipes_by_product)} products ({total_lines} component lines)."
                             if skipped_rows:
-                                feedback_msg += f" Note: {len(skipped_rows)} rows skipped due to invalid item identifiers."
-                            alert_type = "success"
+                                session['skipped_errors'] = skipped_rows
+                                feedback_msg += f" Notice: {len(skipped_rows)} recipe line(s) skipped due to unmatched items. See details below."
+                                alert_type = "warning"
+                            else:
+                                alert_type = "success"
                         else:
                             conn.close()
-                            feedback_msg = "Error: No valid recipe rows found in CSV. Please verify Product and Ingredient names or IDs match existing catalog records."
+                            if skipped_rows:
+                                session['skipped_errors'] = skipped_rows
+                                feedback_msg = f"Import Notice: All {len(skipped_rows)} rows were skipped because items were not found in catalogs. See details below."
+                            else:
+                                feedback_msg = "Error: No valid recipe rows found in CSV spreadsheet."
                             alert_type = "danger"
 
                     # ===== SCENARIO B: KITCHEN PREP SUB-RECIPES IMPORT =====
@@ -371,22 +440,10 @@ def web_settings_tab(username):
                         unit_col = col_map.get('unit') or col_map.get('uom')
                         yield_col = col_map.get('batch_yield') or col_map.get('yield') or col_map.get('output_yield') or col_map.get('batch_output_yield')
 
-                        cursor = conn.cursor()
-                        cursor.execute("SELECT Ingredient_ID, LOWER(TRIM(Ingredient_Name)), Unit, Ingredient_Type FROM Ingredients")
-                        all_ings = cursor.fetchall()
-                        ing_name_to_id = {r[1]: r[0] for r in all_ings if r and r[1]}
-                        valid_ing_ids = {r[0] for r in all_ings if r and r[0]}
-                        ing_id_to_default_unit = {r[0]: (r[2] or 'g') for r in all_ings if r and r[0]}
-
-                        cursor.execute("SELECT Ingredient_ID FROM Ingredients WHERE Ingredient_ID LIKE 'ING%'")
-                        existing_ids = [r[0] for r in cursor.fetchall() if r and r[0]]
-                        nums = []
-                        for eid in existing_ids:
-                            try:
-                                nums.append(int(eid.replace('ING', '')))
-                            except ValueError:
-                                pass
-                        next_ing_num = max(nums) + 1 if nums else 1
+                        ingredients_db = pd.read_sql("SELECT Ingredient_ID, Ingredient_Name, Unit FROM Ingredients", conn)
+                        ing_pairs = list(zip(ingredients_db['Ingredient_ID'], ingredients_db['Ingredient_Name']))
+                        valid_ing_ids, resolve_ingredient = build_entity_resolver(ing_pairs)
+                        ing_id_to_default_unit = {str(iid).strip(): str(u).strip() for iid, u in zip(ingredients_db['Ingredient_ID'], ingredients_db['Unit']) if pd.notna(u)}
 
                         prep_recipes_by_item = {}
                         skipped_rows = []
@@ -395,51 +452,17 @@ def web_settings_tab(username):
                             raw_pid = str(row[prepped_id_col]).strip() if prepped_id_col and pd.notna(row.get(prepped_id_col)) else ""
                             raw_pname = str(row[prepped_name_col]).strip() if prepped_name_col and pd.notna(row.get(prepped_name_col)) else ""
 
-                            resolved_pid = None
-                            if raw_pid and raw_pid in valid_ing_ids:
-                                resolved_pid = raw_pid
-                            elif raw_pname and raw_pname.lower() in ing_name_to_id:
-                                resolved_pid = ing_name_to_id[raw_pname.lower()]
-                            elif raw_pid and raw_pid.lower() in ing_name_to_id:
-                                resolved_pid = ing_name_to_id[raw_pid.lower()]
-                            elif raw_pname or raw_pid:
-                                target_name = raw_pname if raw_pname else raw_pid
-                                if raw_pid and raw_pid.startswith('ING') and raw_pid not in valid_ing_ids:
-                                    new_pid = raw_pid
-                                else:
-                                    new_pid = f"ING{next_ing_num:03d}"
-                                    next_ing_num += 1
-                                    
-                                cursor.execute("""
-                                    INSERT INTO Ingredients (
-                                        Ingredient_ID, Ingredient_Name, Unit, Category,
-                                        Ingredient_Type, Active, Current_Stock, Min_Stock, Cost_Per_Unit
-                                    ) VALUES (?, ?, 'g', 'Prep', 'PREPPED', 'Yes', 0.0, 0.0, 0.0)
-                                """, (new_pid, target_name))
-                                
-                                valid_ing_ids.add(new_pid)
-                                ing_name_to_id[target_name.lower()] = new_pid
-                                ing_id_to_default_unit[new_pid] = 'g'
-                                resolved_pid = new_pid
-
+                            resolved_pid = resolve_ingredient(raw_pid, raw_pname)
                             if not resolved_pid:
-                                skipped_rows.append(f"Row {row_idx+2}: Unknown Prepped Item '{raw_pid or raw_pname}'")
+                                skipped_rows.append(f"Row {row_idx+2}: Prepped component '{raw_pname or raw_pid}' not found in Ingredients catalog. Register it under Ingredients first.")
                                 continue
 
-                            # Resolve Raw Ingredient Component
                             raw_iid = str(row[raw_id_col]).strip() if raw_id_col and pd.notna(row.get(raw_id_col)) else ""
                             raw_iname = str(row[raw_name_col]).strip() if raw_name_col and pd.notna(row.get(raw_name_col)) else ""
 
-                            resolved_iid = None
-                            if raw_iid and raw_iid in valid_ing_ids:
-                                resolved_iid = raw_iid
-                            elif raw_iname and raw_iname.lower() in ing_name_to_id:
-                                resolved_iid = ing_name_to_id[raw_iname.lower()]
-                            elif raw_iid and raw_iid.lower() in ing_name_to_id:
-                                resolved_iid = ing_name_to_id[raw_iid.lower()]
-
+                            resolved_iid = resolve_ingredient(raw_iid, raw_iname)
                             if not resolved_iid:
-                                skipped_rows.append(f"Row {row_idx+2}: Unknown Raw Ingredient '{raw_iid or raw_iname}'")
+                                skipped_rows.append(f"Row {row_idx+2}: Raw ingredient '{raw_iname or raw_iid}' not found in Ingredients catalog.")
                                 continue
 
                             try:
@@ -448,7 +471,7 @@ def web_settings_tab(username):
                                 qty_val = 0.0
 
                             if qty_val <= 0:
-                                skipped_rows.append(f"Row {row_idx+2}: Invalid quantity for {resolved_pid}")
+                                skipped_rows.append(f"Row {row_idx+2}: Invalid quantity ({qty_val}) for prepped item {resolved_pid}")
                                 continue
 
                             unit_val = str(row[unit_col]).strip() if unit_col and pd.notna(row.get(unit_col)) else ing_id_to_default_unit.get(resolved_iid, 'g')
@@ -512,13 +535,20 @@ def web_settings_tab(username):
                                 details=f"Bulk imported kitchen prep formulas for {len(prep_recipes_by_item)} components ({total_lines} lines)"
                             )
 
-                            feedback_msg = f"Success: Successfully imported kitchen prep blueprints for {len(prep_recipes_by_item)} prepped items ({total_lines} constituent lines). Yield and amortized costs updated."
+                            feedback_msg = f"Successfully imported kitchen prep blueprints for {len(prep_recipes_by_item)} items ({total_lines} constituent lines)."
                             if skipped_rows:
-                                feedback_msg += f" Note: {len(skipped_rows)} rows skipped due to invalid constituent names."
-                            alert_type = "success"
+                                session['skipped_errors'] = skipped_rows
+                                feedback_msg += f" Notice: {len(skipped_rows)} kitchen prep line(s) skipped due to unmatched items. See details below."
+                                alert_type = "warning"
+                            else:
+                                alert_type = "success"
                         else:
                             conn.close()
-                            feedback_msg = "Error: No valid kitchen prep rows found in CSV. Please verify prepped and raw ingredient names or IDs match existing records."
+                            if skipped_rows:
+                                session['skipped_errors'] = skipped_rows
+                                feedback_msg = f"Import Notice: All {len(skipped_rows)} rows were skipped because constituents were not found in Ingredients. See details below."
+                            else:
+                                feedback_msg = "Error: No valid kitchen prep rows found in CSV spreadsheet."
                             alert_type = "danger"
 
                     # ===== SCENARIO C: INGREDIENTS OR PRODUCTS SAFE UPSERT =====
@@ -533,18 +563,19 @@ def web_settings_tab(username):
                         cursor.execute(f"PRAGMA table_info({target_table_name})")
                         valid_cols = [row[1] for row in cursor.fetchall()]
 
-                        # Build existing index maps
                         if is_ingredients:
-                            cursor.execute("SELECT Ingredient_ID, LOWER(TRIM(Ingredient_Name)), Ingredient_Type FROM Ingredients")
+                            cursor.execute("SELECT Ingredient_ID, Ingredient_Name, Ingredient_Type FROM Ingredients")
                             existing_rows = cursor.fetchall()
-                            name_to_id = {r[1]: r[0] for r in existing_rows if r and r[1]}
                             id_to_type = {r[0]: (r[2] or 'RAW') for r in existing_rows if r and r[0]}
                             occupied_ids = set(id_to_type.keys())
+                            ing_pairs = [(r[0], r[1]) for r in existing_rows]
+                            valid_ids, resolve_existing = build_entity_resolver(ing_pairs)
                         else:
-                            cursor.execute("SELECT Product_ID, LOWER(TRIM(Product_Name)) FROM Products")
+                            cursor.execute("SELECT Product_ID, Product_Name FROM Products")
                             existing_rows = cursor.fetchall()
-                            name_to_id = {r[1]: r[0] for r in existing_rows if r and r[1]}
                             occupied_ids = set(r[0] for r in existing_rows if r and r[0])
+                            prod_pairs = [(r[0], r[1]) for r in existing_rows]
+                            valid_ids, resolve_existing = build_entity_resolver(prod_pairs)
 
                         cursor.execute(f"SELECT {id_col} FROM {target_table_name} WHERE {id_col} LIKE '{prefix}%'")
                         existing_ids = [r[0] for r in cursor.fetchall() if r and r[0]]
@@ -565,7 +596,6 @@ def web_settings_tab(username):
                             if not name_val or name_val.lower() == 'nan': 
                                 continue
                             
-                            clean_name = name_val.lower()
                             csv_id = str(row_dict.get(id_col, '')).strip()
 
                             # STRICT COMMERCIAL PACKAGING CONSISTENCY ENGINE
@@ -596,10 +626,11 @@ def web_settings_tab(username):
                                     row_dict['Cost_Per_Unit'] = c_unit
                                     row_dict['Purchase_Cost'] = round(c_unit * p_size, 2)
                             
-                            # 1. MATCH BY NAME (PROTECTS EXISTING FOREIGN KEYS)
-                            if clean_name in name_to_id:
-                                target_id = name_to_id[clean_name]
-                                
+                            # RESOLVE TARGET ID USING TOKEN-SORTED & EXACT MATCHING
+                            target_id = resolve_existing(csv_id, name_val)
+
+                            # 1. MATCH FOUND (SAFE IN-PLACE UPDATE WITHOUT DUPLICATION)
+                            if target_id:
                                 if is_ingredients:
                                     is_prepped = (id_to_type.get(target_id) == 'PREPPED')
                                     if is_prepped and 'Ingredient_Type' in row_dict and row_dict['Ingredient_Type'] != 'PREPPED':
@@ -611,7 +642,7 @@ def web_settings_tab(username):
                                     update_values = tuple([row_dict[k] for k in update_cols] + [target_id])
                                     cursor.execute(f"UPDATE {target_table_name} SET {set_clause} WHERE {id_col} = ?", update_values)
 
-                            # 2. BRAND NEW ITEM (WITH ID COLLISION SHIELD)
+                            # 2. GENUINELY BRAND NEW ITEM (WITH ID COLLISION SHIELD)
                             else:
                                 if csv_id and csv_id in occupied_ids:
                                     target_id = f"{prefix}{next_seq_num:03d}"
@@ -624,7 +655,6 @@ def web_settings_tab(username):
 
                                 row_dict[id_col] = target_id
                                 occupied_ids.add(target_id)
-                                name_to_id[clean_name] = target_id
 
                                 if is_ingredients and 'Ingredient_Type' not in row_dict:
                                     row_dict['Ingredient_Type'] = 'RAW'
@@ -796,18 +826,20 @@ def web_settings_tab(username):
 
         return redirect(f"/portal/{username}/settings?msg={feedback_msg}&alert_type={alert_type}")
 
-    # ===== GET METHOD: HEAL INTEGRITY ON VIEW =====
+    # ===== GET METHOD: HEAL INTEGRITY & RETRIEVE NOTICES =====
     conn = sqlite3.connect(client_db_path)
     heal_database_integrity(conn)
     staff_df = pd.read_sql("SELECT * FROM Staff_Accounts", conn)
     conn.close()
     
     staff_list = staff_df.to_dict(orient='records') if not staff_df.empty else []
+    skipped_errors = session.pop('skipped_errors', None)
 
     return render_template(
         'settings.html', 
         username=username, 
         msg=request.args.get('msg', feedback_msg),
         alert_type=request.args.get('alert_type', alert_type),
-        staff_members=staff_list
+        staff_members=staff_list,
+        skipped_errors=skipped_errors
     )
