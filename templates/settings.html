@@ -10,10 +10,10 @@
     .card-title { margin-top: 0; margin-bottom: 15px; font-size: 18px; font-weight: bold; }
     
     label { font-size: 12.5px; color: #cbd5e1; font-weight: 600; display: block; margin-bottom: 6px; }
-    input[type="text"], input[type="password"], select { 
+    input[type="text"], input[type="password"], input[type="number"], select { 
         width: 100%; padding: 10px; background: #242424; color: #fff; border: 1px solid #3f3f46; border-radius: 4px; margin-bottom: 15px; box-sizing: border-box; font-size: 13.5px;
     }
-    input[type="text"]:focus, input[type="password"]:focus, select:focus {
+    input[type="text"]:focus, input[type="password"]:focus, input[type="number"]:focus, select:focus {
         border-color: #3b8ed0; outline: none; background: #2a2a2a;
     }
     
@@ -60,7 +60,7 @@
 {% if skipped_errors %}
     <div class="alert-banner alert-warning" style="background: #242014; border: 1px solid #eab30866; color: #fef08a; margin-bottom: 25px;">
         <div style="font-weight: bold; font-size: 14px; margin-bottom: 8px; color: #facc15;">
-            ⚠️ Unmatched Line Items (Skipped to Protect Database Integrity):
+            Notice: Unmatched Line Items (Skipped to Protect Database Integrity):
         </div>
         <p style="font-size: 12px; color: #cbd5e1; margin-bottom: 10px;">
             The following lines in your CSV could not be matched to existing registered items. No duplicate or zero-cost phantom items were created. Please verify spelling or register them in their respective master catalog:
@@ -93,6 +93,42 @@
             <input type="password" name="new_password" required placeholder="Minimum 8 characters recommended...">
             
             <input type="submit" value="Commit Security Update" class="action-btn btn-blue" style="width:100%;">
+        </form>
+    </div>
+
+    <div class="settings-card" style="border-color: #f59e0b;">
+        <h3 class="card-title" style="color:#f59e0b;">Inventory Audit & Governance Policy</h3>
+        <p style="font-size:13px; color:#a1a1aa; line-height:1.5; margin-bottom:15px;">Configure store counting transparency, tolerance limits, and high-loss triggers for shift inventory audits.</p>
+        <form method="post">
+            <input type="hidden" name="action_type" value="save_audit_policy">
+            
+            <div style="margin-bottom: 15px;">
+                <label class="maintenance-checkbox-row" style="color: #ffffff; margin-bottom: 6px;">
+                    <input type="checkbox" name="enforce_blind_count" value="yes" {% if store_settings.get('enforce_blind_count', 'yes') == 'yes' %}checked{% endif %}>
+                    <span>Enforce Blind Counting (Hide Book Balance)</span>
+                </label>
+                <small style="color: #94a3b8; display: block; font-size: 11.5px; line-height: 1.4; margin-left: 4px;">
+                    When enabled, physical count sheets mask current book stock numbers so line counters enter raw shelf counts without confirmation bias.
+                </small>
+            </div>
+            
+            <div style="margin-bottom: 15px;">
+                <label>Variance Alert Threshold (% of Book Stock):</label>
+                <input type="number" step="0.1" min="0" name="variance_alert_pct" value="{{ store_settings.get('variance_alert_pct', '2.0') }}" required placeholder="e.g. 2.0" style="margin-bottom: 6px;">
+                <small style="color: #94a3b8; display: block; font-size: 11.5px; line-height: 1.4; margin-left: 4px;">
+                    Any discrepancy exceeding this percentage is flagged as high-risk and requires mandatory supervisor explanation.
+                </small>
+            </div>
+
+            <div style="margin-bottom: 20px;">
+                <label>Critical Financial Loss Trigger (PHP Value):</label>
+                <input type="number" step="1.0" min="0" name="variance_alert_value" value="{{ store_settings.get('variance_alert_value', '100.0') }}" required placeholder="e.g. 100.00" style="margin-bottom: 6px;">
+                <small style="color: #94a3b8; display: block; font-size: 11.5px; line-height: 1.4; margin-left: 4px;">
+                    Flag line items where the monetary value of lost inventory exceeds this peso amount.
+                </small>
+            </div>
+
+            <input type="submit" value="Save Audit Policy" class="action-btn btn-green" style="width:100%;">
         </form>
     </div>
 </div>

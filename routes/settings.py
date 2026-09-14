@@ -93,6 +93,36 @@ def build_entity_resolver(id_name_pairs):
 
     return valid_ids, resolve
 
+def ensure_store_settings_exist(client_db_path):
+    """Ensures the Store_Settings key-value configuration table exists with defaults."""
+    conn = sqlite3.connect(client_db_path)
+    cursor = conn.cursor()
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS Store_Settings (
+            Setting_Key TEXT PRIMARY KEY,
+            Setting_Value TEXT
+        )
+    """)
+    default_settings = {
+        'enforce_blind_count': 'yes',
+        'variance_alert_pct': '2.0',
+        'variance_alert_value': '100.0'
+    }
+    for k, v in default_settings.items():
+        cursor.execute("INSERT OR IGNORE INTO Store_Settings (Setting_Key, Setting_Value) VALUES (?, ?)", (k, v))
+    conn.commit()
+    conn.close()
+
+def get_store_settings(client_db_path):
+    """Retrieves store governance and operational policies dictionary."""
+    ensure_store_settings_exist(client_db_path)
+    conn = sqlite3.connect(client_db_path)
+    cursor = conn.cursor()
+    cursor.execute("SELECT Setting_Key, Setting_Value FROM Store_Settings")
+    settings_dict = {row[0]: row[1] for row in cursor.fetchall()}
+    conn.close()
+    return settings_dict
+
 def ensure_staff_table_exists(client_db_path):
     conn = sqlite3.connect(client_db_path)
     cursor = conn.cursor()
@@ -824,6 +854,46 @@ def web_settings_tab(username):
                 feedback_msg = "Safety Cancel: Database reset aborted. You must type the keyword 'RESET' exactly to clear storage tables."
                 alert_type = "danger"
 
+        # 11. SAVE INVENTORY AUDIT & GOVERNANCE POLICY
+        elif action == 'save_audit_policy':
+            enforce_blind = 'yes' if request.form.get('enforce_blind_count') == 'yes' else 'no'
+            try:
+                alert_pct = float(request.form.get('variance_alert_pct', 2.0) or 2.0)
+                if alert_pct < 0:
+                    alert_pct = 0.0
+            except (ValueError, TypeError):
+                alert_pct = 2.0
+                
+            try:
+                alert_val = float(request.form.get('variance_alert_value', 100.0) or 100.0)
+                if alert_val < 0:
+                    alert_val = 0.0
+            except (ValueError, TypeError):
+                alert_val = 100.0
+
+            ensure_store_settings_exist(client_db_path)
+            conn = sqlite3.connect(client_db_path)
+            cursor = conn.cursor()
+            cursor.execute("INSERT OR REPLACE INTO Store_Settings (Setting_Key, Setting_Value) VALUES ('enforce_blind_count', ?)", (enforce_blind,))
+            cursor.execute("INSERT OR REPLACE INTO Store_Settings (Setting_Key, Setting_Value) VALUES ('variance_alert_pct', ?)", (str(alert_pct),))
+            cursor.execute("INSERT OR REPLACE INTO Store_Settings (Setting_Key, Setting_Value) VALUES ('variance_alert_value', ?)", (str(alert_val),))
+            conn.commit()
+            conn.close()
+
+            if hasattr(client_db, 'log_user_action'):
+                try:
+                    client_db.log_user_action(
+                        username=username,
+                        action_type="UPDATE_AUDIT_POLICY",
+                        module="Settings",
+                        details=f"Updated audit policy: Blind Counting={enforce_blind}, Alert Threshold={alert_pct}%, Loss Trigger=PHP {alert_val:.2f}"
+                    )
+                except Exception:
+                    pass
+
+            feedback_msg = "Success: Inventory Audit & Governance policy updated successfully."
+            alert_type = "success"
+
         return redirect(f"/portal/{username}/settings?msg={feedback_msg}&alert_type={alert_type}")
 
     # ===== GET METHOD: HEAL INTEGRITY & RETRIEVE NOTICES =====
@@ -834,6 +904,7 @@ def web_settings_tab(username):
     
     staff_list = staff_df.to_dict(orient='records') if not staff_df.empty else []
     skipped_errors = session.pop('skipped_errors', None)
+    store_settings = get_store_settings(client_db_path)
 
     return render_template(
         'settings.html', 
@@ -841,5 +912,6 @@ def web_settings_tab(username):
         msg=request.args.get('msg', feedback_msg),
         alert_type=request.args.get('alert_type', alert_type),
         staff_members=staff_list,
-        skipped_errors=skipped_errors
+        skipped_errors=skipped_errors,
+        store_settings=store_settings
     )
