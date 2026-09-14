@@ -1,9 +1,31 @@
+# routes/modifiers.py - Enterprise Modifier Recipe & Portion Costing Controller
 from flask import Blueprint, request, redirect, session, render_template, flash
 from modules.database import InventoryDB
 import pandas as pd
 import sqlite3
 
 modifiers_bp = Blueprint('modifiers', __name__)
+
+def normalize_recipe_qty(qty, selected_unit, base_unit):
+    """Normalizes recipe input quantity into the ingredient's actual database base unit."""
+    try:
+        qty = float(qty)
+    except (ValueError, TypeError):
+        qty = 0.0
+        
+    s_unit = str(selected_unit).strip().lower()
+    b_unit = str(base_unit).strip().lower()
+
+    if b_unit == 'g':
+        return (qty * 1000.0, 'g') if s_unit == 'kg' else (qty, 'g')
+    elif b_unit in ['ml', 'l']:
+        if b_unit == 'ml':
+            return (qty * 1000.0, 'ml') if s_unit == 'l' else (qty, 'ml')
+        elif b_unit == 'l':
+            return (qty / 1000.0, 'L') if s_unit == 'ml' else (qty, 'L')
+    elif b_unit == 'kg':
+        return (qty / 1000.0, 'kg') if s_unit == 'g' else (qty, 'kg')
+    return (qty, selected_unit)
 
 @modifiers_bp.route('/portal/<username>/modifiers', methods=['GET', 'POST'])
 def web_modifiers_tab(username):
@@ -24,7 +46,10 @@ def web_modifiers_tab(username):
         
         if action == 'add_modifier':
             mod_name = request.form.get('modifier_name', '').strip()
-            price = float(request.form.get('price', 0.0))
+            try:
+                price = float(request.form.get('price', 0.0) or 0.0)
+            except (ValueError, TypeError):
+                price = 0.0
             
             mods_df = db.read_tab('Modifiers')
             mod_id = f"MOD{len(mods_df) + 1:03d}"
@@ -45,31 +70,64 @@ def web_modifiers_tab(username):
             qtys = request.form.getlist('quantity[]')
             units = request.form.getlist('unit[]')
             
+            ingredients_df = db.read_tab('Ingredients')
+            base_unit_map = {}
+            if not ingredients_df.empty:
+                base_unit_map = dict(zip(ingredients_df['Ingredient_ID'].astype(str), ingredients_df['Unit'].astype(str)))
+
             recipe_items = []
             for i, q, u in zip(ing_ids, qtys, units):
                 if i and q:
-                    val = float(q)
-                    if u in ['g', 'ml']:
-                        val = val / 1000.0
+                    b_unit = base_unit_map.get(str(i), u)
+                    norm_qty, norm_unit = normalize_recipe_qty(q, u, b_unit)
                     recipe_items.append({
-                        'ingredient_id': i,
-                        'quantity': val,
-                        'unit': u
+                        'ingredient_id': str(i).strip(),
+                        'quantity': norm_qty,
+                        'unit': norm_unit
                     })
             
-            db.save_modifier_recipe(mod_id, recipe_items, username=username)
+            # Resilient direct commit to Modifier_Recipes table
+            conn = sqlite3.connect(db_path, timeout=20.0)
+            cursor = conn.cursor()
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS Modifier_Recipes (
+                    Modifier_ID TEXT,
+                    Ingredient_ID TEXT,
+                    Quantity_Required REAL,
+                    Unit TEXT
+                )
+            """)
+            cursor.execute("DELETE FROM Modifier_Recipes WHERE Modifier_ID = ?", (mod_id,))
+            for item in recipe_items:
+                cursor.execute("""
+                    INSERT INTO Modifier_Recipes (Modifier_ID, Ingredient_ID, Quantity_Required, Unit)
+                    VALUES (?, ?, ?, ?)
+                """, (mod_id, item['ingredient_id'], item['quantity'], item['unit']))
+            conn.commit()
+            conn.close()
+
+            if hasattr(db, 'save_modifier_recipe'):
+                try:
+                    db.save_modifier_recipe(mod_id, recipe_items, username=username)
+                except Exception:
+                    pass
+
             flash("Modifier ingredient recipe updated successfully.", 'success')
 
         elif action == 'delete_modifier':
             mod_id = request.form.get('modifier_id')
             mods_df = db.read_tab('Modifiers')
-            mods_df = mods_df[mods_df['Modifier_ID'] != mod_id]
-            db.save_tab('Modifiers', mods_df)
+            if not mods_df.empty:
+                mods_df = mods_df[mods_df['Modifier_ID'] != mod_id]
+                db.save_tab('Modifiers', mods_df)
             
-            mod_recipes_df = db.read_tab('Modifier_Recipes')
-            if not mod_recipes_df.empty:
-                mod_recipes_df = mod_recipes_df[mod_recipes_df['Modifier_ID'] != mod_id]
-                db.save_tab('Modifier_Recipes', mod_recipes_df)
+            conn = sqlite3.connect(db_path, timeout=20.0)
+            cursor = conn.cursor()
+            cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='Modifier_Recipes'")
+            if cursor.fetchone():
+                cursor.execute("DELETE FROM Modifier_Recipes WHERE Modifier_ID = ?", (mod_id,))
+                conn.commit()
+            conn.close()
 
             flash("Modifier deleted successfully.", 'info')
 
@@ -103,34 +161,49 @@ def web_modifiers_tab(username):
     modifiers_list = []
 
     if not mods_df.empty:
+        conn = sqlite3.connect(db_path, timeout=20.0)
+        cursor = conn.cursor()
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS Modifier_Recipes (
+                Modifier_ID TEXT,
+                Ingredient_ID TEXT,
+                Quantity_Required REAL,
+                Unit TEXT
+            )
+        """)
+
         for _, m in mods_df.iterrows():
-            m_id = m['Modifier_ID']
-            recipe_df = db.get_modifier_recipes(m_id)
+            m_id = str(m['Modifier_ID'])
+            
+            cursor.execute("""
+                SELECT mr.Ingredient_ID, COALESCE(i.Ingredient_Name, mr.Ingredient_ID), 
+                       mr.Quantity_Required, mr.Unit, COALESCE(i.Cost_Per_Unit, 0.0)
+                FROM Modifier_Recipes mr
+                LEFT JOIN Ingredients i ON mr.Ingredient_ID = i.Ingredient_ID
+                WHERE mr.Modifier_ID = ?
+            """, (m_id,))
+            recipe_rows = cursor.fetchall()
+
             items = []
             total_cost = 0.0
             
-            if not recipe_df.empty:
-                for _, r in recipe_df.iterrows():
-                    qty = float(r.get('Quantity_Required', 0))
-                    cost = float(r.get('Cost_Per_Unit', 0))
-                    unit = r.get('Unit', '')
-                    
-                    line_cost = qty * cost
-                    total_cost += line_cost
-                    
-                    display_qty = qty
-                    if unit in ['g', 'ml']:
-                        display_qty = qty * 1000.0
-                        
-                    items.append({
-                        'Ingredient_ID': r.get('Ingredient_ID'),
-                        'Ingredient_Name': r.get('Ingredient_Name'),
-                        'Quantity': display_qty,
-                        'Unit': unit,
-                        'Cost': line_cost
-                    })
+            for r in recipe_rows:
+                qty = float(r[2] or 0.0)
+                cost = float(r[4] or 0.0)
+                unit = str(r[3] or '')
+                
+                line_cost = qty * cost
+                total_cost += line_cost
 
-            price = float(m.get('Price', 0))
+                items.append({
+                    'Ingredient_ID': str(r[0]),
+                    'Ingredient_Name': str(r[1]),
+                    'Quantity': qty,
+                    'Unit': unit,
+                    'Cost': line_cost
+                })
+
+            price = float(pd.to_numeric(m.get('Price', 0.0), errors='coerce') or 0.0)
             profit = price - total_cost
 
             modifiers_list.append({
@@ -141,6 +214,8 @@ def web_modifiers_tab(username):
                 'Profit': profit,
                 'Items': items
             })
+
+        conn.close()
 
     return render_template(
         'modifiers.html',

@@ -28,7 +28,7 @@ def web_corrections_tab(username):
         action = request.form.get('action_type')
         operator = session.get('logged_in_user', 'System')
         
-        # SALES VOID PROCESSING
+        # SALES VOID PROCESSING (SUPPORTS BOTH FINISHED PRODUCTS & MODIFIERS)
         if action == 'void_sale':
             sale_id = request.form.get('sale_id', '').strip()
             void_reason = request.form.get('void_reason', '').strip()
@@ -40,15 +40,24 @@ def web_corrections_tab(username):
                 conn = sqlite3.connect(db_path, timeout=20.0)
                 cursor = conn.cursor()
                 
-                cursor.execute("SELECT Product_ID, Quantity, Total_Amount, Sale_Date FROM Sales WHERE Sale_ID = ?", (sale_id,))
+                # Fetch original sale record
+                cursor.execute("""
+                    SELECT Product_ID, Product_Name, Quantity, Price, Total_Amount, Sale_Date 
+                    FROM Sales 
+                    WHERE Sale_ID = ?
+                """, (sale_id,))
                 sale_record = cursor.fetchone()
                 
                 if not sale_record:
                     conn.close()
                     return redirect(f"/portal/{username}/corrections?error=Database Error: Sale ID {sale_id} not found.")
                     
-                p_id, original_qty, original_amt, original_sale_date = sale_record
-                
+                p_id, p_name, original_qty, price, original_amt, original_sale_date = sale_record
+                p_name = p_name or p_id
+                original_qty = float(original_qty or 0.0)
+                price = float(price or 0.0)
+                original_amt = float(original_amt or 0.0)
+
                 system_time_exact = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
                 void_sale_id = f"VOID-{sale_id}"
                 
@@ -57,38 +66,91 @@ def web_corrections_tab(username):
                     conn.close()
                     return redirect(f"/portal/{username}/corrections?error=Duplicate Action: This transaction has already been voided.")
 
+                # Insert offsetting negative void record into Sales
                 cursor.execute("""
-                    INSERT INTO Sales (Sale_ID, Product_ID, Quantity, Sale_Date, Sale_Time, Total_Amount, Unit_Cost, Entry_Reason, System_Timestamp)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-                """, (void_sale_id, p_id, -original_qty, original_sale_date, datetime.now().strftime("%H:%M:%S"), -original_amt, 0.0, f"[VOIDED] Reason: {void_reason}", system_time_exact))
-                
+                    INSERT INTO Sales (Sale_ID, Sale_Date, Sale_Time, Product_ID, Product_Name, Quantity, Price, Total_Amount, Reason, Recorded_By)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """, (
+                    void_sale_id, 
+                    original_sale_date, 
+                    datetime.now().strftime("%H:%M:%S"), 
+                    p_id, 
+                    f"[VOID] {p_name}", 
+                    -original_qty, 
+                    price, 
+                    -original_amt, 
+                    f"[VOIDED] Reason: {void_reason}", 
+                    operator
+                ))
+
+                # RESTOCK DEDUCTED INGREDIENTS (AUTOMATICALLY HANDLES BOTH PRODUCTS AND MODIFIERS)
+                restocked_summary = []
+
+                # 1. Check Modifier_Recipes (for Modifiers like Extra Espresso Shot, Oat Milk)
+                cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='Modifier_Recipes'")
+                if cursor.fetchone():
+                    cursor.execute("SELECT Ingredient_ID, Quantity_Required, Unit FROM Modifier_Recipes WHERE Modifier_ID = ?", (p_id,))
+                    mod_recipe_rows = cursor.fetchall()
+                    for ing_id, req_qty, rec_unit in mod_recipe_rows:
+                        tot_refund = float(req_qty or 0.0) * original_qty
+                        cursor.execute("SELECT Current_Stock, Ingredient_Name, Unit FROM Ingredients WHERE Ingredient_ID = ?", (ing_id,))
+                        ing_match = cursor.fetchone()
+                        if ing_match:
+                            current_stock, ing_name, base_unit = ing_match
+                            current_stock = float(current_stock or 0.0)
+                            new_stock = current_stock + tot_refund
+                            cursor.execute("UPDATE Ingredients SET Current_Stock = ? WHERE Ingredient_ID = ?", (new_stock, ing_id))
+                            cursor.execute("""
+                                INSERT INTO Inventory_Audit_Log (Audit_ID, Date, Ingredient_Name, Theoretical, Physical, Variance, Notes)
+                                VALUES (?, ?, ?, ?, ?, ?, ?)
+                            """, (
+                                void_sale_id, 
+                                system_time_exact, 
+                                ing_name, 
+                                current_stock, 
+                                new_stock, 
+                                tot_refund, 
+                                f"VOID RESTORE: {original_qty:g}x Modifier ({p_name}) | Reason: {void_reason}"
+                            ))
+                            restocked_summary.append(f"{tot_refund:g} {base_unit or ''} {ing_name}".strip())
+
+                # 2. Check Standard Product Recipes
+                cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='Recipes'")
+                if cursor.fetchone():
+                    cursor.execute("SELECT Ingredient_ID, Quantity_Required, Unit FROM Recipes WHERE Product_ID = ?", (p_id,))
+                    prod_recipe_rows = cursor.fetchall()
+                    for ing_id, req_qty, rec_unit in prod_recipe_rows:
+                        tot_refund = float(req_qty or 0.0) * original_qty
+                        cursor.execute("SELECT Current_Stock, Ingredient_Name, Unit FROM Ingredients WHERE Ingredient_ID = ?", (ing_id,))
+                        ing_match = cursor.fetchone()
+                        if ing_match:
+                            current_stock, ing_name, base_unit = ing_match
+                            current_stock = float(current_stock or 0.0)
+                            new_stock = current_stock + tot_refund
+                            cursor.execute("UPDATE Ingredients SET Current_Stock = ? WHERE Ingredient_ID = ?", (new_stock, ing_id))
+                            cursor.execute("""
+                                INSERT INTO Inventory_Audit_Log (Audit_ID, Date, Ingredient_Name, Theoretical, Physical, Variance, Notes)
+                                VALUES (?, ?, ?, ?, ?, ?, ?)
+                            """, (
+                                void_sale_id, 
+                                system_time_exact, 
+                                ing_name, 
+                                current_stock, 
+                                new_stock, 
+                                tot_refund, 
+                                f"VOID RESTORE: {original_qty:g}x Product ({p_name}) | Reason: {void_reason}"
+                            ))
+                            restocked_summary.append(f"{tot_refund:g} {base_unit or ''} {ing_name}".strip())
+
                 conn.commit()
                 conn.close()
 
-                client_db.update_inventory_from_sale(p_id, -original_qty)
+                client_db.update_all_product_costs()
 
-                audit_df = client_db.read_tab('Inventory_Audit_Log')
-                if audit_df is None or audit_df.empty:
-                    audit_df = pd.DataFrame(columns=['Audit_ID', 'Date', 'Ingredient_Name', 'Theoretical', 'Physical', 'Variance', 'Notes', 'Updated_By'])
-                
-                if 'Updated_By' not in audit_df.columns:
-                    audit_df['Updated_By'] = 'System'
-
-                new_audit = {
-                    'Audit_ID': void_sale_id,
-                    'Date': system_time_exact,
-                    'Ingredient_Name': f"Product Refund: {p_id}",
-                    'Theoretical': 0.0, 
-                    'Physical': 0.0,
-                    'Variance': original_qty, 
-                    'Notes': f"MANAGER VOID AUTHORIZED. Reason: {void_reason}",
-                    'Updated_By': operator
-                }
-                
-                audit_df = pd.concat([audit_df, pd.DataFrame([new_audit])], ignore_index=True)
-                client_db.save_tab('Inventory_Audit_Log', audit_df)
-
-                feedback_msg = f"Success: Sale {sale_id} voided. Revenue deducted, inventory restocked, and audit log stamped."
+                if restocked_summary:
+                    feedback_msg = f"Success: Sale {sale_id} voided. Restored to inventory: {', '.join(restocked_summary)}."
+                else:
+                    feedback_msg = f"Success: Sale {sale_id} voided. Financial ledger updated."
                 alert_type = "success"
 
             except Exception as e:
@@ -206,7 +268,6 @@ def web_corrections_tab(username):
                 conn = sqlite3.connect(db_path, timeout=20.0)
                 cursor = conn.cursor()
                 
-                # Neutralize the expense amount directly in the database
                 cursor.execute("SELECT Amount, Description FROM Expenses WHERE rowid = ?", (expense_rowid,))
                 expense_record = cursor.fetchone()
                 
@@ -242,7 +303,9 @@ def web_corrections_tab(username):
         voided_ids = set([str(vid).replace('VOID-', '') for vid in void_records['Sale_ID'].tolist()])
         valid_sales = sales_df[~sales_df['Sale_ID'].astype(str).str.startswith('VOID', na=False)]
         
-        if 'System_Timestamp' in valid_sales.columns:
+        if 'Sale_Date' in valid_sales.columns and 'Sale_Time' in valid_sales.columns:
+            valid_sales = valid_sales.sort_values(['Sale_Date', 'Sale_Time'], ascending=[False, False])
+        elif 'System_Timestamp' in valid_sales.columns:
             valid_sales = valid_sales.sort_values('System_Timestamp', ascending=False)
         else:
             valid_sales = valid_sales.sort_values('Sale_ID', ascending=False)
