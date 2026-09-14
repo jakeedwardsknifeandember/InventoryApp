@@ -210,11 +210,10 @@
                                             </td>
                                         </tr>
                                     {% endif %}
-                                {% else %}
-                                <tr id="noResultsRow">
+                                {% endfor %}
+                                <tr id="noResultsRow" style="display: none;">
                                     <td colspan="4" class="text-center text-muted py-4">No product profiles found matching active search criteria.</td>
                                 </tr>
-                                {% endfor %}
                             </tbody>
                         </table>
                     </div>
@@ -222,7 +221,7 @@
                     <!-- MODIFIERS WORKSHEET -->
                     <div class="p-2 bg-dark border-top border-secondary">
                         <div class="d-flex justify-content-between align-items-center mb-1 px-2">
-                            <span class="fw-bold text-info" style="font-size: 12px; letter-spacing: 0.5px;">➕ MODIFIERS & ADD-ONS WORKSHEET</span>
+                            <span class="fw-bold text-info" style="font-size: 12px; letter-spacing: 0.5px;">MODIFIERS & ADD-ONS WORKSHEET</span>
                             <small class="text-muted" style="font-size: 10px;">Mapped raw ingredient depletions will apply on sync</small>
                         </div>
                         <div style="max-height: 22vh; overflow-y: auto;">
@@ -411,23 +410,26 @@ function resetClosingFormMatrixFields() {
     inputs.forEach(input => {
         input.value = '0';
     });
-    document.getElementById('eodAuditNoteInput').style.border = "1px solid #3d3d3d";
+    const auditInput = document.getElementById('eodAuditNoteInput');
+    if (auditInput) auditInput.style.border = "1px solid #3d3d3d";
 }
 
 function toggleParentVariants(index) {
     const childRows = document.querySelectorAll('.child-group-' + index);
     const caret = document.getElementById('caret-' + index);
     
+    let willOpen = false;
     childRows.forEach(row => {
         if (row.style.display === 'none' || row.style.display === '') {
             row.style.display = 'table-row';
+            willOpen = true;
         } else {
             row.style.display = 'none';
         }
     });
     
     if (caret) {
-        caret.textContent = (caret.textContent.trim() === 'v') ? '^' : 'v';
+        caret.textContent = willOpen ? '^' : 'v';
     }
 }
 
@@ -469,55 +471,159 @@ document.addEventListener("DOMContentLoaded", function() {
         picker.value = getLocalTodayString();
     }
 
+    const auditInput = document.getElementById('eodAuditNoteInput');
+    if (auditInput) {
+        auditInput.addEventListener('input', function() {
+            if (this.value.trim() !== "") {
+                this.style.border = "1px solid #3d3d3d";
+            }
+        });
+    }
+
+    const masterForm = document.getElementById('eodSalesMasterForm');
+    if (masterForm) {
+        masterForm.addEventListener('keydown', function(e) {
+            if (e.key === 'Enter' && e.target.tagName === 'INPUT') {
+                e.preventDefault();
+                triggerSecurityModalCheck();
+            }
+        });
+    }
+
     const searchInput = document.getElementById('liveSearchInput');
     const categorySelect = document.getElementById('liveCategorySelect');
     const sortSelect = document.getElementById('liveSortSelect');
     const orderSelect = document.getElementById('liveOrderSelect');
+    const tableBody = document.getElementById('productTableBody');
 
     function applyFiltersAndSort() {
         const searchTerm = searchInput.value.toLowerCase().trim();
         const selectedCategory = categorySelect.value.toLowerCase();
-        
-        const parentHeaderRows = document.querySelectorAll('.eod-parent-row');
-        const productRows = document.querySelectorAll('.product-row');
+        const sortBy = sortSelect.value;
+        const sortOrder = orderSelect.value;
 
-        if (searchTerm !== "") {
-            parentHeaderRows.forEach(parentRow => {
-                const pIndex = parentRow.getAttribute('data-parent-index');
-                const parentName = parentRow.getAttribute('data-parent-name') || '';
-                const childRows = document.querySelectorAll('.child-group-' + pIndex);
+        const parentHeaderRows = Array.from(tableBody.querySelectorAll('.eod-parent-row'));
+        const standaloneRows = Array.from(tableBody.querySelectorAll('.product-row:not([data-parent-index])'));
+        const noResultsRow = document.getElementById('noResultsRow');
+
+        // Build composite sortable groups
+        const groups = [];
+
+        parentHeaderRows.forEach(parentRow => {
+            const pIndex = parentRow.getAttribute('data-parent-index');
+            const parentName = (parentRow.getAttribute('data-parent-name') || '').toLowerCase();
+            const childRows = Array.from(tableBody.querySelectorAll('.child-group-' + pIndex));
+            
+            let minPrice = Infinity;
+            childRows.forEach(child => {
+                const p = parseFloat(child.getAttribute('data-price')) || 0;
+                if (p < minPrice) minPrice = p;
+            });
+            if (minPrice === Infinity) minPrice = 0;
+
+            const category = childRows.length > 0 ? (childRows[0].getAttribute('data-category') || 'general') : 'general';
+
+            groups.push({
+                type: 'parent',
+                parentRow: parentRow,
+                childRows: childRows,
+                name: parentName,
+                price: minPrice,
+                category: category,
+                pIndex: pIndex
+            });
+        });
+
+        standaloneRows.forEach(row => {
+            const name = (row.getAttribute('data-name') || row.getAttribute('data-full-name') || '').toLowerCase();
+            const price = parseFloat(row.getAttribute('data-price')) || 0;
+            const category = (row.getAttribute('data-category') || 'general').toLowerCase();
+
+            groups.push({
+                type: 'standalone',
+                row: row,
+                name: name,
+                price: price,
+                category: category
+            });
+        });
+
+        // 1. Sort Groups
+        groups.sort((a, b) => {
+            let result = 0;
+            if (sortBy === 'price') {
+                result = a.price - b.price;
+            } else {
+                result = a.name.localeCompare(b.name);
+            }
+            return sortOrder === 'desc' ? -result : result;
+        });
+
+        // 2. Re-order DOM elements inside tbody while keeping child elements attached
+        groups.forEach(group => {
+            if (group.type === 'parent') {
+                tableBody.appendChild(group.parentRow);
                 
-                let parentMatches = parentName.includes(searchTerm);
-                let childMatches = false;
-
-                childRows.forEach(child => {
-                    const cName = child.getAttribute('data-name') || '';
-                    const cFullName = child.getAttribute('data-full-name') || '';
-                    const cId = child.getAttribute('data-id') || '';
-                    const cCat = child.getAttribute('data-category') || '';
-
-                    const matchesSearch = cName.includes(searchTerm) || cFullName.includes(searchTerm) || cId.includes(searchTerm) || parentName.includes(searchTerm);
-                    const matchesCategory = (selectedCategory === 'all' || cCat === selectedCategory);
-
-                    if (matchesSearch && matchesCategory) {
-                        child.style.display = 'table-row';
-                        childMatches = true;
+                // Also sort child variants within the parent
+                group.childRows.sort((ca, cb) => {
+                    let cResult = 0;
+                    if (sortBy === 'price') {
+                        cResult = (parseFloat(ca.getAttribute('data-price')) || 0) - (parseFloat(cb.getAttribute('data-price')) || 0);
                     } else {
-                        child.style.display = 'none';
+                        const caName = ca.getAttribute('data-name') || '';
+                        const cbName = cb.getAttribute('data-name') || '';
+                        cResult = caName.localeCompare(cbName);
                     }
+                    return sortOrder === 'desc' ? -cResult : cResult;
                 });
 
-                if (parentMatches || childMatches) {
-                    parentRow.style.display = 'table-row';
-                    const caret = document.getElementById('caret-' + pIndex);
-                    if (caret) caret.textContent = '^';
-                } else {
-                    parentRow.style.display = 'none';
-                }
-            });
+                group.childRows.forEach(child => tableBody.appendChild(child));
+            } else {
+                tableBody.appendChild(group.row);
+            }
+        });
 
-            productRows.forEach(row => {
-                if (!row.getAttribute('data-parent-index')) {
+        if (noResultsRow) {
+            tableBody.appendChild(noResultsRow);
+        }
+
+        // 3. Apply Filtering & Search Visibility
+        let visibleCount = 0;
+
+        if (searchTerm !== "") {
+            groups.forEach(group => {
+                if (group.type === 'parent') {
+                    let parentMatches = group.name.includes(searchTerm);
+                    let anyChildMatched = false;
+
+                    group.childRows.forEach(child => {
+                        const cName = child.getAttribute('data-name') || '';
+                        const cFullName = child.getAttribute('data-full-name') || '';
+                        const cId = child.getAttribute('data-id') || '';
+                        const cCat = child.getAttribute('data-category') || '';
+
+                        const matchesSearch = cName.includes(searchTerm) || cFullName.includes(searchTerm) || cId.includes(searchTerm) || parentMatches;
+                        const matchesCategory = (selectedCategory === 'all' || cCat === selectedCategory);
+
+                        if (matchesSearch && matchesCategory) {
+                            child.style.display = 'table-row';
+                            anyChildMatched = true;
+                        } else {
+                            child.style.display = 'none';
+                        }
+                    });
+
+                    const caret = document.getElementById('caret-' + group.pIndex);
+                    if (parentMatches || anyChildMatched) {
+                        group.parentRow.style.display = 'table-row';
+                        if (caret) caret.textContent = '^';
+                        visibleCount++;
+                    } else {
+                        group.parentRow.style.display = 'none';
+                        if (caret) caret.textContent = 'v';
+                    }
+                } else {
+                    const row = group.row;
                     const name = row.getAttribute('data-name') || '';
                     const fullName = row.getAttribute('data-full-name') || '';
                     const id = row.getAttribute('data-id') || '';
@@ -528,50 +634,52 @@ document.addEventListener("DOMContentLoaded", function() {
 
                     if (matchesSearch && matchesCategory) {
                         row.style.display = 'table-row';
+                        visibleCount++;
                     } else {
                         row.style.display = 'none';
                     }
                 }
             });
-
         } else {
-            parentHeaderRows.forEach(parentRow => {
-                const pIndex = parentRow.getAttribute('data-parent-index');
-                const childRows = document.querySelectorAll('.child-group-' + pIndex);
-                
-                let hasVisibleChildInCategory = false;
-                childRows.forEach(child => {
-                    child.style.display = 'none';
-                    const cCat = child.getAttribute('data-category') || '';
-                    if (selectedCategory === 'all' || cCat === selectedCategory) {
-                        hasVisibleChildInCategory = true;
+            groups.forEach(group => {
+                if (group.type === 'parent') {
+                    let hasMatchingVariant = false;
+                    group.childRows.forEach(child => {
+                        child.style.display = 'none';
+                        const cCat = child.getAttribute('data-category') || '';
+                        if (selectedCategory === 'all' || cCat === selectedCategory) {
+                            hasMatchingVariant = true;
+                        }
+                    });
+
+                    const caret = document.getElementById('caret-' + group.pIndex);
+                    if (caret) caret.textContent = 'v';
+
+                    if (hasMatchingVariant) {
+                        group.parentRow.style.display = 'table-row';
+                        visibleCount++;
+                    } else {
+                        group.parentRow.style.display = 'none';
                     }
-                });
-
-                const caret = document.getElementById('caret-' + pIndex);
-                if (caret) caret.textContent = 'v';
-
-                if (hasVisibleChildInCategory) {
-                    parentRow.style.display = 'table-row';
                 } else {
-                    parentRow.style.display = 'none';
-                }
-            });
-
-            productRows.forEach(row => {
-                if (!row.getAttribute('data-parent-index')) {
+                    const row = group.row;
                     const cat = row.getAttribute('data-category') || '';
                     if (selectedCategory === 'all' || cat === selectedCategory) {
                         row.style.display = 'table-row';
+                        visibleCount++;
                     } else {
                         row.style.display = 'none';
                     }
                 }
             });
         }
+
+        if (noResultsRow) {
+            noResultsRow.style.display = (visibleCount === 0) ? 'table-row' : 'none';
+        }
     }
 
-    searchInput.addEventListener('keyup', applyFiltersAndSort);
+    searchInput.addEventListener('input', applyFiltersAndSort);
     categorySelect.addEventListener('change', applyFiltersAndSort);
     sortSelect.addEventListener('change', applyFiltersAndSort);
     orderSelect.addEventListener('change', applyFiltersAndSort);
@@ -582,7 +690,7 @@ function clearLiveFilters() {
     document.getElementById('liveCategorySelect').value = 'All';
     document.getElementById('liveSortSelect').value = 'name';
     document.getElementById('liveOrderSelect').value = 'asc';
-    document.getElementById('liveSearchInput').dispatchEvent(new Event('keyup'));
+    document.getElementById('liveSearchInput').dispatchEvent(new Event('input'));
 }
 </script>
 {% endblock %}

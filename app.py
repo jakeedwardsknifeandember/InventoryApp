@@ -5,6 +5,7 @@ import sqlite3
 import os
 import pandas as pd
 import datetime
+from collections import defaultdict
 
 # SYSTEM COMPONENT BLUEPRINT IMPORTS
 from routes.auth import auth_bp
@@ -81,7 +82,7 @@ def client_portal(username):
     inventory_df = client_db.get_inventory_status()
     low_stock_count = len(inventory_df[inventory_df['Status'] == 'Low Stock']) if not inventory_df.empty else 0
     
-    # 2. Date Filter Parsing Controls (Loyverse Style Alignment)
+    # 2. Date Filter Parsing Controls
     selected_period = request.args.get('period', 'this_month')
     start_date_str = request.args.get('start_date', '')
     end_date_str = request.args.get('end_date', '')
@@ -117,40 +118,101 @@ def client_portal(username):
     chart_labels = []
     chart_data = []
     sales_count = 0
+    theoretical_cogs = 0.0
 
     if not sales_df.empty and 'Total_Amount' in sales_df.columns:
         sales_df['Total_Amount'] = pd.to_numeric(sales_df['Total_Amount'], errors='coerce').fillna(0.0)
         
-        # Flexibly detect any common date column name across system variations
-        possible_date_cols = ['Sales_Date', 'Date', 'sales_date', 'date', 'created_at', 'timestamp', 'transaction_date', 'DateTime']
-        date_col = next((col for col in possible_date_cols if col in sales_df.columns), None)
-        
-        if date_col:
-            sales_df['Parsed_Date'] = pd.to_datetime(sales_df[date_col], errors='coerce')
-            filtered_sales = sales_df[(sales_df['Parsed_Date'] >= start_bound) & (sales_df['Parsed_Date'] <= end_bound)]
-            
-            # Fallback to full dataset if date filter returns an empty slice
-            if filtered_sales.empty and not sales_df.empty:
-                filtered_sales = sales_df.copy()
+        # Resilient date coalescing prioritizing Sale_Date and Date
+        date_candidates = ['Sale_Date', 'sale_date', 'Sales_Date', 'Date', 'date', 'created_at', 'timestamp', 'transaction_date', 'DateTime']
+        sales_df['Parsed_Date'] = pd.NaT
+        for col in date_candidates:
+            if col in sales_df.columns:
+                parsed_col = pd.to_datetime(sales_df[col], errors='coerce')
+                sales_df['Parsed_Date'] = sales_df['Parsed_Date'].fillna(parsed_col)
 
-            total_revenue = float(filtered_sales['Total_Amount'].sum())
-            sales_count = len(filtered_sales)
-            
+        if sales_df['Parsed_Date'].notna().any():
+            filtered_sales = sales_df[(sales_df['Parsed_Date'] >= start_bound) & (sales_df['Parsed_Date'] <= end_bound)].copy()
+        else:
+            filtered_sales = sales_df.copy()
+
+        total_revenue = float(filtered_sales['Total_Amount'].sum())
+        sales_count = len(filtered_sales)
+        
+        if not filtered_sales.empty and sales_df['Parsed_Date'].notna().any():
+            filtered_sales = filtered_sales.sort_values('Parsed_Date')
             if selected_period == 'today':
-                filtered_sales['Hour_Block'] = filtered_sales['Parsed_Date'].dt.strftime('%I:%M %p')
-                hourly_group = filtered_sales.groupby('Hour_Block')['Total_Amount'].sum()
-                chart_labels = list(hourly_group.index)
+                filtered_sales['Hour_Num'] = filtered_sales['Parsed_Date'].dt.hour
+                hourly_group = filtered_sales.groupby('Hour_Num')['Total_Amount'].sum()
+                chart_labels = [datetime.time(h, 0).strftime('%I:%M %p') for h in hourly_group.index]
                 chart_data = [float(v) for v in hourly_group.values]
             else:
-                filtered_sales['Day_Block'] = filtered_sales['Parsed_Date'].dt.strftime('%b %d')
-                daily_group = filtered_sales.groupby('Day_Block')['Total_Amount'].sum()
-                chart_labels = list(daily_group.index)
+                filtered_sales['Date_Only'] = filtered_sales['Parsed_Date'].dt.date
+                daily_group = filtered_sales.groupby('Date_Only')['Total_Amount'].sum()
+                chart_labels = [d.strftime('%b %d') for d in daily_group.index]
                 chart_data = [float(v) for v in daily_group.values]
-        else:
-            total_revenue = float(sales_df['Total_Amount'].sum())
-            sales_count = len(sales_df)
-            chart_labels = ['Total Aggregate']
-            chart_data = [total_revenue]
+
+        # -------------------------------------------------------------
+        # COMPREHENSIVE THEORETICAL COGS (RECIPES + MODIFIER RECIPES)
+        # -------------------------------------------------------------
+        if not filtered_sales.empty:
+            conn = sqlite3.connect(client_db_path, timeout=20.0)
+            cursor = conn.cursor()
+
+            # Product Recipes
+            cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='Recipes'")
+            prod_recipe_map = defaultdict(list)
+            if cursor.fetchone():
+                cursor.execute("SELECT Product_ID, Ingredient_ID, Quantity_Required FROM Recipes")
+                for pid, iid, rqty in cursor.fetchall():
+                    prod_recipe_map[str(pid)].append((str(iid), float(rqty or 0.0)))
+
+            # Modifier Recipes
+            cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='Modifier_Recipes'")
+            mod_recipe_map = defaultdict(list)
+            if cursor.fetchone():
+                cursor.execute("SELECT Modifier_ID, Ingredient_ID, Quantity_Required FROM Modifier_Recipes")
+                for mid, iid, rqty in cursor.fetchall():
+                    mod_recipe_map[str(mid)].append((str(iid), float(rqty or 0.0)))
+
+            # Ingredient Costs
+            cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='Ingredients'")
+            ing_cost_map = {}
+            if cursor.fetchone():
+                cursor.execute("SELECT Ingredient_ID, Cost_Per_Unit FROM Ingredients")
+                for iid, cpu in cursor.fetchall():
+                    ing_cost_map[str(iid)] = float(cpu or 0.0)
+
+            # Product Cost Price Fallback
+            cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='Products'")
+            prod_cost_map = {}
+            if cursor.fetchone():
+                cursor.execute("SELECT Product_ID, Cost_Price FROM Products")
+                for pid, cp in cursor.fetchall():
+                    prod_cost_map[str(pid)] = float(cp or 0.0)
+
+            conn.close()
+
+            for _, s_row in filtered_sales.iterrows():
+                item_id = str(s_row.get('Product_ID', '')).strip()
+                try:
+                    qty_sold = float(s_row.get('Quantity', 0.0) or 0.0)
+                except (ValueError, TypeError):
+                    qty_sold = 0.0
+
+                if qty_sold == 0:
+                    continue
+
+                if item_id in prod_recipe_map:
+                    for iid, req_qty in prod_recipe_map[item_id]:
+                        theoretical_cogs += qty_sold * req_qty * ing_cost_map.get(iid, 0.0)
+                elif item_id in mod_recipe_map:
+                    for iid, req_qty in mod_recipe_map[item_id]:
+                        theoretical_cogs += qty_sold * req_qty * ing_cost_map.get(iid, 0.0)
+                elif item_id in prod_cost_map:
+                    theoretical_cogs += qty_sold * prod_cost_map[item_id]
+
+            theoretical_cogs = round(float(theoretical_cogs), 2)
 
     if not chart_labels:
         chart_labels = ['08:00 AM', '12:00 PM', '04:00 PM', '08:00 PM'] if selected_period == 'today' else ['Period Start', 'Period End']
@@ -164,7 +226,8 @@ def client_portal(username):
     
     if not expenses_df.empty and 'Amount' in expenses_df.columns:
         expenses_df['Amount'] = pd.to_numeric(expenses_df['Amount'], errors='coerce').fillna(0.0)
-        date_col_exp = 'Expense_Date' if 'Expense_Date' in expenses_df.columns else ('Date' if 'Date' in expenses_df.columns else None)
+        possible_date_cols_exp = ['Expense_Date', 'Date', 'expense_date', 'date', 'created_at', 'timestamp']
+        date_col_exp = next((col for col in possible_date_cols_exp if col in expenses_df.columns), None)
         
         if date_col_exp:
             expenses_df['Parsed_Date'] = pd.to_datetime(expenses_df[date_col_exp], errors='coerce')
@@ -203,7 +266,6 @@ def client_portal(username):
             prod_name = row.get('Product_Name', 'Unknown Item')
             margin_amt = float(row['Margin_Amt'])
             
-            # Use actual sales volume from map, default to 0 for clean accounts
             sales_volume = int(item_sales_map.get(prod_id, 0))
             
             if margin_amt >= avg_margin and sales_volume >= avg_volume:
@@ -233,19 +295,26 @@ def client_portal(username):
                 'price': float(row['Selling_Price'])
             })
             
-    # Sort the full catalog by volume, but only push the top 10 to the dashboard to keep it clean
     menu_engineering_list = sorted(menu_engineering_list, key=lambda x: x['volume'], reverse=True)[:10]
 
-    # 6. Real-Time Operational Activity Stream (The Shift Manager Logbook)
+    # 6. Real-Time Operational Activity Stream (Shift Manager Logbook)
     logbook_stream = []
     
-    # Read primary audit ledger table (with fallback to inventory_log)
     audit_log_df = client_db.read_tab('Inventory_Audit_Log')
     if audit_log_df is None or audit_log_df.empty:
         audit_log_df = client_db.read_tab('Inventory_Log')
 
     if audit_log_df is not None and not audit_log_df.empty:
-        for _, row in audit_log_df.tail(30).iterrows():
+        possible_audit_date_cols = ['Date', 'Log_Date', 'timestamp', 'created_at', 'sales_date', 'DateTime']
+        audit_date_col = next((col for col in possible_audit_date_cols if col in audit_log_df.columns), None)
+
+        if audit_date_col:
+            audit_log_df['Parsed_Date'] = pd.to_datetime(audit_log_df[audit_date_col], errors='coerce')
+            filtered_audit_df = audit_log_df[(audit_log_df['Parsed_Date'] >= start_bound) & (audit_log_df['Parsed_Date'] <= end_bound)].copy()
+        else:
+            filtered_audit_df = audit_log_df.copy()
+
+        for _, row in filtered_audit_df.tail(30).iterrows():
             audit_id = str(row.get('Audit_ID', row.get('Type', ''))).strip().upper()
             notes_str = str(row.get('Notes', row.get('Reason', 'Routine process record.'))).strip()
             item_ref = str(row.get('Ingredient_Name', row.get('Ingredient_ID', row.get('Item_Name', 'Stock Line')))).strip()
@@ -256,14 +325,15 @@ def client_portal(username):
             except Exception:
                 qty_acted = 0.0
 
-            log_date_raw = str(row.get('Date', row.get('Log_Date', '')))
-            try:
-                parsed_log_date = pd.to_datetime(log_date_raw)
-                if parsed_log_date < start_bound or parsed_log_date > end_bound:
-                    continue
+            parsed_log_date = row.get('Parsed_Date') if 'Parsed_Date' in row else None
+            if pd.notnull(parsed_log_date):
                 time_stamp_str = parsed_log_date.strftime("%b %d, %I:%M %p")
-            except Exception:
-                time_stamp_str = "Today, On Shift"
+            else:
+                log_date_raw = str(row.get('Date', row.get('Log_Date', '')))
+                try:
+                    time_stamp_str = pd.to_datetime(log_date_raw).strftime("%b %d, %I:%M %p")
+                except Exception:
+                    time_stamp_str = "Today, On Shift"
 
             user_node = str(row.get('Updated_By', row.get('User', 'Floor Terminal'))).title()
 
@@ -318,7 +388,7 @@ def client_portal(username):
                 'notes': notes_str
             })
 
-    logbook_stream = list(reversed(logbook_stream))
+        logbook_stream = list(reversed(logbook_stream))
 
     return render_template(
         'dashboard.html', username=username, total_products=total_products,
@@ -333,7 +403,8 @@ def client_portal(username):
         expense_values=expense_values,
         menu_matrix=menu_engineering_list,
         logbook=logbook_stream,
-        sales_count=sales_count
+        sales_count=sales_count,
+        theoretical_cogs=theoretical_cogs
     )
 
 # AUDIT LOG ROUTE: View operational ledger with date filtering
@@ -352,7 +423,6 @@ def audit_log(username):
     client_db_path = f"data/client_{username}.db"
     client_db = InventoryDB(client_db_path)
 
-    # Date Filter Parsing Controls
     selected_period = request.args.get('period', 'this_month')
     start_date_str = request.args.get('start_date', '')
     end_date_str = request.args.get('end_date', '')
@@ -391,7 +461,6 @@ def audit_log(username):
     formatted_start_str = start_bound.strftime("%Y-%m-%d") if start_bound is not None else ""
     formatted_end_str = end_bound.strftime("%Y-%m-%d") if end_bound is not None else ""
 
-    # Read primary audit ledger table
     audit_log_df = client_db.read_tab('Inventory_Audit_Log')
     if audit_log_df is None or audit_log_df.empty:
         audit_log_df = client_db.read_tab('Inventory_Log')
@@ -408,7 +477,7 @@ def audit_log(username):
             filtered_df = audit_log_df.copy()
 
         logs = filtered_df.to_dict(orient='records')
-        logs.reverse()  # Show most recent entries at the top
+        logs.reverse()
 
     return render_template(
         'audit_log.html', 

@@ -1,18 +1,23 @@
 {% extends "base.html" %}
 {% block content %}
 
-<!-- 📊 Chart.js Industrial Visualization Canvas Library Engine Hook -->
+<!-- Industrial Visualization Canvas Engine Hook with Offline Fallback -->
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+    if (typeof Chart === 'undefined') {
+        document.write('<script src="{{ url_for("static", filename="js/chart.min.js") }}"><\/script>');
+    }
+</script>
 
 <style>
-    /* Premium High-Contrast Colorway Variables & Typography Rules */
+    /* High-Contrast Colorway Variables & Typography Rules */
     .dashboard-headline { font-size: 24px; font-weight: 800; color: #ffffff; letter-spacing: 0.3px; margin: 0; }
     .dashboard-subtitle { font-size: 13px; color: #a1a1aa; margin: 2px 0 0 0; }
     
     .kpi-card { background: #1e1e2e; border: 1px solid #3f3f46; border-radius: 8px; padding: 20px; box-sizing: border-box; }
-    .kpi-title { font-size: 12px; font-weight: 700; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 6px; }
+    .kpi-title { font-size: 11.5px; font-weight: 700; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 6px; }
     .kpi-value { font-size: 26px; font-weight: 800; color: #ffffff; line-height: 1.2; }
-    .kpi-subtext { font-size: 12px; font-weight: 600; color: #cbd5e1; margin-top: 8px; display: flex; align-items: center; gap: 6px; }
+    .kpi-subtext { font-size: 12px; font-weight: 600; color: #cbd5e1; margin-top: 8px; display: flex; align-items: center; justify-content: space-between; }
 
     .badge-filter-btn { padding: 8px 16px; border-radius: 20px; font-size: 13px; font-weight: bold; border: 1px solid #3f3f46; background: #1e1e2e; color: #94a3b8; text-decoration: none; transition: all 0.2s; }
     .badge-filter-btn:hover { background: #2d2d3f; color: #fff; }
@@ -36,7 +41,7 @@
 
 <div class="container-fluid p-0">
     
-    <!-- 👑 HEADER CONTROLS NAVIGATION BAR BANNER -->
+    <!-- HEADER CONTROLS NAVIGATION BAR BANNER -->
     <div class="d-flex justify-content-between align-items-center mb-4">
         <div>
             <h1 class="dashboard-headline">Today's Store Operations Overview</h1>
@@ -56,66 +61,76 @@
         </form>
     </div>
 
-    <!-- 💡 JINJA RUNTIME MATH EXECUTION FOR PERFORMANCE COEFFICIENTS -->
-    {% set net_profit = total_revenue - total_expenses %}
-    {% if total_revenue > 0 %}
-        {% set profit_margin = (net_profit / total_revenue) * 100 %}
-    {% else %}
-        {% set profit_margin = 0.0 %}
-    {% endif %}
+    <!-- RUNTIME MATH EXECUTION FOR OPERATIONAL RATIOS -->
+    {% set cogs = theoretical_cogs | default(0.0) %}
+    {% set computed_food_cost_pct = (cogs / total_revenue * 100) if total_revenue > 0 else 0.0 %}
+    {% set net_cash_flow = total_revenue - total_expenses %}
+    {% set avg_order_value = (total_revenue / sales_count) if sales_count > 0 else 0.0 %}
 
-    <!-- 👑 4-COLUMN TOP GRID: HIGH IMPACT METRIC CARD OVERVIEWS -->
+    <!-- 4-COLUMN TOP GRID: EXECUTIVE KPI CARDS -->
     <div class="row g-3 mb-4">
-        <!-- CARD 1: GROSS TRANSACTION VOLUME -->
+        <!-- CARD 1: GROSS SALES REVENUE -->
         <div class="col-md-3">
             <div class="kpi-card" style="border-top: 4px solid #2fa572;">
-                <div class="kpi-title">Gross Revenue Sales</div>
+                <div class="kpi-title">Gross Sales Revenue</div>
                 <div class="kpi-value">₱{{ "{:,.2f}".format(total_revenue) }}</div>
-                <div class="kpi-subtext" style="color: #2fa572;">
-                    <span>📈</span> Total Orders Processed: {{ sales_count }}
+                <div class="kpi-subtext">
+                    <span style="color: #2fa572;">Orders: {{ sales_count }}</span>
+                    <span class="text-light small font-monospace">AOV: ₱{{ "{:,.2f}".format(avg_order_value) }}</span>
                 </div>
             </div>
         </div>
 
-        <!-- CARD 2: TOTAL OUTLAYS EXPENSES -->
+        <!-- CARD 2: THEORETICAL FOOD COST & COGS -->
         <div class="col-md-3">
-            <div class="kpi-card" style="border-top: 4px solid #c24b4b;">
-                <div class="kpi-title">Total Cash Outlays</div>
-                <div class="kpi-value">₱{{ "{:,.2f}".format(total_expenses) }}</div>
-                <div class="kpi-subtext" style="color: #ff6b6b;">
-                    <span>📉</span> Active Expense Channels logged
+            <div class="kpi-card" style="border-top: 4px solid #38bdf8;">
+                <div class="kpi-title">Theoretical Food Cost (COGS)</div>
+                <div class="kpi-value font-monospace" style="color: #38bdf8;">₱{{ "{:,.2f}".format(cogs) }}</div>
+                <div class="kpi-subtext">
+                    <span>Food Cost Ratio: <b class="font-monospace text-white">{{ "{:.1f}%".format(computed_food_cost_pct) }}</b></span>
+                    {% if cogs <= 0 or total_revenue <= 0 %}
+                        <span class="badge bg-secondary font-monospace" style="font-size: 10px;">Pending Recipe</span>
+                    {% elif computed_food_cost_pct <= 30.0 %}
+                        <span class="badge bg-success font-monospace" style="font-size: 10px;">Healthy (&le;30%)</span>
+                    {% elif computed_food_cost_pct <= 35.0 %}
+                        <span class="badge bg-warning text-dark font-monospace" style="font-size: 10px;">Watch (31-35%)</span>
+                    {% else %}
+                        <span class="badge bg-danger font-monospace" style="font-size: 10px;">High Risk (&gt;35%)</span>
+                    {% endif %}
                 </div>
             </div>
         </div>
 
-        <!-- CARD 3: NET PERFORMANCE RATIO -->
+        <!-- CARD 3: NET OPERATING CASH POSITION -->
         <div class="col-md-3">
-            <div class="kpi-card" style="border-top: 4px solid #3b8ed0;">
-                <div class="kpi-title">Net Cash Position</div>
-                <div class="kpi-value {% if net_profit >= 0 %}text-info{% else %}text-danger{% endif %}">₱{{ "{:,.2f}".format(net_profit) }}</div>
-                <div class="kpi-subtext text-white">
-                    <span>📊</span> Net Margin Factor: <b class="text-warning font-monospace">{{ "{:.1f}%".format(profit_margin) }}</b>
+            <div class="kpi-card" style="border-top: 4px solid #a855f7;">
+                <div class="kpi-title">Operating Cash Flow</div>
+                <div class="kpi-value {% if net_cash_flow >= 0 %}text-info{% else %}text-danger{% endif %}">₱{{ "{:,.2f}".format(net_cash_flow) }}</div>
+                <div class="kpi-subtext">
+                    <span style="color: #f87171;">Expenses: ₱{{ "{:,.2f}".format(total_expenses) }}</span>
+                    <span class="text-light small font-monospace">Margin: {{ "{:.1f}%".format((net_cash_flow / total_revenue * 100) if total_revenue > 0 else 0.0) }}</span>
                 </div>
             </div>
         </div>
 
-        <!-- CARD 4: MATERIAL DEFICIENCIES -->
+        <!-- CARD 4: PAR LEVEL & DEFICIENCY HEALTH -->
         <div class="col-md-3">
             <div class="kpi-card" style="border-top: 4px solid #d97706;">
                 <div class="kpi-title">Material Stock Deficiencies</div>
                 <div class="kpi-value {% if low_stock_count > 0 %}text-warning{% else %}text-white-50{% endif %}">{{ low_stock_count }} Triggers</div>
-                <div class="kpi-subtext text-light" style="opacity:0.85;">
-                    <span>⚠️</span> Registered Menu Items: {{ total_products }}
+                <div class="kpi-subtext">
+                    <span class="text-warning">Reorder Par Alerts</span>
+                    <span class="text-light small font-monospace">Menu SKUs: {{ total_products }}</span>
                 </div>
             </div>
         </div>
     </div>
 
-    <!-- 👑 MIDDLE SPLIT ROW: VOLUME DISTRIBUTION LINE GRAPH vs STRATEGIC MENU ENGINEERING PANEL -->
+    <!-- MIDDLE SPLIT ROW: VOLUME DISTRIBUTION LINE GRAPH vs MENU ENGINEERING PANEL -->
     <div class="dashboard-split-row">
         <!-- MIDDLE LEFT COLUMN: DYNAMIC AREA CHART GRAPH -->
         <div class="panel-card">
-            <h5 class="panel-header-title">📈 Volumetric Sales Stream Distribution</h5>
+            <h5 class="panel-header-title">Volumetric Sales Stream Distribution</h5>
             <div style="position: relative; height: 260px; width:100%;">
                 <canvas id="loyverseInspiredVolumeChart"></canvas>
             </div>
@@ -123,7 +138,7 @@
 
         <!-- MIDDLE RIGHT COLUMN: CORE MENU ENGINEERING CLASSIFICATIONS PLATFORM -->
         <div class="panel-card">
-            <h5 class="panel-header-title">⭐ Strategic Menu Engineering Matrix</h5>
+            <h5 class="panel-header-title">Strategic Menu Engineering Matrix</h5>
             <div class="d-flex flex-column gap-2" style="max-height: 260px; overflow-y: auto; padding-right:2px;">
                 {% for item in menu_matrix %}
                 <div class="p-2 rounded border border-secondary" style="background:#161622; display:flex; justify-content:space-between; align-items:center;">
@@ -143,12 +158,12 @@
         </div>
     </div>
 
-    <!-- 👑 BOTTOM SPLIT ROW: THE REAL-TIME OPERATIONS LOGBOOK vs FINANCIAL DEFICIT DOUGHNUT CHART -->
+    <!-- BOTTOM SPLIT ROW: OPERATIONS LOGBOOK vs FINANCIAL DEFICIT DOUGHNUT CHART -->
     <div class="dashboard-split-row">
-        <!-- BOTTOM LEFT COLUMN: MANAGER SHIFT OPERATIONS LOGBOOK DEBRIEF AGGREGATION -->
+        <!-- BOTTOM LEFT COLUMN: REAL-TIME SHIFT OPERATIONS LOGBOOK -->
         <div class="panel-card">
             <div class="panel-header-title">
-                <span>📋 Real-Time Shift Operations Logbook (Debrief Terminal)</span>
+                <span>Real-Time Shift Operations Logbook</span>
                 <span class="badge bg-secondary font-monospace" style="font-size:11px; color:#fff;">Daily Activity Stream</span>
             </div>
             
@@ -176,9 +191,9 @@
             </div>
         </div>
 
-        <!-- BOTTOM RIGHT COLUMN: CATEGORICAL BURN FINANCIAL EXPENDITURE DOUGHNUT CHART GRAPH -->
+        <!-- BOTTOM RIGHT COLUMN: CATEGORICAL CAPITAL OUTLAY DISTRIBUTION -->
         <div class="panel-card d-flex flex-column justify-content-between">
-            <h5 class="panel-header-title">🍩 Categorical Capital Outlay Distribution</h5>
+            <h5 class="panel-header-title">Categorical Capital Outlay Distribution</h5>
             <div style="position: relative; height: 260px; width:100%; margin: auto 0;">
                 <canvas id="expensesCategoricalDoughnutChart"></canvas>
             </div>
@@ -190,105 +205,107 @@
 
 </div>
 
-<!-- 📊 DUAL GRAPH INTEGRATION SCRIPTS INJECTION MATRIX -->
+<!-- GRAPH INTEGRATION SCRIPTS -->
 <script>
 document.addEventListener("DOMContentLoaded", function() {
-    // ==========================================
-    // 📊 CHART A: INTRADAY SALES LINE WAVE DISTRIBUTIONS
-    // ==========================================
-    const lineCtx = document.getElementById('loyverseInspiredVolumeChart').getContext('2d');
-    const greenGradient = lineCtx.createLinearGradient(0, 0, 0, 220);
-    greenGradient.addColorStop(0, 'rgba(47, 165, 114, 0.35)');
-    greenGradient.addColorStop(1, 'rgba(47, 165, 114, 0.00)');
+    // CHART A: INTRADAY SALES LINE WAVE DISTRIBUTIONS
+    const lineCanvas = document.getElementById('loyverseInspiredVolumeChart');
+    if (lineCanvas) {
+        const lineCtx = lineCanvas.getContext('2d');
+        const greenGradient = lineCtx.createLinearGradient(0, 0, 0, 220);
+        greenGradient.addColorStop(0, 'rgba(47, 165, 114, 0.35)');
+        greenGradient.addColorStop(1, 'rgba(47, 165, 114, 0.00)');
 
-    new Chart(lineCtx, {
-        type: 'line',
-        data: {
-            labels: {{ chart_labels|tojson }},
-            datasets: [{
-                data: {{ chart_data|tojson }},
-                borderColor: '#2fa572',
-                borderWidth: 3,
-                pointBackgroundColor: '#2fa572',
-                pointBorderColor: '#ffffff',
-                pointBorderWidth: 1.5,
-                pointRadius: 4,
-                fill: true,
-                backgroundColor: greenGradient,
-                tension: 0.3
-            }]
-        },
-        options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            plugins: { legend: { display: false } },
-            scales: {
-                x: {
-                    grid: { color: '#2d2d3f', drawBorder: false },
-                    ticks: { color: '#cbd5e1', font: { family: 'Segoe UI', size: 11, weight: 'bold' } }
-                },
-                y: {
-                    grid: { color: '#2d2d3f', drawBorder: false },
-                    ticks: {
-                        color: '#cbd5e1',
-                        font: { family: 'Segoe UI', size: 11, weight: 'bold' },
-                        callback: function(value) { return '₱' + value.toLocaleString(); }
-                    },
-                    suggestedMin: 0
-                }
-            }
-        }
-    });
-
-    // ==========================================
-    // 🍩 CHART B: EXPENDITURE BURN RATE DOUGHNUT CORE ENGINE
-    // ==========================================
-    const doughnutCtx = document.getElementById('expensesCategoricalDoughnutChart');
-    const chartCategories = {{ expense_categories|tojson }};
-    const chartValues = {{ expense_values|tojson }};
-
-    if (chartValues.length === 0 || chartValues.reduce((a, b) => a + b, 0) === 0) {
-        doughnutCtx.style.display = 'none';
-        document.getElementById('doughnutFallbackMessageBlock').classList.remove('d-none');
-    } else {
-        new Chart(doughnutCtx, {
-            type: 'doughnut',
+        new Chart(lineCtx, {
+            type: 'line',
             data: {
-                labels: chartCategories,
+                labels: {{ chart_labels|tojson }},
                 datasets: [{
-                    data: chartValues,
-                    backgroundColor: [
-                        '#ef4444', '#3b8ed0', '#2fa572', '#eab308', 
-                        '#a855f7', '#ec4899', '#6366f1', '#14b8a6'
-                    ],
-                    borderWidth: 2,
-                    borderColor: '#1e1e2e',
-                    hoverOffset: 8
+                    data: {{ chart_data|tojson }},
+                    borderColor: '#2fa572',
+                    borderWidth: 3,
+                    pointBackgroundColor: '#2fa572',
+                    pointBorderColor: '#ffffff',
+                    pointBorderWidth: 1.5,
+                    pointRadius: 4,
+                    fill: true,
+                    backgroundColor: greenGradient,
+                    tension: 0.3
                 }]
             },
             options: {
                 responsive: true,
                 maintainAspectRatio: false,
-                plugins: {
-                    legend: {
-                        position: 'right',
-                        labels: {
+                plugins: { legend: { display: false } },
+                scales: {
+                    x: {
+                        grid: { color: '#2d2d3f', drawBorder: false },
+                        ticks: { color: '#cbd5e1', font: { family: 'Segoe UI', size: 11, weight: 'bold' } }
+                    },
+                    y: {
+                        grid: { color: '#2d2d3f', drawBorder: false },
+                        ticks: {
                             color: '#cbd5e1',
                             font: { family: 'Segoe UI', size: 11, weight: 'bold' },
-                            padding: 12
-                        }
-                    },
-                    tooltip: {
-                        callbacks: {
-                            label: function(context) {
-                                let val = context.raw || 0;
-                                return ' ' + context.label + ': ₱' + val.toLocaleString(undefined, {minimumFractionDigits: 2});
-                            }
-                        }
+                            callback: function(value) { return '₱' + value.toLocaleString(); }
+                        },
+                        suggestedMin: 0
                     }
                 }
             }
         });
+    }
+
+    // CHART B: EXPENDITURE BURN RATE DOUGHNUT
+    const doughnutCanvas = document.getElementById('expensesCategoricalDoughnutChart');
+    if (doughnutCanvas) {
+        const doughnutCtx = doughnutCanvas.getContext('2d');
+        const chartCategories = {{ expense_categories|tojson }};
+        const chartValues = {{ expense_values|tojson }};
+
+        if (chartValues.length === 0 || chartValues.reduce((a, b) => a + b, 0) === 0) {
+            doughnutCanvas.style.display = 'none';
+            document.getElementById('doughnutFallbackMessageBlock').classList.remove('d-none');
+        } else {
+            new Chart(doughnutCtx, {
+                type: 'doughnut',
+                data: {
+                    labels: chartCategories,
+                    datasets: [{
+                        data: chartValues,
+                        backgroundColor: [
+                            '#ef4444', '#3b8ed0', '#2fa572', '#eab308', 
+                            '#a855f7', '#ec4899', '#6366f1', '#14b8a6'
+                        ],
+                        borderWidth: 2,
+                        borderColor: '#1e1e2e',
+                        hoverOffset: 8
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            position: 'right',
+                            labels: {
+                                color: '#cbd5e1',
+                                font: { family: 'Segoe UI', size: 11, weight: 'bold' },
+                                padding: 12
+                            }
+                        },
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    let val = context.raw || 0;
+                                    return ' ' + context.label + ': ₱' + val.toLocaleString(undefined, {minimumFractionDigits: 2});
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+        }
     }
 });
 </script>

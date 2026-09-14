@@ -2,6 +2,7 @@
 from flask import Blueprint, request, redirect, session, render_template, url_for
 from modules.database import InventoryDB
 from datetime import datetime, timedelta
+from collections import defaultdict
 import pandas as pd
 import sqlite3
 import json
@@ -32,6 +33,77 @@ def ensure_operational_tables_exist(db_path):
     """)
     conn.commit()
     conn.close()
+
+def calculate_sales_cogs(sales_slice_df, db_path):
+    """
+    Computes accurate, multi-tiered Cost of Goods Sold (COGS) across:
+    1. Direct Product Recipes (Recipes + Ingredients.Cost_Per_Unit)
+    2. Modifier Add-ons (Modifier_Recipes + Ingredients.Cost_Per_Unit)
+    3. Products.Cost_Price fallback
+    """
+    if sales_slice_df is None or sales_slice_df.empty:
+        return 0.0
+        
+    conn = sqlite3.connect(db_path, timeout=20.0)
+    cursor = conn.cursor()
+
+    # 1. Product Recipes
+    cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='Recipes'")
+    prod_recipe_map = defaultdict(list)
+    if cursor.fetchone():
+        cursor.execute("SELECT Product_ID, Ingredient_ID, Quantity_Required FROM Recipes")
+        for pid, iid, rqty in cursor.fetchall():
+            prod_recipe_map[str(pid)].append((str(iid), float(rqty or 0.0)))
+
+    # 2. Modifier Recipes
+    cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='Modifier_Recipes'")
+    mod_recipe_map = defaultdict(list)
+    if cursor.fetchone():
+        cursor.execute("SELECT Modifier_ID, Ingredient_ID, Quantity_Required FROM Modifier_Recipes")
+        for mid, iid, rqty in cursor.fetchall():
+            mod_recipe_map[str(mid)].append((str(iid), float(rqty or 0.0)))
+
+    # 3. Ingredient Costs
+    cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='Ingredients'")
+    ing_cost_map = {}
+    if cursor.fetchone():
+        cursor.execute("SELECT Ingredient_ID, Cost_Per_Unit FROM Ingredients")
+        for iid, cpu in cursor.fetchall():
+            ing_cost_map[str(iid)] = float(cpu or 0.0)
+
+    # 4. Product Cost Price Fallback
+    cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='Products'")
+    prod_cost_map = {}
+    if cursor.fetchone():
+        cursor.execute("SELECT Product_ID, Cost_Price FROM Products")
+        for pid, cp in cursor.fetchall():
+            prod_cost_map[str(pid)] = float(cp or 0.0)
+
+    conn.close()
+
+    total_cogs = 0.0
+    for _, s_row in sales_slice_df.iterrows():
+        item_id = str(s_row.get('Product_ID', '')).strip()
+        try:
+            qty_sold = float(s_row.get('Quantity', 0.0) or 0.0)
+        except (ValueError, TypeError):
+            qty_sold = 0.0
+
+        if qty_sold == 0:
+            continue
+
+        if item_id in prod_recipe_map and len(prod_recipe_map[item_id]) > 0:
+            for iid, req_qty in prod_recipe_map[item_id]:
+                total_cogs += qty_sold * req_qty * ing_cost_map.get(iid, 0.0)
+        elif item_id in mod_recipe_map and len(mod_recipe_map[item_id]) > 0:
+            for iid, req_qty in mod_recipe_map[item_id]:
+                total_cogs += qty_sold * req_qty * ing_cost_map.get(iid, 0.0)
+        elif item_id in prod_cost_map and prod_cost_map[item_id] > 0:
+            total_cogs += qty_sold * prod_cost_map[item_id]
+        elif 'Unit_Cost' in s_row and pd.notnull(s_row['Unit_Cost']):
+            total_cogs += qty_sold * float(s_row['Unit_Cost'] or 0.0)
+
+    return round(float(total_cogs), 2)
 
 @reports_bp.route('/portal/<username>/reports', methods=['GET', 'POST'])
 def web_reports_tab(username):
@@ -162,32 +234,37 @@ def web_reports_tab(username):
     if not sales_df.empty:
         sales_df['Total_Amount'] = pd.to_numeric(sales_df['Total_Amount'], errors='coerce').fillna(0.0)
         sales_df['Quantity'] = pd.to_numeric(sales_df['Quantity'], errors='coerce').fillna(0.0)
-        sales_df['Sale_Date'] = pd.to_datetime(sales_df['Sale_Date'], errors='coerce')
+        
+        # Resilient date coalescing prioritizing Sale_Date and Date
+        date_candidates = ['Sale_Date', 'sale_date', 'Sales_Date', 'Date', 'date', 'created_at', 'timestamp', 'transaction_date', 'DateTime']
+        sales_df['Parsed_Date'] = pd.NaT
+        for col in date_candidates:
+            if col in sales_df.columns:
+                parsed_col = pd.to_datetime(sales_df[col], errors='coerce')
+                sales_df['Parsed_Date'] = sales_df['Parsed_Date'].fillna(parsed_col)
+
     if not expenses_df.empty:
         expenses_df['Amount'] = pd.to_numeric(expenses_df['Amount'], errors='coerce').fillna(0.0)
-        expenses_df['Expense_Date'] = pd.to_datetime(expenses_df['Expense_Date'], errors='coerce')
+        date_candidates_exp = ['Expense_Date', 'Date', 'expense_date', 'date', 'created_at', 'timestamp']
+        expenses_df['Parsed_Date'] = pd.NaT
+        for col in date_candidates_exp:
+            if col in expenses_df.columns:
+                parsed_col = pd.to_datetime(expenses_df[col], errors='coerce')
+                expenses_df['Parsed_Date'] = expenses_df['Parsed_Date'].fillna(parsed_col)
+
     if not audit_df.empty:
         audit_df['Variance'] = pd.to_numeric(audit_df['Variance'], errors='coerce').fillna(0.0)
-        audit_df['Date'] = pd.to_datetime(audit_df['Date'], errors='coerce')
+        date_candidates_audit = ['Date', 'Log_Date', 'timestamp', 'created_at', 'sales_date', 'DateTime']
+        audit_df['Parsed_Date'] = pd.NaT
+        for col in date_candidates_audit:
+            if col in audit_df.columns:
+                parsed_col = pd.to_datetime(audit_df[col], errors='coerce')
+                audit_df['Parsed_Date'] = audit_df['Parsed_Date'].fillna(parsed_col)
 
     # --- ALL-TIME ROI CALCULATIONS BEFORE DATE FILTER ---
     all_time_revenue = float(sales_df['Total_Amount'].sum()) if not sales_df.empty else 0.0
     all_time_expenses = float(expenses_df['Amount'].sum()) if not expenses_df.empty else 0.0
-    all_time_cogs = 0.0
-    
-    if not sales_df.empty:
-        for _, sale_row in sales_df.iterrows():
-            qty_sold = float(sale_row.get('Quantity', 0.0))
-            if 'Unit_Cost' in sale_row and pd.notnull(sale_row['Unit_Cost']):
-                unit_cost = float(sale_row['Unit_Cost'])
-            else:
-                unit_cost = 0.0
-                p_id = sale_row.get('Product_ID')
-                if not products_df.empty:
-                    prod_match = products_df[products_df['Product_ID'] == p_id]
-                    if not prod_match.empty:
-                        unit_cost = float(pd.to_numeric(prod_match['Cost_Price'], errors='coerce').fillna(0.0).iloc[0])
-            all_time_cogs += (qty_sold * unit_cost)
+    all_time_cogs = calculate_sales_cogs(sales_df, db_path)
 
     all_time_net_profit = all_time_revenue - all_time_cogs - all_time_expenses
     
@@ -256,36 +333,17 @@ def web_reports_tab(username):
     formatted_end_str = end_bound.strftime("%Y-%m-%d") if end_bound is not None else ""
 
     if start_bound is not None and end_bound is not None:
-        if not sales_df.empty and 'Sale_Date' in sales_df.columns:
-            sales_df = sales_df[(sales_df['Sale_Date'] >= start_bound) & (sales_df['Sale_Date'] <= end_bound)]
-        if not expenses_df.empty and 'Expense_Date' in expenses_df.columns:
-            expenses_df = expenses_df[(expenses_df['Expense_Date'] >= start_bound) & (expenses_df['Expense_Date'] <= end_bound)]
-        if not audit_df.empty and 'Date' in audit_df.columns:
-            audit_df = audit_df[(audit_df['Date'] >= start_bound) & (audit_df['Date'] <= end_bound)]
+        if not sales_df.empty and 'Parsed_Date' in sales_df.columns:
+            sales_df = sales_df[(sales_df['Parsed_Date'] >= start_bound) & (sales_df['Parsed_Date'] <= end_bound)]
+        if not expenses_df.empty and 'Parsed_Date' in expenses_df.columns:
+            expenses_df = expenses_df[(expenses_df['Parsed_Date'] >= start_bound) & (expenses_df['Parsed_Date'] <= end_bound)]
+        if not audit_df.empty and 'Parsed_Date' in audit_df.columns:
+            audit_df = audit_df[(audit_df['Parsed_Date'] >= start_bound) & (audit_df['Parsed_Date'] <= end_bound)]
 
     # CORE REVENUE & COST OF GOODS SOLD (COGS) CALCULATIONS
-    total_revenue = 0.0
-    total_cogs = 0.0
-    total_sales_count = 0
-    
-    if not sales_df.empty:
-        total_revenue = float(sales_df['Total_Amount'].sum())
-        total_sales_count = len(sales_df)
-        
-        for _, sale_row in sales_df.iterrows():
-            qty_sold = float(sale_row.get('Quantity', 0.0))
-            
-            if 'Unit_Cost' in sale_row and pd.notnull(sale_row['Unit_Cost']):
-                unit_cost = float(sale_row['Unit_Cost'])
-            else:
-                unit_cost = 0.0
-                p_id = sale_row.get('Product_ID')
-                if not products_df.empty:
-                    prod_match = products_df[products_df['Product_ID'] == p_id]
-                    if not prod_match.empty:
-                        unit_cost = float(pd.to_numeric(prod_match['Cost_Price'], errors='coerce').fillna(0.0).iloc[0])
-            
-            total_cogs += (qty_sold * unit_cost)
+    total_revenue = float(sales_df['Total_Amount'].sum()) if not sales_df.empty else 0.0
+    total_sales_count = len(sales_df) if not sales_df.empty else 0
+    total_cogs = calculate_sales_cogs(sales_df, db_path)
 
     total_expenses = float(expenses_df['Amount'].sum()) if not expenses_df.empty else 0.0
 
@@ -476,14 +534,27 @@ def web_reports_tab(username):
 
     recent_sales = []
     if not sales_df.empty:
-        sales_sorted = sales_df.sort_values('Sale_Date', ascending=False).head(8)
+        sort_col = 'Parsed_Date' if 'Parsed_Date' in sales_df.columns and sales_df['Parsed_Date'].notna().any() else 'Sale_Date'
+        sales_sorted = sales_df.sort_values(sort_col, ascending=False).head(8)
         for _, row in sales_sorted.iterrows():
-            p_id = row['Product_ID']
-            p_name = products_df[products_df['Product_ID'] == p_id]['Product_Name'].values[0] if not products_df.empty and p_id in products_df['Product_ID'].values else p_id
-            date_str = row['Sale_Date'].strftime("%Y-%m-%d") if pd.notnull(row['Sale_Date']) else datetime.now().strftime("%Y-%m-%d")
+            p_id = str(row.get('Product_ID', ''))
+            stored_name = row.get('Product_Name')
+            if stored_name and str(stored_name).strip() and str(stored_name).strip().lower() != 'nan':
+                p_name = str(stored_name).strip()
+            elif not products_df.empty and p_id in products_df['Product_ID'].values:
+                p_name = products_df[products_df['Product_ID'] == p_id]['Product_Name'].values[0]
+            else:
+                p_name = p_id
+
+            date_val = row.get('Parsed_Date')
+            if pd.notnull(date_val):
+                date_str = pd.to_datetime(date_val).strftime("%Y-%m-%d")
+            else:
+                date_str = str(row.get('Sale_Date', datetime.now().strftime("%Y-%m-%d")))
+                
             recent_sales.append({
                 'Sale_Date': date_str, 'Sale_Time': str(row.get('Sale_Time', '')),
-                'Product_Name': p_name, 'Quantity': float(row['Quantity']), 'Total_Amount': float(row['Total_Amount'])
+                'Product_Name': p_name, 'Quantity': float(row.get('Quantity', 0.0) or 0.0), 'Total_Amount': float(row.get('Total_Amount', 0.0) or 0.0)
             })
 
     incidents_list = []
