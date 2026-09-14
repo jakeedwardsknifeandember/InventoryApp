@@ -5,7 +5,7 @@ import sqlite3
 import os
 import pandas as pd
 import datetime
-from collections import defaultdict
+from collections import defaultdict, OrderedDict
 
 # SYSTEM COMPONENT BLUEPRINT IMPORTS
 from routes.auth import auth_bp
@@ -48,11 +48,11 @@ def initialize_user_database():
     os.makedirs("data", exist_ok=True)
     conn = sqlite3.connect(USER_DB_PATH)
     cursor = conn.cursor()
-    cursor.execute('''
+    cursor.execute("""
         CREATE TABLE IF NOT EXISTS users (
             username TEXT PRIMARY KEY, password TEXT NOT NULL, database_file TEXT NOT NULL, subscription_status TEXT NOT NULL
         )
-    ''')
+    """)
     cursor.execute("INSERT OR REPLACE INTO users VALUES ('bakery', 'bakery123', 'data/client_bakery.db', 'Active')")
     conn.commit()
     conn.close()
@@ -203,13 +203,13 @@ def client_portal(username):
                 if qty_sold == 0:
                     continue
 
-                if item_id in prod_recipe_map:
+                if item_id in prod_recipe_map and len(prod_recipe_map[item_id]) > 0:
                     for iid, req_qty in prod_recipe_map[item_id]:
                         theoretical_cogs += qty_sold * req_qty * ing_cost_map.get(iid, 0.0)
-                elif item_id in mod_recipe_map:
+                elif item_id in mod_recipe_map and len(mod_recipe_map[item_id]) > 0:
                     for iid, req_qty in mod_recipe_map[item_id]:
                         theoretical_cogs += qty_sold * req_qty * ing_cost_map.get(iid, 0.0)
-                elif item_id in prod_cost_map:
+                elif item_id in prod_cost_map and prod_cost_map[item_id] > 0:
                     theoretical_cogs += qty_sold * prod_cost_map[item_id]
 
             theoretical_cogs = round(float(theoretical_cogs), 2)
@@ -297,7 +297,7 @@ def client_portal(username):
             
     menu_engineering_list = sorted(menu_engineering_list, key=lambda x: x['volume'], reverse=True)[:10]
 
-    # 6. Real-Time Operational Activity Stream (Shift Manager Logbook)
+    # 6. Real-Time Operational Activity Stream (Shift Manager Logbook with Grouped Transactions)
     logbook_stream = []
     
     audit_log_df = client_db.read_tab('Inventory_Audit_Log')
@@ -314,7 +314,9 @@ def client_portal(username):
         else:
             filtered_audit_df = audit_log_df.copy()
 
-        for _, row in filtered_audit_df.tail(30).iterrows():
+        grouped_events = OrderedDict()
+
+        for _, row in filtered_audit_df.iterrows():
             audit_id = str(row.get('Audit_ID', row.get('Type', ''))).strip().upper()
             notes_str = str(row.get('Notes', row.get('Reason', 'Routine process record.'))).strip()
             item_ref = str(row.get('Ingredient_Name', row.get('Ingredient_ID', row.get('Item_Name', 'Stock Line')))).strip()
@@ -335,60 +337,103 @@ def client_portal(username):
                 except Exception:
                     time_stamp_str = "Today, On Shift"
 
-            user_node = str(row.get('Updated_By', row.get('User', 'Floor Terminal'))).title()
-
-            is_pos_sale = (
-                audit_id.startswith('POS') or 
-                'POS' in notes_str or 
-                ('Product ' in notes_str and 'Product Waste' not in notes_str) or 
-                ('PROD' in audit_id and 'Product Waste' not in notes_str and 'WST' not in audit_id)
-            )
-            is_waste = (
-                audit_id.startswith('WST') or 
-                'Product Waste:' in notes_str or 
-                'Reason:' in notes_str or 
-                'SPOIL' in audit_id or 
-                'WASTE' in audit_id
-            )
-            is_prep = (
-                audit_id.startswith('PRP') or 
-                'PREP' in audit_id or 
-                'Consumed to manufacture' in notes_str or 
-                'Yielded output' in notes_str
-            )
-
-            if is_pos_sale:
-                badge_color = "info"
-                log_type = "POS SALE"
-                event_title = f"POS Recipe Depletion for {item_ref}"
-            elif is_waste:
-                badge_color = "danger"
-                log_type = "SPOILAGE"
-                event_title = f"Spoilage/Waste Event recorded for {item_ref}"
-            elif is_prep:
-                badge_color = "warning"
-                log_type = "KITCHEN PREP"
-                event_title = f"Kitchen Prep batch finalized for {item_ref}"
-            elif qty_acted > 0 or audit_id.startswith('RCV') or audit_id.startswith('AUD'):
-                badge_color = "success"
-                log_type = "STOCK INTAKE" if audit_id.startswith('RCV') else "AUDIT RECON"
-                event_title = f"Stock level addition logged for {item_ref}"
+            # Grouping key collapses all ingredients belonging to the exact same transaction
+            if audit_id and audit_id not in ['NONE', 'NAN', '']:
+                group_key = audit_id
             else:
-                badge_color = "danger" if qty_acted < 0 else "success"
-                log_type = "ADJUSTMENT"
-                event_title = f"Stock level adjustment for {item_ref}"
+                group_key = f"{time_stamp_str}_{notes_str[:30]}"
 
-            logbook_stream.append({
-                'timestamp': time_stamp_str,
-                'type': log_type,
-                'title': event_title,
-                'quantity': f"{qty_acted:+,g}" if qty_acted != 0 else "0",
-                'user': user_node,
-                'badge': badge_color,
-                'notes': notes_str
+            if group_key not in grouped_events:
+                is_pos_sale = (
+                    audit_id.startswith('POS') or 
+                    audit_id.startswith('SAL') or 
+                    audit_id.startswith('MOD') or 
+                    'POS' in notes_str or 
+                    ('Product ' in notes_str and 'Product Waste' not in notes_str)
+                )
+                is_waste = (
+                    audit_id.startswith('WST') or 
+                    'Product Waste:' in notes_str or 
+                    'Reason:' in notes_str or 
+                    'SPOIL' in audit_id or 
+                    'WASTE' in audit_id
+                )
+                is_prep = (
+                    audit_id.startswith('PRP') or 
+                    'PREP' in audit_id or 
+                    'Consumed to manufacture' in notes_str or 
+                    'Yielded output' in notes_str
+                )
+                is_void = (
+                    audit_id.startswith('VOID') or 
+                    'VOID' in notes_str
+                )
+
+                if is_void:
+                    badge_color = "warning"
+                    log_type = "VOID RESTORE"
+                elif is_pos_sale:
+                    badge_color = "primary"
+                    log_type = "POS SALE"
+                elif is_waste:
+                    badge_color = "danger"
+                    log_type = "SPOILAGE"
+                elif is_prep:
+                    badge_color = "warning"
+                    log_type = "KITCHEN PREP"
+                elif qty_acted > 0 or audit_id.startswith('RCV') or audit_id.startswith('AUD'):
+                    badge_color = "success"
+                    log_type = "STOCK INTAKE" if audit_id.startswith('RCV') else "AUDIT RECON"
+                else:
+                    badge_color = "danger" if qty_acted < 0 else "success"
+                    log_type = "ADJUSTMENT"
+
+                commentary = ""
+                if "POS Depletion:" in notes_str:
+                    parts = notes_str.split('|')
+                    sold_item = parts[0].replace("POS Depletion:", "").strip()
+                    event_title = f"POS Depletion for {sold_item}"
+                    if len(parts) > 1:
+                        commentary = "|".join(parts[1:]).strip()
+                elif "VOID RESTORE:" in notes_str:
+                    parts = notes_str.split('|')
+                    event_title = parts[0].strip()
+                    if len(parts) > 1:
+                        commentary = "|".join(parts[1:]).strip()
+                elif is_pos_sale:
+                    event_title = f"POS Depletion for Order {audit_id}"
+                    commentary = notes_str
+                elif is_waste:
+                    event_title = f"Spoilage Event recorded for {item_ref}"
+                    commentary = notes_str
+                elif is_prep:
+                    event_title = f"Kitchen Prep batch finalized for {item_ref}"
+                    commentary = notes_str
+                elif qty_acted > 0 or audit_id.startswith('RCV'):
+                    event_title = f"Stock level addition logged for {item_ref}"
+                    commentary = notes_str
+                else:
+                    event_title = f"Stock level adjustment for {item_ref}"
+                    commentary = notes_str
+
+                grouped_events[group_key] = {
+                    'event_id': group_key,
+                    'timestamp': time_stamp_str,
+                    'type': log_type,
+                    'title': event_title,
+                    'user': str(row.get('Updated_By', row.get('User', 'Floor Terminal'))).title(),
+                    'badge': badge_color,
+                    'notes': commentary,
+                    'depleted_items': []
+                }
+
+            grouped_events[group_key]['depleted_items'].append({
+                'name': item_ref,
+                'quantity': f"{qty_acted:+,g}" if qty_acted != 0 else "0"
             })
 
-        logbook_stream = list(reversed(logbook_stream))
+        # Most recent transactions first, limited to top 30 distinct events
+        logbook_stream = list(reversed(list(grouped_events.values())))[:30]
 
     return render_template(
         'dashboard.html', username=username, total_products=total_products,

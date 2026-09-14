@@ -158,9 +158,9 @@
         </div>
     </div>
 
-    <!-- BOTTOM SPLIT ROW: OPERATIONS LOGBOOK vs FINANCIAL DEFICIT DOUGHNUT CHART -->
+    <!-- BOTTOM SPLIT ROW: OPERATIONS LOGBOOK ACCORDION vs FINANCIAL DEFICIT DOUGHNUT CHART -->
     <div class="dashboard-split-row">
-        <!-- BOTTOM LEFT COLUMN: REAL-TIME SHIFT OPERATIONS LOGBOOK -->
+        <!-- BOTTOM LEFT COLUMN: REAL-TIME SHIFT OPERATIONS LOGBOOK WITH ACCORDION BREAKDOWN -->
         <div class="panel-card">
             <div class="panel-header-title">
                 <span>Real-Time Shift Operations Logbook</span>
@@ -169,18 +169,51 @@
             
             <div class="log-stream-container">
                 {% for log in logbook %}
-                <div class="log-entry-item" style="border-left-color: {% if log.type == 'POS SALE' or log.badge == 'info' or log.badge == 'primary' %}#3b8ed0{% elif log.type == 'SPOILAGE' or log.badge == 'danger' %}#c24b4b{% else %}#2fa572{% endif %};">
+                {% set log_idx = loop.index %}
+                <div class="log-entry-item" style="border-left-color: {% if log.type in ['POS SALE', 'POS DELETION'] or log.badge in ['info', 'primary'] %}#3b8ed0{% elif log.type == 'SPOILAGE' or log.badge == 'danger' %}#c24b4b{% else %}#2fa572{% endif %};">
                     <div class="log-meta-row">
                         <span class="badge bg-{% if log.type == 'POS SALE' %}primary{% elif log.type == 'SPOILAGE' %}danger{% else %}{{ log.badge }}{% endif %} font-monospace" style="font-size: 10px; font-weight:900; color:#ffffff;">
                             {{ log.type }}
                         </span>
                         <span class="log-timestamp">{{ log.timestamp }}</span>
                     </div>
+                    
                     <div class="log-title-string">{{ log.title }}</div>
-                    <div style="font-size: 12px; color: #e2e8f0; display:flex; justify-content:space-between; align-items:center;">
-                        <span>Impact Magnitude Metric: <b class="font-monospace {% if log.type == 'POS SALE' %}text-info{% else %}text-warning{% endif %}">{{ log.quantity }}</b></span>
+                    
+                    <div style="font-size: 12px; color: #e2e8f0; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:6px;">
+                        <div class="d-flex align-items-center">
+                            {% if log.depleted_items|length > 1 %}
+                                <span>Constituents Depleted: <b class="font-monospace text-info">{{ log.depleted_items|length }} items</b></span>
+                                <button class="btn btn-sm btn-outline-info py-0 px-2 ms-2 font-monospace" style="font-size: 11px; border-radius: 4px;" type="button" data-bs-toggle="collapse" data-bs-target="#collapseLog{{ log_idx }}" aria-expanded="false">
+                                    View Breakdown &darr;
+                                </button>
+                            {% elif log.depleted_items|length == 1 %}
+                                <span>Impact Metric: <b class="font-monospace {% if log.type == 'POS SALE' %}text-info{% else %}text-warning{% endif %}">{{ log.depleted_items[0].name }} ({{ log.depleted_items[0].quantity }})</b></span>
+                            {% else %}
+                                <span>Impact Metric: <b class="font-monospace text-muted">—</b></span>
+                            {% endif %}
+                        </div>
                         <span>Operator Node Reference: <b class="text-info font-monospace">{{ log.user }}</b></span>
                     </div>
+
+                    {% if log.depleted_items|length > 1 %}
+                    <div class="collapse mt-2" id="collapseLog{{ log_idx }}">
+                        <div class="p-2 rounded" style="background: #111118; border: 1px solid #282838;">
+                            <div class="text-muted small fw-bold mb-1" style="font-size: 10.5px; letter-spacing: 0.3px;">RECIPE DEPLETIONS (IN ONE PLACE):</div>
+                            <table class="table table-sm table-dark table-hover mb-0 font-monospace" style="font-size: 11.5px; background: transparent;">
+                                <tbody>
+                                    {% for item in log.depleted_items %}
+                                    <tr style="border-bottom: 1px solid #222230;">
+                                        <td class="text-light py-1 ps-1">{{ item.name }}</td>
+                                        <td class="text-end text-warning fw-bold py-1 pe-1">{{ item.quantity }}</td>
+                                    </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                    {% endif %}
+
                     {% if log.notes %}
                         <div class="log-notes-body">Shift Handover Commentary: "{{ log.notes }}"</div>
                     {% endif %}
