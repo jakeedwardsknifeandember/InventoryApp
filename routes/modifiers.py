@@ -34,6 +34,10 @@ def web_modifiers_tab(username):
     if session.get('logged_in_user') != username: 
         return redirect('/login')
 
+    # Safeguard: Recognize master tenant account as Platform Owner Admin
+    if not session.get('staff_role') and session.get('logged_in_user') == username:
+        session['staff_role'] = 'Platform Owner Admin'
+
     if session.get('staff_role') != 'Platform Owner Admin':
         flash('Unauthorized access: Modifiers management is strictly reserved for Platform Owner Admins.', 'danger')
         return redirect(f"/portal/{username}")
@@ -44,6 +48,7 @@ def web_modifiers_tab(username):
     if request.method == 'POST':
         action = request.form.get('action_type')
         
+        # 1. ADD NEW MODIFIER
         if action == 'add_modifier':
             mod_name = request.form.get('modifier_name', '').strip()
             try:
@@ -61,9 +66,45 @@ def web_modifiers_tab(username):
                 mods_df = new_row_df
                 
             db.save_tab('Modifiers', mods_df)
-            db.log_user_action(username, "ADD_MODIFIER", "Modifiers", f"Created modifier '{mod_name}' (PHP {price:.2f})")
+            if hasattr(db, 'log_user_action'):
+                try:
+                    db.log_user_action(username, "ADD_MODIFIER", "Modifiers", f"Created modifier '{mod_name}' (PHP {price:.2f})")
+                except Exception:
+                    pass
             flash(f"Modifier '{mod_name}' added successfully.", 'success')
 
+        # 2. EDIT EXISTING MODIFIER (NAME & PRICE)
+        elif action == 'edit_modifier':
+            mod_id = request.form.get('modifier_id', '').strip()
+            mod_name = request.form.get('modifier_name', '').strip()
+            try:
+                price = float(request.form.get('price', 0.0) or 0.0)
+            except (ValueError, TypeError):
+                price = 0.0
+                
+            if mod_id and mod_name:
+                conn = sqlite3.connect(db_path, timeout=20.0)
+                cursor = conn.cursor()
+                cursor.execute("UPDATE Modifiers SET Modifier_Name = ?, Price = ? WHERE Modifier_ID = ?", (mod_name, price, mod_id))
+                conn.commit()
+                conn.close()
+
+                mods_df = db.read_tab('Modifiers')
+                if not mods_df.empty:
+                    idx = mods_df[mods_df['Modifier_ID'] == mod_id].index
+                    if not idx.empty:
+                        mods_df.loc[idx[0], 'Modifier_Name'] = mod_name
+                        mods_df.loc[idx[0], 'Price'] = price
+                        db.save_tab('Modifiers', mods_df)
+
+                if hasattr(db, 'log_user_action'):
+                    try:
+                        db.log_user_action(username, "EDIT_MODIFIER", "Modifiers", f"Updated modifier '{mod_name}' (PHP {price:.2f})")
+                    except Exception:
+                        pass
+                flash(f"Modifier '{mod_name}' updated successfully.", 'success')
+
+        # 3. SAVE MODIFIER INGREDIENT RECIPE FORMULA
         elif action == 'save_modifier_recipe':
             mod_id = request.form.get('modifier_id')
             ing_ids = request.form.getlist('ingredient_id[]')
@@ -86,7 +127,7 @@ def web_modifiers_tab(username):
                         'unit': norm_unit
                     })
             
-            # Resilient direct commit to Modifier_Recipes table
+            # Direct atomic commit to Modifier_Recipes table
             conn = sqlite3.connect(db_path, timeout=20.0)
             cursor = conn.cursor()
             cursor.execute("""
@@ -114,6 +155,7 @@ def web_modifiers_tab(username):
 
             flash("Modifier ingredient recipe updated successfully.", 'success')
 
+        # 4. DELETE MODIFIER
         elif action == 'delete_modifier':
             mod_id = request.form.get('modifier_id')
             mods_df = db.read_tab('Modifiers')
@@ -123,6 +165,11 @@ def web_modifiers_tab(username):
             
             conn = sqlite3.connect(db_path, timeout=20.0)
             cursor = conn.cursor()
+            cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='Modifiers'")
+            if cursor.fetchone():
+                cursor.execute("DELETE FROM Modifiers WHERE Modifier_ID = ?", (mod_id,))
+                conn.commit()
+
             cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='Modifier_Recipes'")
             if cursor.fetchone():
                 cursor.execute("DELETE FROM Modifier_Recipes WHERE Modifier_ID = ?", (mod_id,))
@@ -136,7 +183,7 @@ def web_modifiers_tab(username):
     # READ MODIFIERS
     mods_df = db.read_tab('Modifiers')
     
-    # DUAL-LAYER FAILSAFE INGREDIENTS FETCHING
+    # FETCH INGREDIENTS FOR SELECTION (RAW + PREPPED)
     dropdown_ingredients = []
     ingredients_df = db.read_tab('Ingredients')
     
@@ -205,6 +252,7 @@ def web_modifiers_tab(username):
 
             price = float(pd.to_numeric(m.get('Price', 0.0), errors='coerce') or 0.0)
             profit = price - total_cost
+            margin = (profit / price * 100.0) if price > 0 else 0.0
 
             modifiers_list.append({
                 'Modifier_ID': m_id,
@@ -212,6 +260,7 @@ def web_modifiers_tab(username):
                 'Price': price,
                 'Cost': total_cost,
                 'Profit': profit,
+                'Margin': margin,
                 'Items': items
             })
 

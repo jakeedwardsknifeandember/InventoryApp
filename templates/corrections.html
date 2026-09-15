@@ -52,7 +52,7 @@
                         <thead>
                             <tr class="text-secondary font-monospace" style="font-size: 11px; letter-spacing: 0.5px;">
                                 <th class="ps-3">SALE ID & TIMESTAMP</th>
-                                <th>PRODUCT ID</th>
+                                <th>PRODUCT</th>
                                 <th class="text-center">QTY</th>
                                 <th class="text-end">REVENUE</th>
                                 <th class="text-center pe-3">ACTION</th>
@@ -75,14 +75,14 @@
                                 </td>
                                 <td>
                                     <span class="badge {% if sale.is_voided %}bg-dark border border-secondary text-light opacity-50{% else %}bg-secondary text-light{% endif %}" style="font-size: 12px;">
-                                        {{ sale.Product_ID }}
+                                        {{ sale.Product_Name or sale.Product_ID }}
                                     </span>
                                 </td>
                                 <td class="text-center font-monospace fw-bold {% if sale.is_voided %}text-secondary{% else %}text-light{% endif %}">
                                     {{ sale.Quantity|int if sale.Quantity % 1 == 0 else sale.Quantity }}
                                 </td>
                                 <td class="text-end fw-bold {% if sale.is_voided %}text-secondary text-decoration-line-through{% else %}text-success{% endif %}">
-                                    PHP {{ "%.2f"|format(sale.Total_Amount) }}
+                                    PHP {{ "%.2f"|format(sale.Total_Amount|float) }}
                                 </td>
                                 <td class="text-center pe-3">
                                     {% if sale.is_voided %}
@@ -96,7 +96,7 @@
                             </tr>
                             {% else %}
                             <tr>
-                                <td colspan="5" class="text-center text-light opacity-75 py-5">No recent valid sales available to void.</td>
+                                <td colspan="5" class="text-center text-light opacity-75 py-5">No recent sales transactions available to void.</td>
                             </tr>
                             {% endfor %}
                         </tbody>
@@ -237,7 +237,7 @@
         <div class="card border-secondary bg-dark text-white shadow-sm mb-4">
             <div class="card-header fw-bold d-flex justify-content-between align-items-center" style="background: linear-gradient(180deg, #64748b 0%, #475569 100%); border-bottom: 1px solid #64748b;">
                 <span>Void Petty Cash & Expenses</span>
-                <small class="text-white-50">Neutralize double-entered expenses from the P&L statement.</small>
+                <small class="text-white-50">Neutralize double-entered expenses from the general ledger.</small>
             </div>
             <div class="card-body p-0">
                 <div style="max-height: 65vh; overflow-y: auto;">
@@ -272,7 +272,8 @@
                                     {% if expense.is_voided %}
                                         <span class="badge bg-danger text-white px-2 py-1" style="font-size: 12px;">VOIDED</span>
                                     {% else %}
-                                        <button type="button" class="btn btn-sm btn-outline-secondary fw-bold px-3 shadow-sm" onclick="openExpenseVoidModal('{{ expense.rowid }}')">
+                                        <button type="button" class="btn btn-sm btn-outline-secondary fw-bold px-3 shadow-sm" 
+                                                onclick="openExpenseVoidModal('{{ expense.rowid }}', '{{ expense.Category }}', '{{ expense.Amount|float }}')">
                                             VOID
                                         </button>
                                     {% endif %}
@@ -291,7 +292,7 @@
     </div>
 </div>
 
-<!-- Security Sales Void Modal -->
+<!-- Modal 1: Sales Void Confirmation -->
 <div class="modal fade" id="saleVoidConfirmModal" tabindex="-1" aria-hidden="true">
     <div class="modal-dialog modal-dialog-centered">
         <div class="modal-content bg-dark text-white border border-danger shadow-lg">
@@ -306,7 +307,7 @@
                 <div class="modal-body p-4" style="background-color: #1a1a1a;">
                     <p class="mb-3 text-light" style="font-size: 14.5px;">
                         You are about to permanently void transaction <strong id="displayTargetSaleId" class="text-danger font-monospace"></strong>.
-                        This will reverse the financial entry and restock all associated ingredients back into the system inventory.
+                        This reverses the financial ledger and restocks all product/modifier ingredients back into active inventory.
                     </p>
                     
                     <label class="form-label text-danger fw-bold small mb-1">Mandatory Audit Explanation:</label>
@@ -321,7 +322,7 @@
     </div>
 </div>
 
-<!-- Security Waste Void Modal -->
+<!-- Modal 2: Waste Void Confirmation -->
 <div class="modal fade" id="wasteVoidConfirmModal" tabindex="-1" aria-hidden="true">
     <div class="modal-dialog modal-dialog-centered">
         <div class="modal-content bg-dark text-white border border-warning shadow-lg">
@@ -336,7 +337,7 @@
                 <div class="modal-body p-4" style="background-color: #1a1a1a;">
                     <p class="mb-3 text-light" style="font-size: 14.5px;">
                         You are about to permanently void wastage log <strong id="displayTargetWasteId" class="text-warning font-monospace"></strong>.
-                        This will restore the deducted physical inventory back into the active stock levels and clear the expense from financial reports.
+                        This restores the deducted physical inventory back into active stock counts.
                     </p>
                     
                     <label class="form-label text-warning fw-bold small mb-1">Mandatory Audit Explanation:</label>
@@ -351,7 +352,7 @@
     </div>
 </div>
 
-<!-- Security Intake Void Modal -->
+<!-- Modal 3: Intake Void Confirmation -->
 <div class="modal fade" id="intakeVoidConfirmModal" tabindex="-1" aria-hidden="true">
     <div class="modal-dialog modal-dialog-centered">
         <div class="modal-content bg-dark text-white border border-info shadow-lg">
@@ -366,7 +367,7 @@
                 <div class="modal-body p-4" style="background-color: #1a1a1a;">
                     <p class="mb-3 text-light" style="font-size: 14.5px;">
                         You are about to permanently void stock intake log <strong id="displayTargetIntakeId" class="text-info font-monospace"></strong>.
-                        This will deduct the overstated inventory amounts from the active system counts.
+                        This deducts the overstated delivery quantity from active stock.
                     </p>
                     
                     <label class="form-label text-info fw-bold small mb-1">Mandatory Audit Explanation:</label>
@@ -381,7 +382,7 @@
     </div>
 </div>
 
-<!-- Security Expense Void Modal -->
+<!-- Modal 4: Expense Void Confirmation -->
 <div class="modal fade" id="expenseVoidConfirmModal" tabindex="-1" aria-hidden="true">
     <div class="modal-dialog modal-dialog-centered">
         <div class="modal-content bg-dark text-white border border-secondary shadow-lg">
@@ -395,8 +396,12 @@
                 </div>
                 <div class="modal-body p-4" style="background-color: #1a1a1a;">
                     <p class="mb-3 text-light" style="font-size: 14.5px;">
-                        You are about to permanently void this petty cash expense record.
-                        The financial amount will be neutralized to 0.0, restoring accuracy to the P&L statement.
+                        You are about to permanently void this petty cash expense record:
+                        <strong id="displayTargetExpenseCategory" class="text-warning d-block mt-1"></strong>
+                        Amount: <strong id="displayTargetExpenseAmount" class="text-danger"></strong>
+                    </p>
+                    <p class="small text-white-50 mb-3">
+                        The financial value will be neutralized to PHP 0.00 to preserve audit integrity.
                     </p>
                     
                     <label class="form-label text-secondary fw-bold small mb-1">Mandatory Audit Explanation:</label>
@@ -415,28 +420,26 @@
 function openSaleVoidModal(saleId) {
     document.getElementById('modalTargetSaleId').value = saleId;
     document.getElementById('displayTargetSaleId').textContent = saleId;
-    const voidModal = new bootstrap.Modal(document.getElementById('saleVoidConfirmModal'));
-    voidModal.show();
+    new bootstrap.Modal(document.getElementById('saleVoidConfirmModal')).show();
 }
 
 function openWasteVoidModal(wasteId) {
     document.getElementById('modalTargetWasteId').value = wasteId;
     document.getElementById('displayTargetWasteId').textContent = wasteId;
-    const voidModal = new bootstrap.Modal(document.getElementById('wasteVoidConfirmModal'));
-    voidModal.show();
+    new bootstrap.Modal(document.getElementById('wasteVoidConfirmModal')).show();
 }
 
 function openIntakeVoidModal(intakeId) {
     document.getElementById('modalTargetIntakeId').value = intakeId;
     document.getElementById('displayTargetIntakeId').textContent = intakeId;
-    const voidModal = new bootstrap.Modal(document.getElementById('intakeVoidConfirmModal'));
-    voidModal.show();
+    new bootstrap.Modal(document.getElementById('intakeVoidConfirmModal')).show();
 }
 
-function openExpenseVoidModal(expenseRowId) {
+function openExpenseVoidModal(expenseRowId, category, amount) {
     document.getElementById('modalTargetExpenseId').value = expenseRowId;
-    const voidModal = new bootstrap.Modal(document.getElementById('expenseVoidConfirmModal'));
-    voidModal.show();
+    document.getElementById('displayTargetExpenseCategory').textContent = category || 'Petty Cash Expense';
+    document.getElementById('displayTargetExpenseAmount').textContent = 'PHP ' + parseFloat(amount || 0).toFixed(2);
+    new bootstrap.Modal(document.getElementById('expenseVoidConfirmModal')).show();
 }
 </script>
 {% endblock %}

@@ -27,6 +27,10 @@
     .prep-preview-card { background: #161622; border: 1px solid #3b8ed055; border-radius: 6px; padding: 14px; }
     .prep-preview-table th { font-size: 11px; text-transform: uppercase; color: #94a3b8; border-bottom: 1px solid #3f3f46; padding: 6px 8px; }
     .prep-preview-table td { font-size: 12px; color: #ffffff; border-bottom: 1px solid #252535; padding: 6px 8px; }
+
+    /* AUDIT REVIEW STAGE 2 STYLES */
+    .audit-review-table th { font-size: 11px; text-transform: uppercase; color: #94a3b8; background: #151518; border-bottom: 1px solid #3f3f46; padding: 8px; }
+    .audit-review-table td { font-size: 12.5px; color: #ffffff; border-bottom: 1px solid #282838; padding: 8px; vertical-align: middle; }
 </style>
 
 <div class="container-fluid p-0">
@@ -39,7 +43,7 @@
             <button class="btn btn-sm btn-warning text-dark fw-bold d-flex align-items-center gap-1 px-3 py-2" data-bs-toggle="modal" data-bs-target="#logPrepModal">
                 Log Kitchen Prep
             </button>
-            <button class="btn btn-sm btn-primary fw-bold d-flex align-items-center gap-1 px-3 py-2" data-bs-toggle="modal" data-bs-target="#reconcileStockModal">
+            <button class="btn btn-sm btn-primary fw-bold d-flex align-items-center gap-1 px-3 py-2" data-bs-toggle="modal" data-bs-target="#reconcileStockModal" onclick="resetReconciliationWizard()">
                 Audit Raw Counts
             </button>
             <button class="btn btn-sm btn-danger fw-bold d-flex align-items-center gap-1 px-3 py-2" data-bs-toggle="modal" data-bs-target="#logWasteModal">
@@ -424,61 +428,135 @@
     </div>
 </div>
 
-<!-- AUDIT RECONCILIATION MODAL -->
+<!-- 2-STAGE PHYSICAL SHIFT AUDIT & DISCREPANCY RECONCILIATION WIZARD -->
 <div class="modal fade" id="reconcileStockModal" tabindex="-1" aria-hidden="true">
-    <div class="modal-dialog modal-lg modal-dialog-centered">
-        <div class="modal-content modal-custom-content">
-            <form method="post" action="/portal/{{ username }}/inventory?type={{ current_type }}">
+    <div class="modal-dialog modal-xl modal-dialog-centered">
+        <div class="modal-content modal-custom-content shadow-lg">
+            <form method="post" id="physicalAuditMasterForm" action="/portal/{{ username }}/inventory?type={{ current_type }}">
                 <input type="hidden" name="action_type" value="reconcile_stock">
                 
-                <div class="modal-custom-header">
-                    <h5 class="fw-bold m-0 text-white">Initiate Physical Floor Count Audit Reconciliation</h5>
+                <div class="modal-custom-header d-flex justify-content-between align-items-center">
+                    <div>
+                        <h5 class="fw-bold m-0 text-white" id="auditModalTitle">Physical Shift Count Audit (Stage 1: Floor Count)</h5>
+                        <small class="text-high-contrast-muted" id="auditModalSubtitle">Record on-hand quantities blindly without bias</small>
+                    </div>
+                    <div class="d-flex align-items-center gap-2">
+                        <div class="form-check form-switch m-0" id="blindCountToggleWrapper">
+                            <input class="form-check-input" type="checkbox" id="unmaskBookBalSwitch" onchange="toggleUnmaskBookBalances(this.checked)">
+                            <label class="form-check-label text-light small fw-bold" for="unmaskBookBalSwitch">Unmask Book Stock</label>
+                        </div>
+                        <button type="button" class="btn-close btn-close-white ms-2" data-bs-dismiss="modal" aria-label="Close"></button>
+                    </div>
                 </div>
                 
                 <div class="modal-body p-4">
-                    <div class="row g-3 mb-4">
-                        <div class="col-md-6">
-                            <label class="form-label-custom">Auditing Officer Identity:</label>
-                            <input type="text" name="reconcile_by" required placeholder="e.g. Lead Auditor" class="form-control bg-dark text-white border-secondary">
+                    <!-- STAGE 1: PHYSICAL BLIND COUNT ENTRY SCREEN -->
+                    <div id="auditStage1Container">
+                        <div class="row g-3 mb-4">
+                            <div class="col-md-6">
+                                <label class="form-label-custom">Auditing Officer Identity:</label>
+                                <input type="text" name="reconcile_by" id="auditOfficerInput" required placeholder="e.g. Lead Barista / Closing Supervisor" class="form-control bg-dark text-white border-secondary">
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label-custom">Audit Purpose / Verification Scope:</label>
+                                <input type="text" name="reconcile_reason" id="auditReasonInput" required placeholder="e.g. End-of-Day Closing Count" value="End-of-Day Closing Count" class="form-control bg-dark text-white border-secondary">
+                            </div>
                         </div>
-                        <div class="col-md-6">
-                            <label class="form-label-custom">Audit Purpose / Verification Scope:</label>
-                            <input type="text" name="reconcile_reason" required placeholder="e.g. End-of-Month Fiscal Audit" class="form-control bg-dark text-white border-secondary">
+
+                        <div class="d-flex justify-content-between align-items-center mb-2">
+                            <label class="form-label-custom m-0 text-warning">Floor Shelf Tally (in Recipe Base Units):</label>
+                            <small class="text-info font-monospace" style="font-size: 11px;">Leave blank if item was not physically counted this shift</small>
+                        </div>
+
+                        <div style="max-height: 48vh; overflow-y: auto; padding-right:6px;" id="auditItemsListWrapper">
+                            {% for item in inventory_status %}
+                            <div class="row g-2 align-items-center mb-2 p-2 rounded audit-count-row" style="background: rgba(255,255,255,0.02); border: 1px solid #2d2d3f;"
+                                 data-id="{{ item.Ingredient_ID }}"
+                                 data-name="{{ item.Ingredient_Name }}"
+                                 data-unit="{{ item.Unit }}"
+                                 data-book="{{ item.Current_Stock }}"
+                                 data-cost="{{ item.Cost_Per_Unit or 0.0 }}">
+                                
+                                <div class="col-md-7">
+                                    <span class="fw-bold text-white fs-6">{{ item.Ingredient_Name }}</span>
+                                    <div class="book-stock-container text-high-contrast-muted font-monospace" style="font-size: 11.5px;">
+                                        {% if store_settings.get('enforce_blind_count', 'yes') == 'yes' %}
+                                            <span class="masked-book-badge text-muted">Book Balance: <b class="text-white-50">*** Masked (Blind Count) ***</b></span>
+                                            <span class="unmasked-book-badge text-info d-none">Book Balance: <b>{{ "{:,.2f}".format(item.Current_Stock) }} {{ item.Unit }}</b></span>
+                                        {% else %}
+                                            <span class="text-info">Book Balance: <b>{{ "{:,.2f}".format(item.Current_Stock) }} {{ item.Unit }}</b></span>
+                                        {% endif %}
+                                    </div>
+                                </div>
+                                
+                                <div class="col-md-5">
+                                    <div class="input-group">
+                                        <input type="hidden" name="ingredient_id[]" value="{{ item.Ingredient_ID }}">
+                                        <input type="number" name="quantity[]" step="any" placeholder="Physical Count" 
+                                               class="form-control bg-dark text-white border-secondary font-monospace text-end fw-bold physical-count-input"
+                                               autocomplete="off">
+                                        <span class="input-group-text bg-secondary border-secondary text-white font-monospace" style="min-width: 60px;">{{ item.Unit }}</span>
+                                    </div>
+                                    <input type="hidden" name="variance_reason[]" class="hidden-variance-reason-field" value="">
+                                </div>
+                            </div>
+                            {% endfor %}
                         </div>
                     </div>
 
-                    <div style="max-height: 280px; overflow-y: auto; padding-right:4px;">
-                        <label class="form-label-custom mb-2 text-warning">Input Physical Quantities Found on Shelf (in Base Units):</label>
-                        {% for item in inventory_status %}
-                        <div class="row g-2 align-items-center mb-2 p-2 rounded" style="background: rgba(255,255,255,0.01); border: 1px solid #2d2d3f;">
-                            <div class="col-md-7">
-                                <span class="fw-bold text-white small" style="font-size:13px;">{{ item.Ingredient_Name }}</span>
-                                <div class="text-high-contrast-muted font-monospace" style="font-size: 11px;">Book Balance: {{ "{:,.2f}".format(item.Current_Stock) }} {{ item.Unit }}</div>
-                            </div>
-                            <div class="col-md-5">
-                                <div class="input-group input-group-sm">
-                                    <input type="hidden" name="ingredient_id[]" value="{{ item.Ingredient_ID }}">
-                                    <input type="number" name="quantity[]" step="0.001" placeholder="Leave blank if uncounted" 
-                                           class="form-control bg-dark text-white border-secondary font-monospace text-end"
-                                           data-book="{{ item.Current_Stock }}" data-unit="{{ item.Unit }}" onkeyup="calculateVariance(this)" onchange="calculateVariance(this)">
-                                    <span class="input-group-text bg-secondary border-secondary text-white small" style="font-size:11px; width:55px;">{{ item.Unit }}</span>
+                    <!-- STAGE 2: VARIANCE & FINANCIAL SHRINKAGE AUDIT SCREEN -->
+                    <div id="auditStage2Container" class="d-none">
+                        <div class="p-3 mb-3 rounded" style="background: #161622; border: 1px solid #3f3f46; color: #ffffff;">
+                            <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
+                                <div>
+                                    <div class="fw-bold text-white mb-1" style="font-size: 15px;">Shift Inventory Reconciliation Summary</div>
+                                    <div class="small" style="color: #94a3b8;">Review variance discrepancies and input operational justifications for flagged high-risk items.</div>
                                 </div>
-                            </div>
-                            
-                            <div class="col-12 mt-2 variance-container d-none">
-                                <div class="d-flex justify-content-between align-items-center mb-1">
-                                    <span class="small fw-bold text-warning">Discrepancy Detected: <span class="variance-display"></span></span>
+                                <div class="text-end">
+                                    <div class="small mb-1" style="color: #94a3b8;">Net Discrepancy Valuation:</div>
+                                    <div id="netDiscrepancyValuationLabel" class="font-monospace fw-bold" style="font-size: 18px;">PHP 0.00</div>
                                 </div>
-                                <input type="text" name="variance_reason[]" class="form-control form-control-sm bg-dark text-white border-warning variance-reason-input" placeholder="Mandatory: Explain this variance...">
                             </div>
                         </div>
-                        {% endfor %}
+
+                        <div class="table-responsive" style="max-height: 48vh; overflow-y: auto;">
+                            <table class="table audit-review-table mb-0">
+                                <thead>
+                                    <tr>
+                                        <th>Component Name</th>
+                                        <th class="text-end">System Book</th>
+                                        <th class="text-end">Physical Count</th>
+                                        <th class="text-end">Unit Variance</th>
+                                        <th class="text-end">Valuation (PHP)</th>
+                                        <th class="text-center">Severity</th>
+                                        <th style="width: 32%;">Operational Justification / Variance Cause</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="auditReviewTableBody"></tbody>
+                            </table>
+                        </div>
                     </div>
                 </div>
                 
-                <div class="modal-custom-footer text-end">
-                    <button type="button" class="btn btn-sm btn-secondary me-2 fw-bold" data-bs-dismiss="modal">Cancel</button>
-                    <button type="submit" class="btn btn-sm btn-primary fw-bold">Commit Adjustments & Overwrite Variances</button>
+                <div class="modal-custom-footer d-flex justify-content-between align-items-center">
+                    <div>
+                        <button type="button" class="btn btn-sm btn-secondary fw-bold" id="auditWizardBackBtn" style="display:none;" onclick="goToAuditStage1()">
+                            &larr; Back to Shelf Counts
+                        </button>
+                    </div>
+                    <div class="d-flex gap-2">
+                        <button type="button" class="btn btn-sm btn-outline-secondary fw-bold" data-bs-dismiss="modal">Cancel</button>
+                        
+                        <!-- STAGE 1 TRIGGER -->
+                        <button type="button" class="btn btn-sm btn-info text-white fw-bold px-4" id="auditStage1NextBtn" onclick="goToAuditStage2()">
+                            Review Count Discrepancies &rarr;
+                        </button>
+                        
+                        <!-- STAGE 2 TRIGGER -->
+                        <button type="submit" class="btn btn-sm btn-success fw-bold px-4" id="auditStage2CommitBtn" style="display:none;">
+                            Authorize & Commit Shift Ledger
+                        </button>
+                    </div>
                 </div>
             </form>
         </div>
@@ -596,6 +674,15 @@
 const preppedMasterData = {{ prepped_options_json|safe }};
 let selectedPreppedItem = null;
 
+const auditPolicy = {
+    enforceBlind: "{{ store_settings.get('enforce_blind_count', 'yes') }}" === "yes",
+    alertPct: parseFloat("{{ store_settings.get('variance_alert_pct', '2.0') }}") || 2.0,
+    alertValue: parseFloat("{{ store_settings.get('variance_alert_value', '100.0') }}") || 100.0
+};
+
+// ==========================================
+// 1. KITCHEN PREP & YIELD PRODUCTION
+// ==========================================
 function onPrepItemSelected(selectNode) {
     const pId = selectNode.value;
     selectedPreppedItem = preppedMasterData.find(item => item.Ingredient_ID === pId);
@@ -628,7 +715,6 @@ function onPrepItemSelected(selectNode) {
     submitBtn.disabled = false;
     note.innerHTML = `Standard Master Recipe Yield: <b class="text-white">${selectedPreppedItem.Batch_Yield.toLocaleString()} ${selectedPreppedItem.Unit}</b> per 1.0 batch.`;
     
-    // Default to 1.0 batch
     batchInput.value = '1.0';
     actualInput.value = selectedPreppedItem.Batch_Yield;
     renderPrepDeductionPreview(1.0);
@@ -703,6 +789,173 @@ function renderPrepDeductionPreview(batches) {
     }
 }
 
+// ==========================================
+// 2. TWO-STAGE AUDIT WIZARD ENGINE
+// ==========================================
+function resetReconciliationWizard() {
+    goToAuditStage1();
+    const switchNode = document.getElementById('unmaskBookBalSwitch');
+    if (switchNode) switchNode.checked = false;
+    toggleUnmaskBookBalances(false);
+}
+
+function toggleUnmaskBookBalances(isUnmasked) {
+    const maskedLabels = document.querySelectorAll('.masked-book-badge');
+    const unmaskedLabels = document.querySelectorAll('.unmasked-book-badge');
+    
+    maskedLabels.forEach(el => {
+        if (isUnmasked) el.classList.add('d-none');
+        else el.classList.remove('d-none');
+    });
+    
+    unmaskedLabels.forEach(el => {
+        if (isUnmasked) el.classList.remove('d-none');
+        else el.classList.add('d-none');
+    });
+}
+
+function goToAuditStage1() {
+    document.getElementById('auditStage1Container').classList.remove('d-none');
+    document.getElementById('auditStage2Container').classList.add('d-none');
+    
+    document.getElementById('auditModalTitle').innerText = "Physical Shift Count Audit (Stage 1: Floor Count)";
+    document.getElementById('auditModalSubtitle').innerText = "Record on-hand quantities blindly without bias";
+    
+    document.getElementById('auditStage1NextBtn').style.display = 'inline-block';
+    document.getElementById('auditStage2CommitBtn').style.display = 'none';
+    document.getElementById('auditWizardBackBtn').style.display = 'none';
+    document.getElementById('blindCountToggleWrapper').style.display = 'block';
+}
+
+function goToAuditStage2() {
+    const officerInput = document.getElementById('auditOfficerInput');
+    const reasonInput = document.getElementById('auditReasonInput');
+
+    if (!officerInput.value.trim() || !reasonInput.value.trim()) {
+        alert("Compliance Gate: Auditing Officer Name and Scope Purpose are mandatory.");
+        if (!officerInput.value.trim()) officerInput.focus();
+        else reasonInput.focus();
+        return;
+    }
+
+    const countRows = document.querySelectorAll('.audit-count-row');
+    const countedItems = [];
+
+    countRows.forEach(row => {
+        const input = row.querySelector('.physical-count-input');
+        const rawVal = input.value.trim();
+        if (rawVal === "") return;
+
+        const physicalVal = parseFloat(rawVal);
+        if (isNaN(physicalVal)) return;
+
+        const id = row.getAttribute('data-id');
+        const name = row.getAttribute('data-name');
+        const unit = row.getAttribute('data-unit');
+        const bookVal = parseFloat(row.getAttribute('data-book')) || 0.0;
+        const costPerUnit = parseFloat(row.getAttribute('data-cost')) || 0.0;
+        const variance = physicalVal - bookVal;
+        const varianceCost = variance * costPerUnit;
+
+        const pctDiff = (bookVal > 0) ? (Math.abs(variance) / bookVal * 100.0) : (physicalVal > 0 ? 100.0 : 0.0);
+        const isHighRisk = (pctDiff > auditPolicy.alertPct) || (Math.abs(varianceCost) > auditPolicy.alertValue);
+
+        countedItems.push({
+            id: id,
+            name: name,
+            unit: unit,
+            book: bookVal,
+            physical: physicalVal,
+            variance: variance,
+            varianceCost: varianceCost,
+            pctDiff: pctDiff,
+            isHighRisk: isHighRisk,
+            rowRef: row
+        });
+    });
+
+    if (countedItems.length === 0) {
+        alert("Please enter physical count numbers for at least one ingredient row.");
+        return;
+    }
+
+    const tbody = document.getElementById('auditReviewTableBody');
+    tbody.innerHTML = '';
+    let netTotalValuation = 0.0;
+
+    countedItems.forEach((item, index) => {
+        netTotalValuation += item.varianceCost;
+        const tr = document.createElement('tr');
+
+        const sign = item.variance > 0 ? '+' : '';
+        const varianceColor = item.variance > 0 ? 'text-success' : (item.variance < 0 ? 'text-danger' : 'text-white-50');
+        const costColor = item.varianceCost >= 0 ? 'text-success' : 'text-danger';
+
+        let severityBadge = '';
+        if (Math.abs(item.variance) <= 0.001) {
+            severityBadge = '<span class="badge bg-success">Matched</span>';
+        } else if (item.isHighRisk) {
+            severityBadge = '<span class="badge bg-danger">Critical Discrepancy</span>';
+        } else {
+            severityBadge = '<span class="badge bg-warning text-dark">Minor Tolerance</span>';
+        }
+
+        tr.innerHTML = `
+            <td><b class="text-white">${item.name}</b></td>
+            <td class="text-end font-monospace text-high-contrast-muted">${item.book.toLocaleString(undefined, {minimumFractionDigits: 2})} ${item.unit}</td>
+            <td class="text-end font-monospace fw-bold text-white">${item.physical.toLocaleString(undefined, {minimumFractionDigits: 2})} ${item.unit}</td>
+            <td class="text-end font-monospace fw-bold ${varianceColor}">
+                ${sign}${item.variance.toLocaleString(undefined, {minimumFractionDigits: 2})} ${item.unit}
+                <div class="small high-contrast-muted" style="font-size:10px;">(${item.pctDiff.toFixed(1)}%)</div>
+            </td>
+            <td class="text-end font-monospace fw-bold ${costColor}">
+                PHP ${item.varianceCost.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}
+            </td>
+            <td class="text-center">${severityBadge}</td>
+            <td>
+                ${Math.abs(item.variance) > 0.001 ? 
+                    `<input type="text" class="form-control form-control-sm bg-dark text-white border-${item.isHighRisk ? 'danger' : 'secondary'} stage2-reason-input" 
+                            data-item-index="${index}"
+                            placeholder="${item.isHighRisk ? 'Required: Explain critical variance...' : 'Optional comment...'}"
+                            ${item.isHighRisk ? 'required' : ''}
+                            oninput="syncStage2ReasonToForm(${index}, this.value)">` 
+                    : '<span class="text-muted small font-monospace">— Balanced —</span>'
+                }
+            </td>
+        `;
+        tbody.appendChild(tr);
+    });
+
+    window.activeAuditItems = countedItems;
+
+    const netLabel = document.getElementById('netDiscrepancyValuationLabel');
+    netLabel.innerText = "PHP " + netTotalValuation.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2});
+    netLabel.className = "fs-5 font-monospace fw-bold " + (netTotalValuation >= 0 ? "text-success" : "text-danger");
+
+    document.getElementById('auditStage1Container').classList.add('d-none');
+    document.getElementById('auditStage2Container').classList.remove('d-none');
+    
+    document.getElementById('auditModalTitle').innerText = "Physical Shift Count Audit (Stage 2: Discrepancy & Shrinkage Review)";
+    document.getElementById('auditModalSubtitle').innerText = "Verify unit variances and monetary shrinkage before updating ledger";
+    
+    document.getElementById('auditStage1NextBtn').style.display = 'none';
+    document.getElementById('auditStage2CommitBtn').style.display = 'inline-block';
+    document.getElementById('auditWizardBackBtn').style.display = 'inline-block';
+    document.getElementById('blindCountToggleWrapper').style.display = 'none';
+}
+
+function syncStage2ReasonToForm(itemIndex, textVal) {
+    if (!window.activeAuditItems || !window.activeAuditItems[itemIndex]) return;
+    const rowRef = window.activeAuditItems[itemIndex].rowRef;
+    const hiddenField = rowRef.querySelector('.hidden-variance-reason-field');
+    if (hiddenField) {
+        hiddenField.value = textVal.trim();
+    }
+}
+
+// ==========================================
+// 3. SUPPLY INTAKE DYNAMIC MATRIX
+// ==========================================
 function updateDeliveryRowMeta(node) {
     const row = node.closest('.delivery-entry-row');
     const select = row.querySelector('.delivery-item-select');
@@ -753,34 +1006,6 @@ function updateDeliveryRowMeta(node) {
         summary.innerHTML = note;
     } else {
         summary.innerHTML = `Default: 1 ${purchaseUnit} = ${defaultPackSize} ${baseUnit} (Editable for substitute brands)`;
-    }
-}
-
-function calculateVariance(input) {
-    const container = input.closest('.row').querySelector('.variance-container');
-    const display = container.querySelector('.variance-display');
-    const reasonInput = container.querySelector('.variance-reason-input');
-    const bookVal = parseFloat(input.getAttribute('data-book')) || 0;
-    const physVal = parseFloat(input.value);
-
-    if (isNaN(physVal)) {
-        container.classList.add('d-none');
-        reasonInput.removeAttribute('required');
-        reasonInput.value = '';
-        return;
-    }
-
-    const variance = physVal - bookVal;
-    
-    if (Math.abs(variance) > 0.001) {
-        container.classList.remove('d-none');
-        const sign = variance > 0 ? '+' : '';
-        display.textContent = sign + variance.toFixed(2) + ' ' + input.getAttribute('data-unit');
-        display.className = 'variance-display font-monospace ' + (variance > 0 ? 'text-success' : 'text-danger');
-        reasonInput.setAttribute('required', 'required');
-    } else {
-        container.classList.add('d-none');
-        reasonInput.removeAttribute('required');
     }
 }
 

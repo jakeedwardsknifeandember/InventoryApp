@@ -235,7 +235,6 @@ def web_reports_tab(username):
         sales_df['Total_Amount'] = pd.to_numeric(sales_df['Total_Amount'], errors='coerce').fillna(0.0)
         sales_df['Quantity'] = pd.to_numeric(sales_df['Quantity'], errors='coerce').fillna(0.0)
         
-        # Resilient date coalescing prioritizing Sale_Date and Date
         date_candidates = ['Sale_Date', 'sale_date', 'Sales_Date', 'Date', 'date', 'created_at', 'timestamp', 'transaction_date', 'DateTime']
         sales_df['Parsed_Date'] = pd.NaT
         for col in date_candidates:
@@ -354,8 +353,17 @@ def web_reports_tab(username):
         audit_df['Audit_ID'] = audit_df['Audit_ID'].astype(str).str.strip()
         audit_df['Notes'] = audit_df['Notes'].astype(str).fillna('')
         audit_df['Ingredient_Name'] = audit_df['Ingredient_Name'].astype(str).str.strip()
+        audit_df['Variance'] = pd.to_numeric(audit_df['Variance'], errors='coerce').fillna(0.0)
         
-        waste_mask = audit_df['Audit_ID'].str.startswith('WST') | audit_df['Audit_ID'].str.startswith('PRD')
+        # Comprehensive loss recognition:
+        # WST: Manual ingredient waste
+        # PRD: Scrapped finished menu products
+        # AUD with Variance < 0: Physical count deficits / operational shrinkage
+        waste_mask = (
+            audit_df['Audit_ID'].str.startswith('WST') | 
+            audit_df['Audit_ID'].str.startswith('PRD') |
+            (audit_df['Audit_ID'].str.startswith('AUD') & (audit_df['Variance'] < 0))
+        )
         waste_rows = audit_df[waste_mask]
         
         ingredients_df['Ingredient_Name_Clean'] = ingredients_df['Ingredient_Name'].astype(str).str.strip().str.lower()
@@ -381,7 +389,7 @@ def web_reports_tab(username):
                             c_price = float(prod_row['Cost_Price']) if float(prod_row['Cost_Price']) > 0 else 1.0
                             retail_multiplier = s_price / c_price
                             break
-                elif row['Audit_ID'].startswith('WST'):
+                elif row['Audit_ID'].startswith('WST') or row['Audit_ID'].startswith('AUD'):
                     retail_multiplier = 1.0  
                     
                 opportunity_cost += (row_financial_cost * retail_multiplier)
@@ -396,7 +404,7 @@ def web_reports_tab(username):
         warehouse_asset_value = float((ingredients_df['Current_Stock'] * ingredients_df['Cost_Per_Unit']).sum())
 
     total_assets = net_profit + warehouse_asset_value
-    total_liabilities = 0.0  
+    total_liabilities = 0.0 
     owners_equity = total_assets - total_liabilities
 
     if total_revenue > 0:
@@ -426,7 +434,7 @@ def web_reports_tab(username):
     if total_sales_count > 0 and total_revenue > 0:
         aov = total_revenue / total_sales_count
     else:
-        aov = 150.0  
+        aov = 150.0 
 
     daily_tickets_needed = int(round(daily_break_even / aov)) if aov > 0 else 0
 
@@ -493,6 +501,7 @@ def web_reports_tab(username):
                     
             menu_data_json = json.dumps(chart_points)
 
+    # COST VARIANCE & INFLATION TRACKER ENGINE
     inflation_data = []
     full_audit_df = db.read_tab('Inventory_Audit_Log')
     
@@ -500,7 +509,8 @@ def web_reports_tab(username):
         rcv_df = full_audit_df[full_audit_df['Audit_ID'].astype(str).str.startswith('RCV')].copy()
         if not rcv_df.empty:
             rcv_df['Date'] = pd.to_datetime(rcv_df['Date'], errors='coerce')
-            rcv_df['Extracted_Price'] = rcv_df['Notes'].astype(str).str.extract(r'Intake Cost: PHP ([\d,\.]+)/unit')[0]
+            # Flexible regex extraction matching any base unit (/g, /ml, /pcs)
+            rcv_df['Extracted_Price'] = rcv_df['Notes'].astype(str).str.extract(r'Intake Cost: PHP ([\d,\.]+)/')[0]
             rcv_df['Extracted_Price'] = pd.to_numeric(rcv_df['Extracted_Price'].astype(str).str.replace(',', ''), errors='coerce')
             rcv_df = rcv_df.dropna(subset=['Extracted_Price', 'Date'])
             rcv_df = rcv_df.sort_values('Date')
@@ -512,13 +522,29 @@ def web_reports_tab(username):
                 
             active_ingredients = current_period_rcv['Ingredient_Name'].unique()
             
+            # Build baseline price dictionary from Ingredients catalog
+            baseline_map = {}
+            if not ingredients_df.empty:
+                for _, ing_r in ingredients_df.iterrows():
+                    ing_n = str(ing_r.get('Ingredient_Name', '')).strip().lower()
+                    cpu = float(pd.to_numeric(ing_r.get('Cost_Per_Unit', 0.0), errors='coerce') or 0.0)
+                    if ing_n and cpu > 0:
+                        baseline_map[ing_n] = cpu
+            
             for name in active_ingredients:
+                name_clean = str(name).strip().lower()
                 ing_all_time = rcv_df[rcv_df['Ingredient_Name'] == name]
                 ing_current = current_period_rcv[current_period_rcv['Ingredient_Name'] == name]
                 
-                if len(ing_all_time) > 1 and not ing_current.empty:
-                    oldest_price = float(ing_all_time.iloc[0]['Extracted_Price'])
+                if not ing_current.empty:
                     newest_price = float(ing_current.iloc[-1]['Extracted_Price'])
+                    last_date_str = ing_current.iloc[-1]['Date'].strftime("%Y-%m-%d") if pd.notnull(ing_current.iloc[-1]['Date']) else datetime.now().strftime("%Y-%m-%d")
+                    
+                    # If multiple deliveries exist, compare oldest vs newest; otherwise compare against catalog baseline
+                    if len(ing_all_time) > 1:
+                        oldest_price = float(ing_all_time.iloc[0]['Extracted_Price'])
+                    else:
+                        oldest_price = float(baseline_map.get(name_clean, 0.0))
                     
                     if oldest_price > 0 and newest_price > oldest_price:
                         pct_change = ((newest_price - oldest_price) / oldest_price) * 100.0
@@ -527,7 +553,7 @@ def web_reports_tab(username):
                             'old_price': oldest_price,
                             'new_price': newest_price,
                             'pct_change': pct_change,
-                            'last_date': ing_current.iloc[-1]['Date'].strftime("%Y-%m-%d")
+                            'last_date': last_date_str
                         })
             
             inflation_data = sorted(inflation_data, key=lambda x: x['pct_change'], reverse=True)[:5]

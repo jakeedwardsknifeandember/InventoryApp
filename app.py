@@ -297,12 +297,21 @@ def client_portal(username):
             
     menu_engineering_list = sorted(menu_engineering_list, key=lambda x: x['volume'], reverse=True)[:10]
 
-    # 6. Real-Time Operational Activity Stream (Shift Manager Logbook with Grouped Transactions)
+    # 6. Real-Time Operational Activity Stream & Waste Shrinkage Valuation
     logbook_stream = []
+    total_waste_cost = 0.0
     
     audit_log_df = client_db.read_tab('Inventory_Audit_Log')
     if audit_log_df is None or audit_log_df.empty:
         audit_log_df = client_db.read_tab('Inventory_Log')
+
+    ingredients_pool = client_db.read_tab('Ingredients')
+    ing_cost_lookup = {}
+    if ingredients_pool is not None and not ingredients_pool.empty:
+        ing_cost_lookup = dict(zip(
+            ingredients_pool['Ingredient_Name'].astype(str).str.strip().str.lower(),
+            pd.to_numeric(ingredients_pool.get('Cost_Per_Unit', 0.0), errors='coerce').fillna(0.0)
+        ))
 
     if audit_log_df is not None and not audit_log_df.empty:
         possible_audit_date_cols = ['Date', 'Log_Date', 'timestamp', 'created_at', 'sales_date', 'DateTime']
@@ -326,6 +335,17 @@ def client_portal(username):
                 qty_acted = float(qty_val or 0)
             except Exception:
                 qty_acted = 0.0
+
+            # Compute operational waste loss across manual waste, products scrapped, and physical count deficits
+            is_waste_event = (
+                audit_id.startswith('WST') or 
+                audit_id.startswith('PRD') or 
+                (audit_id.startswith('AUD') and qty_acted < 0)
+            )
+            if is_waste_event:
+                clean_ing_name = item_ref.strip().lower()
+                cpu = float(ing_cost_lookup.get(clean_ing_name, 0.0))
+                total_waste_cost += (abs(qty_acted) * cpu)
 
             parsed_log_date = row.get('Parsed_Date') if 'Parsed_Date' in row else None
             if pd.notnull(parsed_log_date):
@@ -351,7 +371,7 @@ def client_portal(username):
                     'POS' in notes_str or 
                     ('Product ' in notes_str and 'Product Waste' not in notes_str)
                 )
-                is_waste = (
+                is_manual_waste = (
                     audit_id.startswith('WST') or 
                     'Product Waste:' in notes_str or 
                     'Reason:' in notes_str or 
@@ -368,6 +388,8 @@ def client_portal(username):
                     audit_id.startswith('VOID') or 
                     'VOID' in notes_str
                 )
+                is_audit_deficit = audit_id.startswith('AUD') and qty_acted < 0
+                is_audit_surplus = audit_id.startswith('AUD') and qty_acted >= 0
 
                 if is_void:
                     badge_color = "warning"
@@ -375,15 +397,18 @@ def client_portal(username):
                 elif is_pos_sale:
                     badge_color = "primary"
                     log_type = "POS SALE"
-                elif is_waste:
+                elif is_audit_deficit:
+                    badge_color = "danger"
+                    log_type = "SHRINKAGE"
+                elif is_manual_waste:
                     badge_color = "danger"
                     log_type = "SPOILAGE"
                 elif is_prep:
                     badge_color = "warning"
                     log_type = "KITCHEN PREP"
-                elif qty_acted > 0 or audit_id.startswith('RCV') or audit_id.startswith('AUD'):
+                elif qty_acted > 0 or audit_id.startswith('RCV') or is_audit_surplus:
                     badge_color = "success"
-                    log_type = "STOCK INTAKE" if audit_id.startswith('RCV') else "AUDIT RECON"
+                    log_type = "STOCK INTAKE" if audit_id.startswith('RCV') else "AUDIT SURPLUS"
                 else:
                     badge_color = "danger" if qty_acted < 0 else "success"
                     log_type = "ADJUSTMENT"
@@ -403,7 +428,13 @@ def client_portal(username):
                 elif is_pos_sale:
                     event_title = f"POS Depletion for Order {audit_id}"
                     commentary = notes_str
-                elif is_waste:
+                elif is_audit_deficit:
+                    event_title = f"Audit Discrepancy Deficit for {item_ref}"
+                    commentary = notes_str
+                elif is_audit_surplus:
+                    event_title = f"Audit Discrepancy Surplus for {item_ref}"
+                    commentary = notes_str
+                elif is_manual_waste:
                     event_title = f"Spoilage Event recorded for {item_ref}"
                     commentary = notes_str
                 elif is_prep:
@@ -432,8 +463,9 @@ def client_portal(username):
                 'quantity': f"{qty_acted:+,g}" if qty_acted != 0 else "0"
             })
 
-        # Most recent transactions first, limited to top 30 distinct events
         logbook_stream = list(reversed(list(grouped_events.values())))[:30]
+
+    total_waste_cost = round(total_waste_cost, 2)
 
     return render_template(
         'dashboard.html', username=username, total_products=total_products,
@@ -449,7 +481,8 @@ def client_portal(username):
         menu_matrix=menu_engineering_list,
         logbook=logbook_stream,
         sales_count=sales_count,
-        theoretical_cogs=theoretical_cogs
+        theoretical_cogs=theoretical_cogs,
+        total_waste=total_waste_cost
     )
 
 # AUDIT LOG ROUTE: View operational ledger with date filtering

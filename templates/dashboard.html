@@ -66,6 +66,7 @@
     {% set computed_food_cost_pct = (cogs / total_revenue * 100) if total_revenue > 0 else 0.0 %}
     {% set net_cash_flow = total_revenue - total_expenses %}
     {% set avg_order_value = (total_revenue / sales_count) if sales_count > 0 else 0.0 %}
+    {% set waste_amount = total_waste | default(0.0) %}
 
     <!-- 4-COLUMN TOP GRID: EXECUTIVE KPI CARDS -->
     <div class="row g-3 mb-4">
@@ -101,14 +102,18 @@
             </div>
         </div>
 
-        <!-- CARD 3: NET OPERATING CASH POSITION -->
+        <!-- CARD 3: NET OPERATING CASH POSITION & SHRINKAGE -->
         <div class="col-md-3">
             <div class="kpi-card" style="border-top: 4px solid #a855f7;">
                 <div class="kpi-title">Operating Cash Flow</div>
                 <div class="kpi-value {% if net_cash_flow >= 0 %}text-info{% else %}text-danger{% endif %}">₱{{ "{:,.2f}".format(net_cash_flow) }}</div>
                 <div class="kpi-subtext">
-                    <span style="color: #f87171;">Expenses: ₱{{ "{:,.2f}".format(total_expenses) }}</span>
-                    <span class="text-light small font-monospace">Margin: {{ "{:.1f}%".format((net_cash_flow / total_revenue * 100) if total_revenue > 0 else 0.0) }}</span>
+                    <span style="color: #f87171;">Exp: ₱{{ "{:,.2f}".format(total_expenses) }}</span>
+                    {% if waste_amount > 0 %}
+                        <span class="text-danger small font-monospace fw-bold">Waste Loss: ₱{{ "{:,.2f}".format(waste_amount) }}</span>
+                    {% else %}
+                        <span class="text-light small font-monospace">Margin: {{ "{:.1f}%".format((net_cash_flow / total_revenue * 100) if total_revenue > 0 else 0.0) }}</span>
+                    {% endif %}
                 </div>
             </div>
         </div>
@@ -158,7 +163,7 @@
         </div>
     </div>
 
-    <!-- BOTTOM SPLIT ROW: OPERATIONS LOGBOOK ACCORDION vs FINANCIAL DEFICIT DOUGHNUT CHART -->
+    <!-- BOTTOM SPLIT ROW: OPERATIONS LOGBOOK ACCORDION vs CAPITAL OUTLAY DOUGHNUT CHART -->
     <div class="dashboard-split-row">
         <!-- BOTTOM LEFT COLUMN: REAL-TIME SHIFT OPERATIONS LOGBOOK WITH ACCORDION BREAKDOWN -->
         <div class="panel-card">
@@ -170,9 +175,9 @@
             <div class="log-stream-container">
                 {% for log in logbook %}
                 {% set log_idx = loop.index %}
-                <div class="log-entry-item" style="border-left-color: {% if log.type in ['POS SALE', 'POS DELETION'] or log.badge in ['info', 'primary'] %}#3b8ed0{% elif log.type == 'SPOILAGE' or log.badge == 'danger' %}#c24b4b{% else %}#2fa572{% endif %};">
+                <div class="log-entry-item" style="border-left-color: {% if log.type in ['POS SALE', 'POS DELETION'] or log.badge in ['info', 'primary'] %}#3b8ed0{% elif log.type in ['SPOILAGE', 'SHRINKAGE', 'AUDIT DEFICIT'] or log.badge == 'danger' %}#c24b4b{% else %}#2fa572{% endif %};">
                     <div class="log-meta-row">
-                        <span class="badge bg-{% if log.type == 'POS SALE' %}primary{% elif log.type == 'SPOILAGE' %}danger{% else %}{{ log.badge }}{% endif %} font-monospace" style="font-size: 10px; font-weight:900; color:#ffffff;">
+                        <span class="badge bg-{% if log.type == 'POS SALE' %}primary{% elif log.type in ['SPOILAGE', 'SHRINKAGE', 'AUDIT DEFICIT'] %}danger{% else %}{{ log.badge }}{% endif %} font-monospace" style="font-size: 10px; font-weight:900; color:#ffffff;">
                             {{ log.type }}
                         </span>
                         <span class="log-timestamp">{{ log.timestamp }}</span>
@@ -188,7 +193,7 @@
                                     View Breakdown &darr;
                                 </button>
                             {% elif log.depleted_items|length == 1 %}
-                                <span>Impact Metric: <b class="font-monospace {% if log.type == 'POS SALE' %}text-info{% else %}text-warning{% endif %}">{{ log.depleted_items[0].name }} ({{ log.depleted_items[0].quantity }})</b></span>
+                                <span>Impact Metric: <b class="font-monospace {% if log.type == 'POS SALE' %}text-info{% elif log.badge == 'danger' %}text-danger{% else %}text-warning{% endif %}">{{ log.depleted_items[0].name }} ({{ log.depleted_items[0].quantity }})</b></span>
                             {% else %}
                                 <span>Impact Metric: <b class="font-monospace text-muted">—</b></span>
                             {% endif %}

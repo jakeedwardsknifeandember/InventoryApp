@@ -441,12 +441,22 @@ function triggerSecurityModalCheck() {
     const todayStr = getLocalTodayString();
     const isBackdated = (datePicker.value !== todayStr);
     
+    let hasNonZero = false;
     let hasNegativeValue = false;
     qtyInputs.forEach(input => {
-        if (parseFloat(input.value) < 0) {
+        const val = parseFloat(input.value) || 0;
+        if (val !== 0) {
+            hasNonZero = true;
+        }
+        if (val < 0) {
             hasNegativeValue = true;
         }
     });
+
+    if (!hasNonZero) {
+        alert("Please enter sales quantities for at least one item before synchronizing.");
+        return false;
+    }
     
     if ((isBackdated || hasNegativeValue) && auditInput.value.trim() === "") {
         auditInput.style.border = "2px solid #ff4d4d";

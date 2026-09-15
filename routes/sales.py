@@ -135,7 +135,7 @@ def web_sales_tab(username):
     conn.close()
 
     # ==========================================
-    # 1. POST METHOD: SUBMIT EOD CLOSING SALES
+    # 1. POST METHOD: SUBMIT CONSOLIDATED EOD CLOSING SALES
     # ==========================================
     if request.method == 'POST':
         sale_date = request.form.get('sale_date', '').strip() or datetime.now().strftime("%Y-%m-%d")
@@ -152,19 +152,42 @@ def web_sales_tab(username):
         ensure_sales_database_schema(conn)
         cursor = conn.cursor()
 
+        # Generate Unified EOD Batch Identifier
+        date_slug = sale_date.replace('-', '')
+        time_slug = datetime.now().strftime("%H%M%S")
+        batch_id = f"EOD{date_slug}_{time_slug}"
+        sale_time_str = datetime.now().strftime("%H:%M:%S")
+
         # =================================================================
-        # STRICT INVENTORY PRE-CHECK: VERIFY STOCK BEFORE PERMITTING SALE
+        # STRICT INVENTORY PRE-CHECK & DEPLETION SUMMATION
         # =================================================================
         total_required_ingredients = defaultdict(float)
+        sold_summary_list = []
+        valid_sales_payload = []
+        valid_modifiers_payload = []
 
-        # 1. Sum requirements for Products
+        # 1. Process Product Requirements & Prepare Granular Ledger Records
         for p_id, q_str in zip(prod_ids, prod_qtys):
             try:
                 p_qty = float(q_str or 0)
             except (ValueError, TypeError):
                 p_qty = 0.0
-            if p_qty <= 0:
+            if p_qty == 0:
                 continue
+
+            cursor.execute("SELECT Product_Name, Selling_Price FROM Products WHERE Product_ID = ?", (p_id,))
+            prod_match = cursor.fetchone()
+            p_name = prod_match[0] if prod_match else p_id
+            p_price = float(prod_match[1] or 0.0) if prod_match else 0.0
+            
+            valid_sales_payload.append({
+                'id': p_id,
+                'name': p_name,
+                'qty': p_qty,
+                'price': p_price,
+                'total': p_qty * p_price
+            })
+            sold_summary_list.append(f"{p_qty:g}x {p_name}")
 
             cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='Recipes'")
             if cursor.fetchone():
@@ -172,14 +195,33 @@ def web_sales_tab(username):
                 for ing_id, req_qty in cursor.fetchall():
                     total_required_ingredients[str(ing_id)] += float(req_qty or 0.0) * p_qty
 
-        # 2. Sum requirements for Modifiers
+        # 2. Process Modifier Requirements & Prepare Granular Ledger Records
         for m_id, mq_str in zip(mod_ids, mod_qtys):
             try:
                 m_qty = float(mq_str or 0)
             except (ValueError, TypeError):
                 m_qty = 0.0
-            if m_qty <= 0:
+            if m_qty == 0:
                 continue
+
+            cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='Modifiers'")
+            m_name = m_id
+            m_price = 0.0
+            if cursor.fetchone():
+                cursor.execute("SELECT Modifier_Name, Price FROM Modifiers WHERE Modifier_ID = ?", (m_id,))
+                mod_match = cursor.fetchone()
+                if mod_match:
+                    m_name = mod_match[0] or m_id
+                    m_price = float(mod_match[1] or 0.0)
+
+            valid_modifiers_payload.append({
+                'id': m_id,
+                'name': m_name,
+                'qty': m_qty,
+                'price': m_price,
+                'total': m_qty * m_price
+            })
+            sold_summary_list.append(f"{m_qty:g}x {m_name}")
 
             cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='Modifier_Recipes'")
             if cursor.fetchone():
@@ -187,7 +229,12 @@ def web_sales_tab(username):
                 for ing_id, req_qty in cursor.fetchall():
                     total_required_ingredients[str(ing_id)] += float(req_qty or 0.0) * m_qty
 
-        # 3. Check against current on-hand ingredient stock
+        # Verify that at least one unit was sold
+        if not valid_sales_payload and not valid_modifiers_payload:
+            conn.close()
+            return redirect(f"/portal/{username}/sales?msg=Input Warning: No sales quantities entered. Provide closing units sold for at least one item before syncing.&alert_type=warning")
+
+        # 3. Check Against On-Hand Inventory Balances (Deficit Prevention)
         insufficient_ingredients = []
         for ing_id, needed_qty in total_required_ingredients.items():
             if needed_qty <= 0:
@@ -198,7 +245,7 @@ def web_sales_tab(username):
                 ing_name = ing_row[0] or ing_id
                 current_stock = float(ing_row[1] or 0.0)
                 unit_label = ing_row[2] or 'units'
-                if current_stock < needed_qty or current_stock <= 0:
+                if current_stock < needed_qty:
                     insufficient_ingredients.append({
                         'name': ing_name,
                         'available': current_stock,
@@ -206,7 +253,6 @@ def web_sales_tab(username):
                         'unit': unit_label
                     })
 
-        # If any required ingredient is out of stock or insufficient, BLOCK transaction completely
         if insufficient_ingredients:
             conn.close()
             error_details = []
@@ -215,140 +261,83 @@ def web_sales_tab(username):
             if len(insufficient_ingredients) > 3:
                 error_details.append(f"and {len(insufficient_ingredients) - 3} more items")
             
-            err_msg = f"Inventory Depletion Block: Sale cannot be processed. Insufficient stock for: {'; '.join(error_details)}."
+            err_msg = f"Inventory Depletion Block: Closing sales cannot be recorded. Insufficient stock for: {'; '.join(error_details)}."
             return redirect(f"/portal/{username}/sales?msg={err_msg}&alert_type=danger")
 
         # =================================================================
-        # COMMIT TRANSACTION (ONLY RUNS WHEN STOCK IS VALIDATED)
+        # COMMIT TRANSACTION (GRANULAR SALES + CONSOLIDATED AUDIT DEPLETION)
         # =================================================================
-        logged_sales_count = 0
-        sale_time_str = datetime.now().strftime("%H:%M:%S")
+        if len(sold_summary_list) <= 4:
+            summary_text = ", ".join(sold_summary_list)
+        else:
+            summary_text = ", ".join(sold_summary_list[:4]) + f" (+{len(sold_summary_list) - 4} more)"
 
-        # Process Products Sold
-        for p_id, q_str in zip(prod_ids, prod_qtys):
-            try:
-                qty = float(q_str or 0)
-            except (ValueError, TypeError):
-                qty = 0.0
-                
-            if qty == 0:
-                continue
-
-            cursor.execute("SELECT Product_Name, Selling_Price FROM Products WHERE Product_ID = ?", (p_id,))
-            prod_match = cursor.fetchone()
-            p_name = prod_match[0] if prod_match else p_id
-            selling_price = float(prod_match[1] or 0.0) if prod_match else 0.0
-            line_total = qty * selling_price
-            
-            sale_tx_id = f"SAL{datetime.now().strftime('%M%S')}{logged_sales_count:02d}"
-
+        # 1. Insert Itemized Products Sold into Sales Ledger
+        for idx, item in enumerate(valid_sales_payload, start=1):
+            sale_line_id = f"{batch_id}-P{idx:02d}"
             cursor.execute("""
                 INSERT INTO Sales (
                     Sale_ID, Sale_Date, Sale_Time, Product_ID, Product_Name,
                     Quantity, Price, Total_Amount, Reason, Recorded_By
                 ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            """, (sale_tx_id, sale_date, sale_time_str, p_id, p_name, qty, selling_price, line_total, audit_note, recorded_by))
+            """, (
+                sale_line_id, sale_date, sale_time_str, item['id'], item['name'],
+                item['qty'], item['price'], item['total'], audit_note or f"EOD Batch {batch_id}", recorded_by
+            ))
 
-            # Deduct ingredient inventory according to recipe specifications
-            cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='Recipes'")
-            if cursor.fetchone():
-                cursor.execute("SELECT Ingredient_ID, Quantity_Required, Unit FROM Recipes WHERE Product_ID = ?", (p_id,))
-                recipe_rows = cursor.fetchall()
+        # 2. Insert Itemized Modifiers Sold into Sales Ledger
+        for idx, item in enumerate(valid_modifiers_payload, start=1):
+            mod_line_id = f"{batch_id}-M{idx:02d}"
+            cursor.execute("""
+                INSERT INTO Sales (
+                    Sale_ID, Sale_Date, Sale_Time, Product_ID, Product_Name,
+                    Quantity, Price, Total_Amount, Reason, Recorded_By
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """, (
+                mod_line_id, sale_date, sale_time_str, item['id'], f"Modifier: {item['name']}",
+                item['qty'], item['price'], item['total'], audit_note or f"EOD Batch {batch_id}", recorded_by
+            ))
 
-                for ing_id, req_qty, rec_unit in recipe_rows:
-                    tot_deduct = float(req_qty or 0.0) * qty
-                    cursor.execute("SELECT Current_Stock, Ingredient_Name, Unit FROM Ingredients WHERE Ingredient_ID = ?", (ing_id,))
-                    ing_match = cursor.fetchone()
+        # 3. Consolidated Recipe Inventory Deductions (One Row Per Ingredient under Unified Batch ID)
+        depleted_ingredients_count = 0
+        batch_audit_note = f"POS Depletion: {summary_text} | {audit_note}".strip(" | ")
 
-                    if ing_match:
-                        current_stock, ing_name, base_unit = ing_match
-                        current_stock = float(current_stock or 0.0)
-                        new_stock = current_stock - tot_deduct
-
-                        cursor.execute("UPDATE Ingredients SET Current_Stock = ? WHERE Ingredient_ID = ?", (new_stock, ing_id))
-                        
-                        cursor.execute("""
-                            INSERT INTO Inventory_Audit_Log (
-                                Audit_ID, Date, Ingredient_Name, Theoretical, Physical, Variance, Notes
-                            ) VALUES (?, ?, ?, ?, ?, ?, ?)
-                        """, (
-                            sale_tx_id, 
-                            sale_date, 
-                            ing_name, 
-                            current_stock, 
-                            new_stock, 
-                            -tot_deduct, 
-                            f"POS Depletion: {qty:g}x {p_name} | {audit_note}".strip(" | ")
-                        ))
-
-            logged_sales_count += 1
-
-        # Process Modifiers Sold
-        for m_id, mq_str in zip(mod_ids, mod_qtys):
-            try:
-                m_qty = float(mq_str or 0)
-            except (ValueError, TypeError):
-                m_qty = 0.0
-                
-            if m_qty == 0:
+        for ing_id, tot_deduct in total_required_ingredients.items():
+            if tot_deduct <= 0:
                 continue
 
-            cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='Modifiers'")
-            if cursor.fetchone():
-                cursor.execute("SELECT Modifier_Name, Price FROM Modifiers WHERE Modifier_ID = ?", (m_id,))
-                mod_match = cursor.fetchone()
-                m_name = mod_match[0] if mod_match else m_id
-                m_price = float(mod_match[1] or 0.0) if mod_match else 0.0
-                m_total = m_qty * m_price
+            cursor.execute("SELECT Current_Stock, Ingredient_Name, Unit FROM Ingredients WHERE Ingredient_ID = ?", (ing_id,))
+            ing_match = cursor.fetchone()
+
+            if ing_match:
+                current_stock, ing_name, base_unit = ing_match
+                current_stock = float(current_stock or 0.0)
+                new_stock = current_stock - tot_deduct
+
+                cursor.execute("UPDATE Ingredients SET Current_Stock = ? WHERE Ingredient_ID = ?", (new_stock, ing_id))
                 
-                mod_tx_id = f"MOD{datetime.now().strftime('%M%S')}{logged_sales_count:02d}"
-
                 cursor.execute("""
-                    INSERT INTO Sales (
-                        Sale_ID, Sale_Date, Sale_Time, Product_ID, Product_Name,
-                        Quantity, Price, Total_Amount, Reason, Recorded_By
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                """, (mod_tx_id, sale_date, sale_time_str, m_id, f"Modifier: {m_name}", m_qty, m_price, m_total, audit_note, recorded_by))
-
-                # Deduct modifier ingredient inventory according to modifier recipe specifications
-                cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='Modifier_Recipes'")
-                if cursor.fetchone():
-                    cursor.execute("SELECT Ingredient_ID, Quantity_Required, Unit FROM Modifier_Recipes WHERE Modifier_ID = ?", (m_id,))
-                    mod_recipe_rows = cursor.fetchall()
-
-                    for ing_id, req_qty, rec_unit in mod_recipe_rows:
-                        tot_deduct = float(req_qty or 0.0) * m_qty
-                        cursor.execute("SELECT Current_Stock, Ingredient_Name, Unit FROM Ingredients WHERE Ingredient_ID = ?", (ing_id,))
-                        ing_match = cursor.fetchone()
-
-                        if ing_match:
-                            current_stock, ing_name, base_unit = ing_match
-                            current_stock = float(current_stock or 0.0)
-                            new_stock = current_stock - tot_deduct
-
-                            cursor.execute("UPDATE Ingredients SET Current_Stock = ? WHERE Ingredient_ID = ?", (new_stock, ing_id))
-                            
-                            cursor.execute("""
-                                INSERT INTO Inventory_Audit_Log (
-                                    Audit_ID, Date, Ingredient_Name, Theoretical, Physical, Variance, Notes
-                                ) VALUES (?, ?, ?, ?, ?, ?, ?)
-                            """, (
-                                mod_tx_id, 
-                                sale_date, 
-                                ing_name, 
-                                current_stock, 
-                                new_stock, 
-                                -tot_deduct, 
-                                f"POS Depletion: {m_qty:g}x Modifier ({m_name}) | {audit_note}".strip(" | ")
-                            ))
-
-                logged_sales_count += 1
+                    INSERT INTO Inventory_Audit_Log (
+                        Audit_ID, Date, Ingredient_Name, Theoretical, Physical, Variance, Notes
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?)
+                """, (
+                    batch_id, 
+                    sale_date, 
+                    ing_name, 
+                    current_stock, 
+                    new_stock, 
+                    -tot_deduct, 
+                    batch_audit_note
+                ))
+                depleted_ingredients_count += 1
 
         conn.commit()
         conn.close()
         client_db.update_all_product_costs()
 
-        return redirect(f"/portal/{username}/sales?msg=Success:+Successfully+recorded+closing+sales+and+deducted+recipe+ingredients.&alert_type=success")
+        total_units_sold = sum(i['qty'] for i in valid_sales_payload) + sum(i['qty'] for i in valid_modifiers_payload)
+        feedback_msg = f"EOD Closing Recorded: Successfully logged {total_units_sold:g} items sold under Batch {batch_id}. Consolidated deductions applied across {depleted_ingredients_count} inventory ingredients."
+        return redirect(f"/portal/{username}/sales?msg={feedback_msg}&alert_type=success")
 
     # ==========================================
     # 2. GET METHOD: RENDER GROUPED WORKSHEET

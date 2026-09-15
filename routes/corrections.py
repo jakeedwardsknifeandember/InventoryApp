@@ -1,12 +1,16 @@
 # routes/corrections.py - Secure Voids and Corrections Module
 from flask import Blueprint, request, redirect, session, render_template
 from modules.database import InventoryDB
-import pandas as pd
 import sqlite3
 from datetime import datetime
-import io
+import urllib.parse
 
 corrections_bp = Blueprint('corrections', __name__)
+
+def _get_table_columns(cursor, table_name):
+    """Retrieve column names for an existing SQLite table."""
+    cursor.execute(f"PRAGMA table_info({table_name})")
+    return [col[1] for col in cursor.fetchall()]
 
 @corrections_bp.route('/portal/<username>/corrections', methods=['GET', 'POST'])
 def web_corrections_tab(username):
@@ -17,7 +21,8 @@ def web_corrections_tab(username):
     staff_role = session.get('staff_role', 'Staff')
     
     if staff_role not in ['Platform Owner Admin', 'Store Manager']:
-        return redirect(f"/portal/{username}/sales?error=Security Block: Only Managers and Admins can access the Corrections module.")
+        err_msg = urllib.parse.quote_plus("Security Block: Only Managers and Admins can access the Corrections module.")
+        return redirect(f"/portal/{username}/sales?error={err_msg}")
 
     db_path = f"data/client_{username}.db"
     client_db = InventoryDB(db_path)
@@ -27,245 +32,268 @@ def web_corrections_tab(username):
     if request.method == 'POST':
         action = request.form.get('action_type')
         operator = session.get('logged_in_user', 'System')
-        
-        # SALES VOID PROCESSING (SUPPORTS BOTH FINISHED PRODUCTS & MODIFIERS)
+        system_time_exact = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        current_time_hms = datetime.now().strftime("%H:%M:%S")
+
+        # ---------------------------------------------------------
+        # 1. SALES VOID PROCESSING (SUPPORTS MULTI-ITEM & MODIFIERS)
+        # ---------------------------------------------------------
         if action == 'void_sale':
             sale_id = request.form.get('sale_id', '').strip()
             void_reason = request.form.get('void_reason', '').strip()
             
             if not sale_id or not void_reason:
-                return redirect(f"/portal/{username}/corrections?error=Compliance Violation: Sale ID and Void Reason are strictly required.")
+                err_msg = urllib.parse.quote_plus("Compliance Violation: Sale ID and Void Reason are strictly required.")
+                return redirect(f"/portal/{username}/corrections?error={err_msg}")
                 
             try:
-                conn = sqlite3.connect(db_path, timeout=20.0)
+                conn = sqlite3.connect(db_path, timeout=30.0)
                 cursor = conn.cursor()
                 
-                # Fetch original sale record
-                cursor.execute("""
-                    SELECT Product_ID, Product_Name, Quantity, Price, Total_Amount, Sale_Date 
-                    FROM Sales 
-                    WHERE Sale_ID = ?
-                """, (sale_id,))
-                sale_record = cursor.fetchone()
-                
-                if not sale_record:
-                    conn.close()
-                    return redirect(f"/portal/{username}/corrections?error=Database Error: Sale ID {sale_id} not found.")
-                    
-                p_id, p_name, original_qty, price, original_amt, original_sale_date = sale_record
-                p_name = p_name or p_id
-                original_qty = float(original_qty or 0.0)
-                price = float(price or 0.0)
-                original_amt = float(original_amt or 0.0)
-
-                system_time_exact = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                # Check duplicate void
                 void_sale_id = f"VOID-{sale_id}"
-                
                 cursor.execute("SELECT COUNT(*) FROM Sales WHERE Sale_ID = ?", (void_sale_id,))
                 if cursor.fetchone()[0] > 0:
                     conn.close()
-                    return redirect(f"/portal/{username}/corrections?error=Duplicate Action: This transaction has already been voided.")
+                    err_msg = urllib.parse.quote_plus("Duplicate Action: This transaction has already been voided.")
+                    return redirect(f"/portal/{username}/corrections?error={err_msg}")
 
-                # Insert offsetting negative void record into Sales
-                cursor.execute("""
-                    INSERT INTO Sales (Sale_ID, Sale_Date, Sale_Time, Product_ID, Product_Name, Quantity, Price, Total_Amount, Reason, Recorded_By)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                """, (
-                    void_sale_id, 
-                    original_sale_date, 
-                    datetime.now().strftime("%H:%M:%S"), 
-                    p_id, 
-                    f"[VOID] {p_name}", 
-                    -original_qty, 
-                    price, 
-                    -original_amt, 
-                    f"[VOIDED] Reason: {void_reason}", 
-                    operator
-                ))
+                # Fetch all line items for this Sale_ID
+                sales_cols = _get_table_columns(cursor, "Sales")
+                cursor.execute("SELECT * FROM Sales WHERE Sale_ID = ?", (sale_id,))
+                sale_rows = cursor.fetchall()
+                
+                if not sale_rows:
+                    conn.close()
+                    err_msg = urllib.parse.quote_plus(f"Database Error: Sale ID {sale_id} not found.")
+                    return redirect(f"/portal/{username}/corrections?error={err_msg}")
 
-                # RESTOCK DEDUCTED INGREDIENTS (AUTOMATICALLY HANDLES BOTH PRODUCTS AND MODIFIERS)
+                col_idx = {col: i for i, col in enumerate(sales_cols)}
                 restocked_summary = []
 
-                # 1. Check Modifier_Recipes (for Modifiers like Extra Espresso Shot, Oat Milk)
-                cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='Modifier_Recipes'")
-                if cursor.fetchone():
-                    cursor.execute("SELECT Ingredient_ID, Quantity_Required, Unit FROM Modifier_Recipes WHERE Modifier_ID = ?", (p_id,))
-                    mod_recipe_rows = cursor.fetchall()
-                    for ing_id, req_qty, rec_unit in mod_recipe_rows:
-                        tot_refund = float(req_qty or 0.0) * original_qty
-                        cursor.execute("SELECT Current_Stock, Ingredient_Name, Unit FROM Ingredients WHERE Ingredient_ID = ?", (ing_id,))
-                        ing_match = cursor.fetchone()
-                        if ing_match:
-                            current_stock, ing_name, base_unit = ing_match
-                            current_stock = float(current_stock or 0.0)
-                            new_stock = current_stock + tot_refund
-                            cursor.execute("UPDATE Ingredients SET Current_Stock = ? WHERE Ingredient_ID = ?", (new_stock, ing_id))
-                            cursor.execute("""
-                                INSERT INTO Inventory_Audit_Log (Audit_ID, Date, Ingredient_Name, Theoretical, Physical, Variance, Notes)
-                                VALUES (?, ?, ?, ?, ?, ?, ?)
-                            """, (
-                                void_sale_id, 
-                                system_time_exact, 
-                                ing_name, 
-                                current_stock, 
-                                new_stock, 
-                                tot_refund, 
-                                f"VOID RESTORE: {original_qty:g}x Modifier ({p_name}) | Reason: {void_reason}"
-                            ))
-                            restocked_summary.append(f"{tot_refund:g} {base_unit or ''} {ing_name}".strip())
+                for row in sale_rows:
+                    p_id = row[col_idx['Product_ID']] if 'Product_ID' in col_idx else None
+                    p_name = row[col_idx['Product_Name']] if 'Product_Name' in col_idx else p_id
+                    original_qty = float(row[col_idx['Quantity']] or 0.0) if 'Quantity' in col_idx else 0.0
+                    price = float(row[col_idx['Price']] or 0.0) if 'Price' in col_idx else 0.0
+                    original_amt = float(row[col_idx['Total_Amount']] or 0.0) if 'Total_Amount' in col_idx else 0.0
+                    original_sale_date = row[col_idx['Sale_Date']] if 'Sale_Date' in col_idx else datetime.now().strftime("%Y-%m-%d")
 
-                # 2. Check Standard Product Recipes
-                cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='Recipes'")
-                if cursor.fetchone():
-                    cursor.execute("SELECT Ingredient_ID, Quantity_Required, Unit FROM Recipes WHERE Product_ID = ?", (p_id,))
-                    prod_recipe_rows = cursor.fetchall()
-                    for ing_id, req_qty, rec_unit in prod_recipe_rows:
-                        tot_refund = float(req_qty or 0.0) * original_qty
-                        cursor.execute("SELECT Current_Stock, Ingredient_Name, Unit FROM Ingredients WHERE Ingredient_ID = ?", (ing_id,))
-                        ing_match = cursor.fetchone()
-                        if ing_match:
-                            current_stock, ing_name, base_unit = ing_match
-                            current_stock = float(current_stock or 0.0)
-                            new_stock = current_stock + tot_refund
-                            cursor.execute("UPDATE Ingredients SET Current_Stock = ? WHERE Ingredient_ID = ?", (new_stock, ing_id))
+                    # Construct dynamic insert statement based on existing columns
+                    insert_cols = ['Sale_ID', 'Sale_Date', 'Sale_Time', 'Product_ID', 'Product_Name', 'Quantity', 'Price', 'Total_Amount']
+                    insert_vals = [
+                        void_sale_id,
+                        original_sale_date,
+                        current_time_hms,
+                        p_id,
+                        f"[VOID] {p_name}",
+                        -original_qty,
+                        price,
+                        -original_amt
+                    ]
+
+                    if 'Reason' in col_idx:
+                        insert_cols.append('Reason')
+                        insert_vals.append(f"[VOIDED] {void_reason}")
+                    if 'Recorded_By' in col_idx:
+                        insert_cols.append('Recorded_By')
+                        insert_vals.append(operator)
+
+                    placeholders = ', '.join(['?'] * len(insert_vals))
+                    columns_sql = ', '.join(insert_cols)
+                    cursor.execute(f"INSERT INTO Sales ({columns_sql}) VALUES ({placeholders})", insert_vals)
+
+                    # Restock Ingredients: Modifiers
+                    cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='Modifier_Recipes'")
+                    if cursor.fetchone():
+                        cursor.execute("SELECT Ingredient_ID, Quantity_Required, Unit FROM Modifier_Recipes WHERE Modifier_ID = ?", (p_id,))
+                        for ing_id, req_qty, rec_unit in cursor.fetchall():
+                            tot_refund = float(req_qty or 0.0) * original_qty
+                            cursor.execute("UPDATE Ingredients SET Current_Stock = Current_Stock + ? WHERE Ingredient_ID = ?", (tot_refund, ing_id))
+                            
+                            cursor.execute("SELECT Ingredient_Name, Unit FROM Ingredients WHERE Ingredient_ID = ?", (ing_id,))
+                            ing_info = cursor.fetchone()
+                            ing_name = ing_info[0] if ing_info else ing_id
+                            base_unit = ing_info[1] if ing_info else (rec_unit or '')
+                            
                             cursor.execute("""
-                                INSERT INTO Inventory_Audit_Log (Audit_ID, Date, Ingredient_Name, Theoretical, Physical, Variance, Notes)
-                                VALUES (?, ?, ?, ?, ?, ?, ?)
+                                INSERT INTO Inventory_Audit_Log (Audit_ID, Date, Ingredient_Name, Variance, Notes)
+                                VALUES (?, ?, ?, ?, ?)
                             """, (
-                                void_sale_id, 
-                                system_time_exact, 
-                                ing_name, 
-                                current_stock, 
-                                new_stock, 
-                                tot_refund, 
-                                f"VOID RESTORE: {original_qty:g}x Product ({p_name}) | Reason: {void_reason}"
+                                void_sale_id,
+                                system_time_exact,
+                                ing_name,
+                                tot_refund,
+                                f"VOID RESTORE: {original_qty:g}x Modifier ({p_name}) | Auth: {operator} | Reason: {void_reason}"
                             ))
-                            restocked_summary.append(f"{tot_refund:g} {base_unit or ''} {ing_name}".strip())
+                            restocked_summary.append(f"{tot_refund:g} {base_unit} {ing_name}".strip())
+
+                    # Restock Ingredients: Standard Recipes
+                    cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='Recipes'")
+                    if cursor.fetchone():
+                        cursor.execute("SELECT Ingredient_ID, Quantity_Required, Unit FROM Recipes WHERE Product_ID = ?", (p_id,))
+                        for ing_id, req_qty, rec_unit in cursor.fetchall():
+                            tot_refund = float(req_qty or 0.0) * original_qty
+                            cursor.execute("UPDATE Ingredients SET Current_Stock = Current_Stock + ? WHERE Ingredient_ID = ?", (tot_refund, ing_id))
+                            
+                            cursor.execute("SELECT Ingredient_Name, Unit FROM Ingredients WHERE Ingredient_ID = ?", (ing_id,))
+                            ing_info = cursor.fetchone()
+                            ing_name = ing_info[0] if ing_info else ing_id
+                            base_unit = ing_info[1] if ing_info else (rec_unit or '')
+                            
+                            cursor.execute("""
+                                INSERT INTO Inventory_Audit_Log (Audit_ID, Date, Ingredient_Name, Variance, Notes)
+                                VALUES (?, ?, ?, ?, ?)
+                            """, (
+                                void_sale_id,
+                                system_time_exact,
+                                ing_name,
+                                tot_refund,
+                                f"VOID RESTORE: {original_qty:g}x Product ({p_name}) | Auth: {operator} | Reason: {void_reason}"
+                            ))
+                            restocked_summary.append(f"{tot_refund:g} {base_unit} {ing_name}".strip())
 
                 conn.commit()
                 conn.close()
 
-                client_db.update_all_product_costs()
+                try:
+                    client_db.update_all_product_costs()
+                except Exception:
+                    pass
 
-                if restocked_summary:
-                    feedback_msg = f"Success: Sale {sale_id} voided. Restored to inventory: {', '.join(restocked_summary)}."
-                else:
-                    feedback_msg = f"Success: Sale {sale_id} voided. Financial ledger updated."
+                summary_txt = f" Restored: {', '.join(set(restocked_summary))}." if restocked_summary else ""
+                feedback_msg = f"Success: Transaction {sale_id} voided.{summary_txt}"
                 alert_type = "success"
 
             except Exception as e:
                 feedback_msg = f"Error processing void: {str(e)}"
                 alert_type = "danger"
 
-        # WASTAGE VOID PROCESSING
+        # ---------------------------------------------------------
+        # 2. WASTAGE VOID PROCESSING (DIRECT SQL RESTOCK)
+        # ---------------------------------------------------------
         elif action == 'void_waste':
             waste_id = request.form.get('waste_id', '').strip()
             void_reason = request.form.get('void_reason', '').strip()
             
             if not waste_id or not void_reason:
-                return redirect(f"/portal/{username}/corrections?error=Compliance Violation: Waste Audit ID and Void Reason are strictly required.")
+                err_msg = urllib.parse.quote_plus("Compliance Violation: Waste Audit ID and Void Reason are strictly required.")
+                return redirect(f"/portal/{username}/corrections?error={err_msg}")
             
             try:
-                audit_df = client_db.read_tab('Inventory_Audit_Log')
-                if audit_df is None or audit_df.empty:
-                    return redirect(f"/portal/{username}/corrections?error=Database Error: Audit log is empty.")
-                
-                target_idx = audit_df.index[audit_df['Audit_ID'] == waste_id].tolist()
-                if not target_idx:
-                    return redirect(f"/portal/{username}/corrections?error=Database Error: Waste record {waste_id} not found.")
-                
-                idx = target_idx[0]
-                
-                if "[VOIDED]" in str(audit_df.at[idx, 'Notes']):
-                    return redirect(f"/portal/{username}/corrections?error=Duplicate Action: This wastage entry has already been voided.")
-                    
-                item_target = str(audit_df.at[idx, 'Ingredient_Name'])
-                original_variance = float(audit_df.at[idx, 'Variance'])
-                
-                refund_qty = abs(original_variance)
-                
-                conn = sqlite3.connect(db_path, timeout=20.0)
+                conn = sqlite3.connect(db_path, timeout=30.0)
                 cursor = conn.cursor()
-                cursor.execute("PRAGMA table_info(Ingredients)")
-                cols = [r[1] for r in cursor.fetchall()]
-                if 'Current_Stock' in cols:
-                    cursor.execute("UPDATE Ingredients SET Current_Stock = Current_Stock + ? WHERE Ingredient_Name = ? OR Ingredient_ID = ?", (refund_qty, item_target, item_target))
+                
+                cursor.execute("SELECT Ingredient_Name, Variance, Notes FROM Inventory_Audit_Log WHERE Audit_ID = ?", (waste_id,))
+                waste_row = cursor.fetchone()
+                
+                if not waste_row:
+                    conn.close()
+                    err_msg = urllib.parse.quote_plus(f"Database Error: Waste record {waste_id} not found.")
+                    return redirect(f"/portal/{username}/corrections?error={err_msg}")
+                
+                item_name, variance, existing_notes = waste_row
+                if "[VOIDED]" in str(existing_notes):
+                    conn.close()
+                    err_msg = urllib.parse.quote_plus("Duplicate Action: This wastage entry has already been voided.")
+                    return redirect(f"/portal/{username}/corrections?error={err_msg}")
+                
+                refund_qty = abs(float(variance or 0.0))
+                
+                # Restore stock in Ingredients table
+                cursor.execute("""
+                    UPDATE Ingredients 
+                    SET Current_Stock = Current_Stock + ? 
+                    WHERE Ingredient_Name = ? COLLATE NOCASE OR Ingredient_ID = ?
+                """, (refund_qty, item_name, item_name))
+                
+                # Neutralize original audit log row
+                new_notes = f"[VOIDED] {existing_notes or ''} | Auth: {operator} | Reason: {void_reason}"
+                cursor.execute("""
+                    UPDATE Inventory_Audit_Log 
+                    SET Variance = 0.0, Notes = ? 
+                    WHERE Audit_ID = ?
+                """, (new_notes, waste_id))
+                
                 conn.commit()
                 conn.close()
                 
-                original_notes = str(audit_df.at[idx, 'Notes'])
-                audit_df.at[idx, 'Variance'] = 0.0
-                audit_df.at[idx, 'Notes'] = f"[VOIDED] {original_notes} | Auth: {operator} | Reason: {void_reason}"
-                
-                client_db.save_tab('Inventory_Audit_Log', audit_df)
-                
-                feedback_msg = f"Success: Waste entry {waste_id} neutralized. Inventory restored and financial reports updated."
+                feedback_msg = f"Success: Waste entry {waste_id} voided. Restored {refund_qty:g} units to inventory."
                 alert_type = "success"
                 
             except Exception as e:
                 feedback_msg = f"Error processing waste void: {str(e)}"
                 alert_type = "danger"
 
-        # STOCK INTAKE VOID PROCESSING
+        # ---------------------------------------------------------
+        # 3. STOCK INTAKE VOID PROCESSING (DIRECT SQL DEDUCTION)
+        # ---------------------------------------------------------
         elif action == 'void_intake':
             intake_id = request.form.get('intake_id', '').strip()
             void_reason = request.form.get('void_reason', '').strip()
             
             if not intake_id or not void_reason:
-                return redirect(f"/portal/{username}/corrections?error=Compliance Violation: Intake Audit ID and Void Reason are strictly required.")
+                err_msg = urllib.parse.quote_plus("Compliance Violation: Intake Audit ID and Void Reason are strictly required.")
+                return redirect(f"/portal/{username}/corrections?error={err_msg}")
             
             try:
-                audit_df = client_db.read_tab('Inventory_Audit_Log')
-                if audit_df is None or audit_df.empty:
-                    return redirect(f"/portal/{username}/corrections?error=Database Error: Audit log is empty.")
-                
-                target_idx = audit_df.index[audit_df['Audit_ID'] == intake_id].tolist()
-                if not target_idx:
-                    return redirect(f"/portal/{username}/corrections?error=Database Error: Intake record {intake_id} not found.")
-                
-                idx = target_idx[0]
-                
-                if "[VOIDED]" in str(audit_df.at[idx, 'Notes']):
-                    return redirect(f"/portal/{username}/corrections?error=Duplicate Action: This intake entry has already been voided.")
-                    
-                item_target = str(audit_df.at[idx, 'Ingredient_Name'])
-                original_variance = float(audit_df.at[idx, 'Variance'])
-                
-                deduct_qty = abs(original_variance)
-                
-                # Reverse the intake (subtract from current stock)
-                conn = sqlite3.connect(db_path, timeout=20.0)
+                conn = sqlite3.connect(db_path, timeout=30.0)
                 cursor = conn.cursor()
-                cursor.execute("PRAGMA table_info(Ingredients)")
-                cols = [r[1] for r in cursor.fetchall()]
-                if 'Current_Stock' in cols:
-                    cursor.execute("UPDATE Ingredients SET Current_Stock = Current_Stock - ? WHERE Ingredient_Name = ? OR Ingredient_ID = ?", (deduct_qty, item_target, item_target))
+                
+                cursor.execute("SELECT Ingredient_Name, Variance, Notes FROM Inventory_Audit_Log WHERE Audit_ID = ?", (intake_id,))
+                intake_row = cursor.fetchone()
+                
+                if not intake_row:
+                    conn.close()
+                    err_msg = urllib.parse.quote_plus(f"Database Error: Intake record {intake_id} not found.")
+                    return redirect(f"/portal/{username}/corrections?error={err_msg}")
+                
+                item_name, variance, existing_notes = intake_row
+                if "[VOIDED]" in str(existing_notes):
+                    conn.close()
+                    err_msg = urllib.parse.quote_plus("Duplicate Action: This intake entry has already been voided.")
+                    return redirect(f"/portal/{username}/corrections?error={err_msg}")
+                
+                deduct_qty = abs(float(variance or 0.0))
+                
+                # Deduct overstated intake from physical inventory
+                cursor.execute("""
+                    UPDATE Ingredients 
+                    SET Current_Stock = Current_Stock - ? 
+                    WHERE Ingredient_Name = ? COLLATE NOCASE OR Ingredient_ID = ?
+                """, (deduct_qty, item_name, item_name))
+                
+                # Neutralize original audit entry
+                new_notes = f"[VOIDED] {existing_notes or ''} | Auth: {operator} | Reason: {void_reason}"
+                cursor.execute("""
+                    UPDATE Inventory_Audit_Log 
+                    SET Variance = 0.0, Notes = ? 
+                    WHERE Audit_ID = ?
+                """, (new_notes, intake_id))
+                
                 conn.commit()
                 conn.close()
                 
-                original_notes = str(audit_df.at[idx, 'Notes'])
-                audit_df.at[idx, 'Variance'] = 0.0
-                audit_df.at[idx, 'Notes'] = f"[VOIDED] {original_notes} | Auth: {operator} | Reason: {void_reason}"
-                
-                client_db.save_tab('Inventory_Audit_Log', audit_df)
-                
-                feedback_msg = f"Success: Intake entry {intake_id} neutralized. Overstated inventory has been successfully deducted."
+                feedback_msg = f"Success: Intake entry {intake_id} voided. Deducted {deduct_qty:g} units from inventory."
                 alert_type = "success"
                 
             except Exception as e:
                 feedback_msg = f"Error processing intake void: {str(e)}"
                 alert_type = "danger"
 
-        # EXPENSE VOID PROCESSING
+        # ---------------------------------------------------------
+        # 4. PETTY CASH / EXPENSE VOID PROCESSING
+        # ---------------------------------------------------------
         elif action == 'void_expense':
             expense_rowid = request.form.get('expense_rowid', '').strip()
             void_reason = request.form.get('void_reason', '').strip()
             
             if not expense_rowid or not void_reason:
-                return redirect(f"/portal/{username}/corrections?error=Compliance Violation: Expense ID and Void Reason are strictly required.")
+                err_msg = urllib.parse.quote_plus("Compliance Violation: Expense ID and Void Reason are strictly required.")
+                return redirect(f"/portal/{username}/corrections?error={err_msg}")
             
             try:
-                conn = sqlite3.connect(db_path, timeout=20.0)
+                conn = sqlite3.connect(db_path, timeout=30.0)
                 cursor = conn.cursor()
                 
                 cursor.execute("SELECT Amount, Description FROM Expenses WHERE rowid = ?", (expense_rowid,))
@@ -273,83 +301,98 @@ def web_corrections_tab(username):
                 
                 if not expense_record:
                     conn.close()
-                    return redirect(f"/portal/{username}/corrections?error=Database Error: Expense record not found.")
+                    err_msg = urllib.parse.quote_plus("Database Error: Expense record not found.")
+                    return redirect(f"/portal/{username}/corrections?error={err_msg}")
                 
-                original_desc = str(expense_record[1])
+                original_desc = str(expense_record[1] or '')
                 if "[VOIDED]" in original_desc:
                     conn.close()
-                    return redirect(f"/portal/{username}/corrections?error=Duplicate Action: This expense has already been voided.")
+                    err_msg = urllib.parse.quote_plus("Duplicate Action: This expense has already been voided.")
+                    return redirect(f"/portal/{username}/corrections?error={err_msg}")
                 
                 new_desc = f"[VOIDED] {original_desc} | Auth: {operator} | Reason: {void_reason}"
-                
                 cursor.execute("UPDATE Expenses SET Amount = 0.0, Description = ? WHERE rowid = ?", (new_desc, expense_rowid))
                 conn.commit()
                 conn.close()
                 
-                feedback_msg = f"Success: Expense log neutralized. The financial ledger has been updated."
+                feedback_msg = "Success: Expense neutralized to 0.00 in the general ledger."
                 alert_type = "success"
                 
             except Exception as e:
                 feedback_msg = f"Error processing expense void: {str(e)}"
                 alert_type = "danger"
 
-        return redirect(f"/portal/{username}/corrections?msg={feedback_msg}&alert_type={alert_type}")
+        params = urllib.parse.urlencode({'msg': feedback_msg, 'alert_type': alert_type})
+        return redirect(f"/portal/{username}/corrections?{params}")
 
-    # FETCH SALES FOR UI
-    sales_df = client_db.read_tab('Sales')
+    # =========================================================
+    # UI DATA RETRIEVAL (OPTIMIZED SQL READS)
+    # =========================================================
     recent_sales = []
-    if not sales_df.empty:
-        void_records = sales_df[sales_df['Sale_ID'].astype(str).str.startswith('VOID-', na=False)]
-        voided_ids = set([str(vid).replace('VOID-', '') for vid in void_records['Sale_ID'].tolist()])
-        valid_sales = sales_df[~sales_df['Sale_ID'].astype(str).str.startswith('VOID', na=False)]
-        
-        if 'Sale_Date' in valid_sales.columns and 'Sale_Time' in valid_sales.columns:
-            valid_sales = valid_sales.sort_values(['Sale_Date', 'Sale_Time'], ascending=[False, False])
-        elif 'System_Timestamp' in valid_sales.columns:
-            valid_sales = valid_sales.sort_values('System_Timestamp', ascending=False)
-        else:
-            valid_sales = valid_sales.sort_values('Sale_ID', ascending=False)
-            
-        recent_sales_raw = valid_sales.head(100).to_dict(orient='records')
-        for sale in recent_sales_raw:
-            sale['is_voided'] = sale['Sale_ID'] in voided_ids
-            recent_sales.append(sale)
-            
-    # FETCH AUDIT LOGS FOR UI (WASTE AND INTAKE)
-    audit_df = client_db.read_tab('Inventory_Audit_Log')
     recent_waste = []
     recent_intake = []
-    
-    if audit_df is not None and not audit_df.empty:
-        if 'Date' in audit_df.columns:
-            audit_df = audit_df.sort_values('Date', ascending=False)
-            
-        # Parse Waste
-        waste_mask = audit_df['Audit_ID'].astype(str).str.startswith('WST', na=False) | audit_df['Notes'].astype(str).str.contains('Waste|Spoil', case=False, na=False)
-        valid_waste = audit_df[waste_mask].head(100).to_dict(orient='records')
-        for waste in valid_waste:
-            waste['is_voided'] = '[VOIDED]' in str(waste.get('Notes', ''))
-            recent_waste.append(waste)
-            
-        # Parse Intake
-        intake_mask = audit_df['Audit_ID'].astype(str).str.startswith('RCV', na=False) | audit_df['Audit_ID'].astype(str).str.startswith('AUD', na=False)
-        valid_intake = audit_df[intake_mask].head(100).to_dict(orient='records')
-        for intake in valid_intake:
-            intake['is_voided'] = '[VOIDED]' in str(intake.get('Notes', ''))
-            recent_intake.append(intake)
-
-    # FETCH EXPENSES FOR UI
     recent_expenses = []
+
     try:
-        conn = sqlite3.connect(db_path, timeout=20.0)
+        conn = sqlite3.connect(db_path, timeout=30.0)
         conn.row_factory = sqlite3.Row
         cursor = conn.cursor()
-        cursor.execute("SELECT rowid, * FROM Expenses ORDER BY rowid DESC LIMIT 100")
-        expense_rows = cursor.fetchall()
-        for row in expense_rows:
-            exp = dict(row)
-            exp['is_voided'] = '[VOIDED]' in str(exp.get('Description', ''))
-            recent_expenses.append(exp)
+
+        # 1. Fetch Sales & Identify Voided Records
+        cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='Sales'")
+        if cursor.fetchone():
+            sales_cols = _get_table_columns(cursor, "Sales")
+            order_clause = "Sale_Date DESC, Sale_Time DESC" if ('Sale_Date' in sales_cols and 'Sale_Time' in sales_cols) else "Sale_ID DESC"
+            
+            cursor.execute(f"""
+                SELECT * FROM Sales 
+                WHERE Sale_ID NOT LIKE 'VOID-%'
+                ORDER BY {order_clause}
+                LIMIT 100
+            """)
+            raw_sales = [dict(r) for r in cursor.fetchall()]
+
+            cursor.execute("SELECT Sale_ID FROM Sales WHERE Sale_ID LIKE 'VOID-%'")
+            voided_sale_ids = set(r[0].replace('VOID-', '') for r in cursor.fetchall())
+
+            for sale in raw_sales:
+                sale['is_voided'] = str(sale.get('Sale_ID', '')) in voided_sale_ids
+                recent_sales.append(sale)
+
+        # 2. Fetch Audit Logs (Wastage and Intake)
+        cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='Inventory_Audit_Log'")
+        if cursor.fetchone():
+            cursor.execute("""
+                SELECT * FROM Inventory_Audit_Log 
+                ORDER BY Date DESC 
+                LIMIT 250
+            """)
+            audit_logs = [dict(r) for r in cursor.fetchall()]
+
+            for entry in audit_logs:
+                audit_id = str(entry.get('Audit_ID', ''))
+                notes = str(entry.get('Notes', ''))
+                entry['is_voided'] = '[VOIDED]' in notes
+
+                # Filter Wastage
+                if audit_id.startswith('WST') or any(w in notes.lower() for w in ['waste', 'spoil', 'damaged', 'expired']):
+                    if len(recent_waste) < 100:
+                        recent_waste.append(entry)
+                # Filter Intake
+                elif audit_id.startswith('RCV') or audit_id.startswith('AUD') or any(w in notes.lower() for w in ['intake', 'delivery', 'restock']):
+                    if len(recent_intake) < 100:
+                        recent_intake.append(entry)
+
+        # 3. Fetch Expenses
+        cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='Expenses'")
+        if cursor.fetchone():
+            cursor.execute("SELECT rowid, * FROM Expenses ORDER BY rowid DESC LIMIT 100")
+            for row in cursor.fetchall():
+                exp = dict(row)
+                desc = str(exp.get('Description', exp.get('Notes', '')))
+                exp['is_voided'] = '[VOIDED]' in desc
+                recent_expenses.append(exp)
+
         conn.close()
     except Exception:
         pass

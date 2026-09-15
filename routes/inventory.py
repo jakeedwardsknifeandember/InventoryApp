@@ -1,6 +1,7 @@
 # routes/inventory.py - Stock Inventory Module with Dynamic Packaging & Dual-Input Yield Prep Engine
 from flask import Blueprint, request, redirect, session, render_template
 from modules.database import InventoryDB
+from routes.settings import get_store_settings
 import pandas as pd
 import json
 from datetime import datetime
@@ -15,6 +16,7 @@ def web_inventory_tab(username):
         
     client_db_path = f"data/client_{username}.db"
     client_db = InventoryDB(client_db_path)
+    store_settings = get_store_settings(client_db_path)
     
     feedback_msg = None
     alert_type = "success"
@@ -168,7 +170,6 @@ def web_inventory_tab(username):
                 if formula_df.empty:
                     return redirect(f"/portal/{username}/inventory?type=PREPPED&error=Configuration Error: No recipe formula found for this item. Build its sub-recipe blueprint first.")
                 
-                # Determine standard master recipe yield
                 standard_yield = 0.0
                 if 'Batch_Yield' in formula_df.columns and pd.notna(formula_df['Batch_Yield'].iloc[0]) and float(formula_df['Batch_Yield'].iloc[0] or 0) > 0:
                     standard_yield = float(formula_df['Batch_Yield'].iloc[0])
@@ -177,7 +178,6 @@ def web_inventory_tab(username):
                     if standard_yield <= 0:
                         standard_yield = 1.0
 
-                # Compute exact scaling ratio based on actual yield produced vs batch multiplier
                 total_yield_produced = 0.0
                 prep_batches = 0.0
                 
@@ -200,7 +200,6 @@ def web_inventory_tab(username):
                 else:
                     return redirect(f"/portal/{username}/inventory?type=PREPPED&error=Input Error: Provide either actual yield produced or number of batches.")
 
-                # Check inventory availability across all constituent components
                 insufficient_stocks = []
                 for _, row in formula_df.iterrows():
                     raw_id = str(row['Raw_Ingredient_ID'])
@@ -229,7 +228,6 @@ def web_inventory_tab(username):
                 batch_id = f"PRP{datetime.now().strftime('%H%M%S')}"
                 meta_notes = f"Prepped by {prepped_by}"
                 
-                # Deduct raw ingredients proportionally
                 for _, row in formula_df.iterrows():
                     raw_id = str(row['Raw_Ingredient_ID'])
                     req_qty = float(pd.to_numeric(row['Quantity_Required'], errors='coerce') or 0.0)
@@ -252,7 +250,6 @@ def web_inventory_tab(username):
                     audit_ledger_df = pd.concat([audit_ledger_df, pd.DataFrame([raw_log_row])], ignore_index=True)
                     logged_count += 1
                 
-                # Credit the finished prepped component balance
                 current_prep_stock = float(ingredients_df.loc[target_idx[0], 'Current_Stock'])
                 ingredients_df.loc[target_idx[0], 'Current_Stock'] = current_prep_stock + total_yield_produced
                 
@@ -362,7 +359,7 @@ def web_inventory_tab(username):
                     feedback_msg = "Waste Log Complete: Deducted stock components successfully."
                     alert_type = "warning"
 
-            # 4. PROCESS PHYSICAL RECONCILIATION AUDITS
+            # 4. PROCESS PHYSICAL RECONCILIATION AUDITS (WITH FINANCIAL SHRINKAGE VALUATION)
             elif action == 'reconcile_stock':
                 ing_ids = request.form.getlist('ingredient_id[]')
                 quantities = request.form.getlist('quantity[]')
@@ -375,21 +372,28 @@ def web_inventory_tab(username):
                 
                 meta_notes = f"Physical Count by {reconcile_by} ({reconcile_reason})"
                 logged_count = 0
+                total_variance_value = 0.0
                 
                 for i_id, q_val, v_reason in zip(ing_ids, quantities, variance_reasons):
-                    if not q_val or q_val.strip() == "": continue
+                    if not q_val or q_val.strip() == "": 
+                        continue
                     physical_count = float(q_val)
                     
                     idx = ingredients_df[ingredients_df['Ingredient_ID'] == str(i_id)].index
                     if not idx.empty:
                         ing_name = ingredients_df.loc[idx[0], 'Ingredient_Name']
                         theoretical_count = float(ingredients_df.loc[idx[0], 'Current_Stock'])
-                        variance = physical_count - theoretical_count
+                        base_unit = str(ingredients_df.loc[idx[0], 'Unit'] if 'Unit' in ingredients_df.columns else '')
+                        cost_per_unit = float(ingredients_df.loc[idx[0], 'Cost_Per_Unit'] if 'Cost_Per_Unit' in ingredients_df.columns else 0.0)
                         
-                        item_notes = meta_notes
+                        variance = physical_count - theoretical_count
+                        line_variance_cost = variance * cost_per_unit
+                        total_variance_value += line_variance_cost
+                        
+                        item_notes = f"{meta_notes} | Net Value: PHP {line_variance_cost:+,.2f} ({variance:+,.2f} {base_unit})"
                         if abs(variance) > 0.001:
-                            justification = v_reason.strip() if v_reason.strip() else "No reason provided."
-                            item_notes += f" | Variance Justification: {justification}"
+                            justification = v_reason.strip() if v_reason.strip() else "Routine reconciliation variance."
+                            item_notes += f" | Variance Reason: {justification}"
                         
                         ingredients_df.loc[idx[0], 'Current_Stock'] = physical_count
                         
@@ -408,8 +412,8 @@ def web_inventory_tab(username):
                 if logged_count > 0:
                     client_db.save_tab('Ingredients', ingredients_df)
                     client_db.save_tab('Inventory_Audit_Log', audit_ledger_df)
-                    feedback_msg = "Inventory Reconciled: Balance adjustments permanently recorded with variance justifications."
-                    alert_type = "info"
+                    feedback_msg = f"Inventory Reconciled: Successfully updated {logged_count} items. Total net financial discrepancy: PHP {total_variance_value:+,.2f}."
+                    alert_type = "info" if abs(total_variance_value) < 100.0 else "warning"
                     
             client_db.update_all_product_costs()
             return redirect(f"/portal/{username}/inventory?type={current_type}&msg={feedback_msg}&alert_type={alert_type}")
@@ -572,5 +576,6 @@ def web_inventory_tab(username):
         alert_type=alert_type,
         current_search=search_query,
         current_category=category_filter,
-        current_filter_date=filter_date
+        current_filter_date=filter_date,
+        store_settings=store_settings
     )

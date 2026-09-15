@@ -74,6 +74,10 @@ def web_recipes_tab(username):
     if session.get('logged_in_user') != username: 
         return redirect('/login')
         
+    # Safeguard: Automatically recognize master tenant account as Platform Owner Admin
+    if not session.get('staff_role') and session.get('logged_in_user') == username:
+        session['staff_role'] = 'Platform Owner Admin'
+
     if session.get('staff_role') != 'Platform Owner Admin':
         flash('Unauthorized access: Recipes management is strictly reserved for Platform Owner Admins.', 'danger')
         return redirect(f"/portal/{username}")
@@ -114,10 +118,13 @@ def web_recipes_tab(username):
             
             ingredients_df = db.read_tab('Ingredients')
             base_unit_map = {}
+            ing_cost_map = {}
             if not ingredients_df.empty:
                 base_unit_map = dict(zip(ingredients_df['Ingredient_ID'].astype(str), ingredients_df['Unit'].astype(str)))
+                ing_cost_map = dict(zip(ingredients_df['Ingredient_ID'].astype(str), pd.to_numeric(ingredients_df.get('Cost_Per_Unit', 0.0), errors='coerce').fillna(0.0)))
 
             recipe_items = []
+            total_batch_cost = 0.0
             for i, q, u in zip(ing_ids, qtys, units):
                 if i and q:
                     b_unit = base_unit_map.get(str(i), u)
@@ -127,6 +134,7 @@ def web_recipes_tab(username):
                         'quantity': norm_qty,
                         'unit': norm_unit
                     })
+                    total_batch_cost += norm_qty * float(ing_cost_map.get(str(i), 0.0))
             
             if recipe_type == 'product':
                 db.save_recipe(target_id, recipe_items)
@@ -149,9 +157,16 @@ def web_recipes_tab(username):
                 if new_records:
                     prep_df = pd.concat([prep_df, pd.DataFrame(new_records)], ignore_index=True)
                 db.save_tab('Prep_Recipes', prep_df)
+
+                # Synchronize amortized cost per unit into the Ingredients master table
+                amortized_unit_cost = (total_batch_cost / batch_yield_val) if batch_yield_val > 0 else 0.0
+                conn = sqlite3.connect(client_db_path, timeout=20.0)
+                cursor = conn.cursor()
+                cursor.execute("UPDATE Ingredients SET Cost_Per_Unit = ? WHERE Ingredient_ID = ?", (round(amortized_unit_cost, 4), target_id))
+                conn.commit()
+                conn.close()
                 
             db.update_all_product_costs()
-            # Retain active product_id in redirect parameters
             return redirect(f"/portal/{username}/recipes?tab={recipe_type}&product_id={target_id}&msg=Formula specifications successfully saved.")
             
         # DELETE SPECIFICATION OR INGREDIENT SHELL

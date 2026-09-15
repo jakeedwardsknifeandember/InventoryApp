@@ -55,16 +55,27 @@
     <button class="btn btn-primary fw-bold px-4 py-2" data-bs-toggle="modal" data-bs-target="#addModifierModal">+ Add Modifier</button>
 </div>
 
+{% with messages = get_flashed_messages(with_categories=true) %}
+  {% if messages %}
+    {% for category, message in messages %}
+      <div class="alert alert-{{ category if category != 'error' else 'danger' }} border-0 text-white fw-bold mb-3 shadow-sm" style="border-radius: 6px; font-size: 14px;">
+        {{ message }}
+      </div>
+    {% endfor %}
+  {% endif %}
+{% endwith %}
+
 <div class="content-card p-0 overflow-hidden" style="background: #1e1e24; border: 1px solid #2d2d34; border-radius: 8px;">
     <div class="table-responsive">
         <table class="loyverse-table align-middle m-0">
             <thead>
                 <tr>
-                    <th style="width: 15%;">ID</th>
-                    <th style="width: 30%;">MODIFIER NAME</th>
-                    <th style="width: 25%;">RAW INGREDIENTS MAPPED</th>
-                    <th style="width: 15%;">ADD-ON PRICE</th>
-                    <th class="text-end pe-4" style="width: 15%;">ACTIONS</th>
+                    <th style="width: 12%;">ID</th>
+                    <th style="width: 24%;">MODIFIER NAME</th>
+                    <th style="width: 24%;">RAW INGREDIENTS MAPPED</th>
+                    <th style="width: 12%;">RECIPE COST</th>
+                    <th style="width: 14%;">ADD-ON PRICE</th>
+                    <th class="text-end pe-4" style="width: 14%;">ACTIONS</th>
                 </tr>
             </thead>
             <tbody>
@@ -85,10 +96,23 @@
                             <span class="text-muted small" style="font-style: italic;">No ingredients mapped</span>
                         {% endif %}
                     </td>
-                    <td class="font-monospace text-white fw-bold">PHP {{ "%.2f"|format(m.Price) }}</td>
+                    <td class="font-monospace text-warning fw-bold">
+                        PHP {{ "%.2f"|format(m.Cost) }}
+                    </td>
+                    <td>
+                        <span class="font-monospace text-white fw-bold d-block">PHP {{ "%.2f"|format(m.Price) }}</span>
+                        {% if m.Items %}
+                            <small class="font-monospace {% if m.Margin >= 65 %}text-success{% elif m.Margin >= 40 %}text-warning{% else %}text-danger{% endif %} fw-bold" style="font-size: 11px;">
+                                Margin: {{ "%.1f"|format(m.Margin) }}%
+                            </small>
+                        {% else %}
+                            <small class="text-muted" style="font-size: 10.5px;">No Recipe Set</small>
+                        {% endif %}
+                    </td>
                     <td class="text-end pe-4">
+                        <button class="btn btn-sm btn-warning text-dark fw-bold me-1 px-2 py-1" style="font-size: 11px;" data-bs-toggle="modal" data-bs-target="#editModifierModal{{ m.Modifier_ID }}">Edit</button>
                         <button class="btn btn-sm btn-info fw-bold me-1 px-2 py-1" style="font-size: 11px;" data-bs-toggle="modal" data-bs-target="#recipeModal{{ m.Modifier_ID }}">Recipe</button>
-                        <form method="post" style="display: inline;" onsubmit="return confirm('Are you sure you want to delete this modifier?');">
+                        <form method="post" style="display: inline;" onsubmit="return confirm('Permanently delete modifier \'{{ m.Modifier_Name }}\'?');">
                             <input type="hidden" name="action_type" value="delete_modifier">
                             <input type="hidden" name="modifier_id" value="{{ m.Modifier_ID }}">
                             <button type="submit" class="btn btn-sm btn-danger fw-bold px-2 py-1" style="font-size: 11px;">Delete</button>
@@ -97,7 +121,7 @@
                 </tr>
                 {% else %}
                 <tr>
-                    <td colspan="5" class="text-center py-5 text-muted">No modifiers created yet. Click + Add Modifier to start.</td>
+                    <td colspan="6" class="text-center py-5 text-muted">No modifiers created yet. Click + Add Modifier to start.</td>
                 </tr>
                 {% endfor %}
             </tbody>
@@ -129,6 +153,34 @@
         </div>
     </div>
 </div>
+
+<!-- EDIT MODIFIER DETAILS MODALS -->
+{% for m in modifiers %}
+<div class="modal fade" id="editModifierModal{{ m.Modifier_ID }}" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content bg-dark text-white border-secondary shadow-lg" style="background-color: #1e1e24 !important;">
+            <form method="post">
+                <input type="hidden" name="action_type" value="edit_modifier">
+                <input type="hidden" name="modifier_id" value="{{ m.Modifier_ID }}">
+                <div class="modal-header border-secondary" style="background-color: #151518;">
+                    <h5 class="modal-title fw-bold text-warning">Edit Modifier: {{ m.Modifier_Name }}</h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body p-4">
+                    <label class="form-label">MODIFIER NAME:</label>
+                    <input type="text" name="modifier_name" class="form-control text-white border-secondary mb-3" value="{{ m.Modifier_Name }}" required autocomplete="off">
+                    
+                    <label class="form-label">ADD-ON PRICE (PHP):</label>
+                    <input type="number" step="0.01" name="price" class="form-control text-white border-secondary font-monospace" value="{{ "%.2f"|format(m.Price) }}" required>
+                </div>
+                <div class="modal-footer border-secondary" style="background-color: #151518;">
+                    <button type="submit" class="btn btn-warning text-dark fw-bold w-100 py-2">Update Modifier Details</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endfor %}
 
 <!-- EDIT MODIFIER INGREDIENT RECIPE MODALS -->
 {% for m in modifiers %}
@@ -196,20 +248,20 @@
 
 <script>
 function synchronizeRowMeasurementUnitOptions(selectElement) {
-    const row = selectElement.parentElement.parentElement;
+    const row = selectElement.closest('.row');
     const activeOption = selectElement.options[selectElement.selectedIndex];
-    const nativeUnit = activeOption.getAttribute('data-native-unit') || 'pcs';
+    const nativeUnit = (activeOption.getAttribute('data-native-unit') || 'pcs').trim().toLowerCase();
     const unitDropdown = row.querySelector('.unit-selector-node');
     
-    const previousSelectionValue = unitDropdown.value;
+    const previousSelectionValue = (unitDropdown.value || '').trim().toLowerCase();
     unitDropdown.innerHTML = '';
     
-    if (nativeUnit === 'kg' || nativeUnit === 'g') {
-        unitDropdown.innerHTML = `<option value="kg">kg</option><option value="g">g</option>`;
-        unitDropdown.value = (previousSelectionValue === 'g' || previousSelectionValue === 'kg') ? previousSelectionValue : 'kg';
-    } else if (nativeUnit === 'L' || nativeUnit === 'ml') {
-        unitDropdown.innerHTML = `<option value="L">L</option><option value="ml">ml</option>`;
-        unitDropdown.value = (previousSelectionValue === 'ml' || previousSelectionValue === 'L') ? previousSelectionValue : 'L';
+    if (nativeUnit === 'g' || nativeUnit === 'kg') {
+        unitDropdown.innerHTML = `<option value="g">g</option><option value="kg">kg</option>`;
+        unitDropdown.value = (previousSelectionValue === 'kg') ? 'kg' : 'g';
+    } else if (nativeUnit === 'ml' || nativeUnit === 'l') {
+        unitDropdown.innerHTML = `<option value="ml">ml</option><option value="L">L</option>`;
+        unitDropdown.value = (previousSelectionValue === 'l' || previousSelectionValue === 'L') ? 'L' : 'ml';
     } else {
         unitDropdown.innerHTML = `<option value="${nativeUnit}">${nativeUnit}</option>`;
         unitDropdown.value = nativeUnit;
