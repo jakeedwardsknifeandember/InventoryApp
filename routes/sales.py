@@ -1,4 +1,4 @@
-# routes/sales.py - End-of-Day (EOD) Sales Entry & Recipe Inventory Deduction Engine
+# routes/sales.py - End-of-Day (EOD) Sales Entry, Recipe Inventory Deduction & Discounts Engine
 from flask import Blueprint, request, redirect, session, render_template
 from modules.database import InventoryDB
 import sqlite3
@@ -18,7 +18,6 @@ def resolve_parent_and_variant(p):
     raw_parent = p.get('Parent_Item')
     raw_variant = p.get('Variant_Name')
     
-    # 1. Respect explicit database values if populated
     if raw_parent and str(raw_parent).strip().lower() not in ['nan', 'none', '', 'null']:
         parent = str(raw_parent).strip()
         variant = str(raw_variant).strip() if (raw_variant and str(raw_variant).strip().lower() not in ['nan', 'none', '', 'null']) else 'Regular'
@@ -26,21 +25,18 @@ def resolve_parent_and_variant(p):
 
     full_name = str(p.get('Product_Name') or '').strip()
     
-    # 2. Match Prefix Patterns: "Hot - Brown Sugar Coffee", "Iced- Americano Coffee", "Hot Cafe Mocha"
     prefix_match = re.match(r"^(Hot|Iced|Cold|Warm)\s*[-–—:]?\s*(.+)$", full_name, re.IGNORECASE)
     if prefix_match:
         variant = prefix_match.group(1).strip().capitalize()
         parent = prefix_match.group(2).strip()
         return parent, variant
 
-    # 3. Match Suffix Patterns: "Brown Sugar Coffee - Hot", "Americano (Iced)"
     suffix_match = re.match(r"^(.+?)\s*[-–—:(]\s*(Hot|Iced|Cold|Warm|12oz|16oz|22oz|Regular|Large)\)?$", full_name, re.IGNORECASE)
     if suffix_match:
         parent = suffix_match.group(1).strip()
         variant = suffix_match.group(2).strip().capitalize()
         return parent, variant
 
-    # 4. Standard Delimiter: "Product Family - Variant"
     delimiter_match = re.match(r"^([^-–—(]+)\s*[-–—]\s*(.+)$", full_name)
     if delimiter_match:
         part1 = delimiter_match.group(1).strip()
@@ -53,7 +49,7 @@ def resolve_parent_and_variant(p):
 
 def ensure_sales_database_schema(conn):
     """
-    Auto-migrates the Sales and Inventory_Audit_Log tables if they exist with legacy schemas.
+    Auto-migrates the Sales, Inventory_Audit_Log, and Sales_Discounts tables.
     Safely adds missing columns without data loss.
     """
     cursor = conn.cursor()
@@ -114,6 +110,21 @@ def ensure_sales_database_schema(conn):
         if col_name not in existing_audit_cols:
             cursor.execute(f"ALTER TABLE Inventory_Audit_Log ADD COLUMN {col_name} {col_type}")
 
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS Sales_Discounts (
+            Discount_Tx_ID TEXT PRIMARY KEY,
+            Batch_ID TEXT,
+            Sale_Date TEXT,
+            Sale_Time TEXT,
+            Discount_ID TEXT,
+            Discount_Name TEXT,
+            Category TEXT,
+            Amount REAL,
+            Notes TEXT,
+            Recorded_By TEXT
+        )
+    """)
+
     conn.commit()
 
 @sales_bp.route('/portal/<username>/sales', methods=['GET', 'POST'])
@@ -129,14 +140,13 @@ def web_sales_tab(username):
     feedback_msg = None
     alert_type = "success"
 
-    # Always ensure schema integrity on every request
     conn = sqlite3.connect(client_db_path, timeout=20.0)
     ensure_sales_database_schema(conn)
     conn.close()
 
-    # ==========================================
-    # 1. POST METHOD: SUBMIT CONSOLIDATED EOD CLOSING SALES
-    # ==========================================
+    # =================================================================
+    # 1. POST METHOD: SUBMIT CONSOLIDATED EOD SALES & Z-READING DISCOUNTS
+    # =================================================================
     if request.method == 'POST':
         sale_date = request.form.get('sale_date', '').strip() or datetime.now().strftime("%Y-%m-%d")
         audit_note = request.form.get('audit_note', '').strip()
@@ -147,12 +157,15 @@ def web_sales_tab(username):
         
         mod_ids = request.form.getlist('modifier_id[]')
         mod_qtys = request.form.getlist('modifier_quantity[]')
+
+        disc_ids = request.form.getlist('discount_id[]')
+        disc_amts = request.form.getlist('discount_amount[]')
+        disc_notes = request.form.getlist('discount_notes[]')
         
         conn = sqlite3.connect(client_db_path, timeout=20.0)
         ensure_sales_database_schema(conn)
         cursor = conn.cursor()
 
-        # Generate Unified EOD Batch Identifier
         date_slug = sale_date.replace('-', '')
         time_slug = datetime.now().strftime("%H%M%S")
         batch_id = f"EOD{date_slug}_{time_slug}"
@@ -165,8 +178,9 @@ def web_sales_tab(username):
         sold_summary_list = []
         valid_sales_payload = []
         valid_modifiers_payload = []
+        valid_discounts_payload = []
 
-        # 1. Process Product Requirements & Prepare Granular Ledger Records
+        # 1. Process Product Requirements & Prepare Itemized Payload
         for p_id, q_str in zip(prod_ids, prod_qtys):
             try:
                 p_qty = float(q_str or 0)
@@ -195,7 +209,7 @@ def web_sales_tab(username):
                 for ing_id, req_qty in cursor.fetchall():
                     total_required_ingredients[str(ing_id)] += float(req_qty or 0.0) * p_qty
 
-        # 2. Process Modifier Requirements & Prepare Granular Ledger Records
+        # 2. Process Modifier Requirements & Prepare Itemized Payload
         for m_id, mq_str in zip(mod_ids, mod_qtys):
             try:
                 m_qty = float(mq_str or 0)
@@ -229,12 +243,40 @@ def web_sales_tab(username):
                 for ing_id, req_qty in cursor.fetchall():
                     total_required_ingredients[str(ing_id)] += float(req_qty or 0.0) * m_qty
 
-        # Verify that at least one unit was sold
+        # 3. Process Discounts from Z-Reading Tape
+        discounts_total_amount = 0.0
+        for d_id, d_amt_str, d_note in zip(disc_ids, disc_amts, disc_notes):
+            try:
+                d_amt = float(d_amt_str or 0)
+            except (ValueError, TypeError):
+                d_amt = 0.0
+            if d_amt <= 0:
+                continue
+
+            d_name = d_id
+            d_cat = "Promotional / Marketing"
+            cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='Discounts'")
+            if cursor.fetchone():
+                cursor.execute("SELECT Discount_Name, Category FROM Discounts WHERE Discount_ID = ?", (d_id,))
+                disc_match = cursor.fetchone()
+                if disc_match:
+                    d_name = disc_match[0] or d_id
+                    d_cat = disc_match[1] or "Promotional / Marketing"
+
+            valid_discounts_payload.append({
+                'id': d_id,
+                'name': d_name,
+                'category': d_cat,
+                'amount': d_amt,
+                'notes': (d_note or '').strip()
+            })
+            discounts_total_amount += d_amt
+
         if not valid_sales_payload and not valid_modifiers_payload:
             conn.close()
             return redirect(f"/portal/{username}/sales?msg=Input Warning: No sales quantities entered. Provide closing units sold for at least one item before syncing.&alert_type=warning")
 
-        # 3. Check Against On-Hand Inventory Balances (Deficit Prevention)
+        # 4. Check Against On-Hand Inventory Balances (Deficit Prevention Guard)
         insufficient_ingredients = []
         for ing_id, needed_qty in total_required_ingredients.items():
             if needed_qty <= 0:
@@ -265,7 +307,7 @@ def web_sales_tab(username):
             return redirect(f"/portal/{username}/sales?msg={err_msg}&alert_type=danger")
 
         # =================================================================
-        # COMMIT TRANSACTION (GRANULAR SALES + CONSOLIDATED AUDIT DEPLETION)
+        # COMMIT TRANSACTION (SALES + DISCOUNTS + CONSOLIDATED AUDIT DEPLETION)
         # =================================================================
         if len(sold_summary_list) <= 4:
             summary_text = ", ".join(sold_summary_list)
@@ -273,8 +315,10 @@ def web_sales_tab(username):
             summary_text = ", ".join(sold_summary_list[:4]) + f" (+{len(sold_summary_list) - 4} more)"
 
         # 1. Insert Itemized Products Sold into Sales Ledger
+        gross_sales_amount = 0.0
         for idx, item in enumerate(valid_sales_payload, start=1):
             sale_line_id = f"{batch_id}-P{idx:02d}"
+            gross_sales_amount += item['total']
             cursor.execute("""
                 INSERT INTO Sales (
                     Sale_ID, Sale_Date, Sale_Time, Product_ID, Product_Name,
@@ -288,6 +332,7 @@ def web_sales_tab(username):
         # 2. Insert Itemized Modifiers Sold into Sales Ledger
         for idx, item in enumerate(valid_modifiers_payload, start=1):
             mod_line_id = f"{batch_id}-M{idx:02d}"
+            gross_sales_amount += item['total']
             cursor.execute("""
                 INSERT INTO Sales (
                     Sale_ID, Sale_Date, Sale_Time, Product_ID, Product_Name,
@@ -298,7 +343,34 @@ def web_sales_tab(username):
                 item['qty'], item['price'], item['total'], audit_note or f"EOD Batch {batch_id}", recorded_by
             ))
 
-        # 3. Consolidated Recipe Inventory Deductions (One Row Per Ingredient under Unified Batch ID)
+        # 3. Insert Applied Discounts into Sales_Discounts & Sales (Financial Net Revenue Bridge)
+        for idx, disc in enumerate(valid_discounts_payload, start=1):
+            disc_line_id = f"{batch_id}-D{idx:02d}"
+            
+            # Compliance Audit Table Record
+            cursor.execute("""
+                INSERT INTO Sales_Discounts (
+                    Discount_Tx_ID, Batch_ID, Sale_Date, Sale_Time,
+                    Discount_ID, Discount_Name, Category, Amount, Notes, Recorded_By
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """, (
+                disc_line_id, batch_id, sale_date, sale_time_str,
+                disc['id'], disc['name'], disc['category'], disc['amount'], disc['notes'], recorded_by
+            ))
+
+            # Financial Ledger Entry in Sales
+            reason_str = f"[{disc['category']}] {disc['notes']}".strip()
+            cursor.execute("""
+                INSERT INTO Sales (
+                    Sale_ID, Sale_Date, Sale_Time, Product_ID, Product_Name,
+                    Quantity, Price, Total_Amount, Reason, Recorded_By
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """, (
+                disc_line_id, sale_date, sale_time_str, disc['id'], f"Discount: {disc['name']}",
+                1, -disc['amount'], -disc['amount'], reason_str or f"EOD Discount {disc['id']}", recorded_by
+            ))
+
+        # 4. Consolidated Recipe Inventory Deductions (One Row Per Ingredient under Unified Batch ID)
         depleted_ingredients_count = 0
         batch_audit_note = f"POS Depletion: {summary_text} | {audit_note}".strip(" | ")
 
@@ -336,15 +408,22 @@ def web_sales_tab(username):
         client_db.update_all_product_costs()
 
         total_units_sold = sum(i['qty'] for i in valid_sales_payload) + sum(i['qty'] for i in valid_modifiers_payload)
-        feedback_msg = f"EOD Closing Recorded: Successfully logged {total_units_sold:g} items sold under Batch {batch_id}. Consolidated deductions applied across {depleted_ingredients_count} inventory ingredients."
+        net_sales_amount = gross_sales_amount - discounts_total_amount
+
+        feedback_msg = (
+            f"EOD Closing Recorded: Successfully logged {total_units_sold:g} items sold under Batch {batch_id}. "
+            f"Gross Sales: ₱{gross_sales_amount:,.2f} | Discounts: -₱{discounts_total_amount:,.2f} | Net Sales: ₱{net_sales_amount:,.2f}. "
+            f"Consolidated deductions applied across {depleted_ingredients_count} ingredients."
+        )
         return redirect(f"/portal/{username}/sales?msg={feedback_msg}&alert_type=success")
 
-    # ==========================================
-    # 2. GET METHOD: RENDER GROUPED WORKSHEET
-    # ==========================================
+    # =================================================================
+    # 2. GET METHOD: RENDER GROUPED WORKSHEET & ACTIVE DISCOUNT POLICIES
+    # =================================================================
     conn = sqlite3.connect(client_db_path, timeout=20.0)
+    cursor = conn.cursor()
     
-    # Read active products and build parent-variant dictionary
+    # 1. Read active products and build parent-variant dictionary
     products_df = pd.read_sql("SELECT * FROM Products WHERE Active = 'Yes' OR Active = 'yes'", conn)
     
     grouped_products = defaultdict(list)
@@ -366,16 +445,28 @@ def web_sales_tab(username):
             }
             grouped_products[parent_name].append(p_obj)
 
-    # Read active modifiers
+    # 2. Read active modifiers
     active_modifiers = []
-    cursor = conn.cursor()
     cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='Modifiers'")
     if cursor.fetchone():
         mods_df = pd.read_sql("SELECT * FROM Modifiers WHERE Active = 'Yes' OR Active = 'yes'", conn)
         if not mods_df.empty:
             active_modifiers = mods_df.to_dict('records')
 
-    # Read historical sales grouped by date
+    # 3. Read active discount policies from Discounts module
+    active_discounts = []
+    cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='Discounts'")
+    if cursor.fetchone():
+        cursor.execute("SELECT * FROM Discounts WHERE Active = 'Yes' OR Active = 'yes' ORDER BY Discount_ID ASC")
+        rows = cursor.fetchall()
+        cols = [c[0] for c in cursor.description]
+        for r in rows:
+            d_dict = dict(zip(cols, r))
+            d_dict['Value'] = float(d_dict.get('Value') or 0.0)
+            d_dict['Category'] = str(d_dict.get('Category') or 'Promotional / Marketing')
+            active_discounts.append(d_dict)
+
+    # 4. Read historical sales grouped by date
     sales_history = []
     cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='Sales'")
     if cursor.fetchone():
@@ -387,13 +478,20 @@ def web_sales_tab(username):
 
             for u_date in unique_dates:
                 day_entries = sales_ledger_df[sales_ledger_df['Sale_Date'] == u_date]
-                total_qty = float(pd.to_numeric(day_entries['Quantity'], errors='coerce').fillna(0.0).sum())
-                total_revenue = float(pd.to_numeric(day_entries['Total_Amount'], errors='coerce').fillna(0.0).sum())
+                
+                product_lines = day_entries[~day_entries['Product_Name'].str.startswith('Discount:')]
+                total_qty = float(pd.to_numeric(product_lines['Quantity'], errors='coerce').fillna(0.0).sum())
+                
+                gross_revenue = float(pd.to_numeric(day_entries[day_entries['Total_Amount'] > 0]['Total_Amount'], errors='coerce').fillna(0.0).sum())
+                discount_total = abs(float(pd.to_numeric(day_entries[day_entries['Total_Amount'] < 0]['Total_Amount'], errors='coerce').fillna(0.0).sum()))
+                net_revenue = float(pd.to_numeric(day_entries['Total_Amount'], errors='coerce').fillna(0.0).sum())
 
                 sales_history.append({
                     'date': u_date,
                     'total_qty': total_qty,
-                    'total_revenue': total_revenue,
+                    'total_revenue': net_revenue,
+                    'gross_revenue': gross_revenue,
+                    'discount_total': discount_total,
                     'entries': day_entries.to_dict('records')
                 })
 
@@ -405,6 +503,7 @@ def web_sales_tab(username):
         grouped_products=grouped_products,
         categories=categories,
         active_modifiers=active_modifiers,
+        active_discounts=active_discounts,
         sales_history=sales_history,
         msg=request.args.get('msg', feedback_msg),
         alert_type=request.args.get('alert_type', alert_type)
