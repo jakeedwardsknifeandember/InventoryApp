@@ -47,7 +47,6 @@ def calculate_sales_cogs(sales_slice_df, db_path):
     conn = sqlite3.connect(db_path, timeout=20.0)
     cursor = conn.cursor()
 
-    # 1. Product Recipes
     cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='Recipes'")
     prod_recipe_map = defaultdict(list)
     if cursor.fetchone():
@@ -55,7 +54,6 @@ def calculate_sales_cogs(sales_slice_df, db_path):
         for pid, iid, rqty in cursor.fetchall():
             prod_recipe_map[str(pid)].append((str(iid), float(rqty or 0.0)))
 
-    # 2. Modifier Recipes
     cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='Modifier_Recipes'")
     mod_recipe_map = defaultdict(list)
     if cursor.fetchone():
@@ -63,7 +61,6 @@ def calculate_sales_cogs(sales_slice_df, db_path):
         for mid, iid, rqty in cursor.fetchall():
             mod_recipe_map[str(mid)].append((str(iid), float(rqty or 0.0)))
 
-    # 3. Ingredient Costs
     cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='Ingredients'")
     ing_cost_map = {}
     if cursor.fetchone():
@@ -71,7 +68,6 @@ def calculate_sales_cogs(sales_slice_df, db_path):
         for iid, cpu in cursor.fetchall():
             ing_cost_map[str(iid)] = float(cpu or 0.0)
 
-    # 4. Product Cost Price Fallback
     cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='Products'")
     prod_cost_map = {}
     if cursor.fetchone():
@@ -83,6 +79,11 @@ def calculate_sales_cogs(sales_slice_df, db_path):
 
     total_cogs = 0.0
     for _, s_row in sales_slice_df.iterrows():
+        # Exclude discount rows from COGS recipe calculations
+        p_name = str(s_row.get('Product_Name', ''))
+        if p_name.startswith('Discount:'):
+            continue
+
         item_id = str(s_row.get('Product_ID', '')).strip()
         try:
             qty_sold = float(s_row.get('Quantity', 0.0) or 0.0)
@@ -267,7 +268,6 @@ def web_reports_tab(username):
 
     all_time_net_profit = all_time_revenue - all_time_cogs - all_time_expenses
     
-    # CapEx Data
     total_capex = 0.0
     capex_list = []
     try:
@@ -277,7 +277,7 @@ def web_reports_tab(username):
         if not capex_raw_df.empty:
             total_capex = float(capex_raw_df['Amount'].sum())
             capex_list = capex_raw_df.to_dict(orient='records')
-    except:
+    except Exception:
         pass
         
     roi_percentage = (all_time_net_profit / total_capex) * 100.0 if total_capex > 0 else 0.0
@@ -339,11 +339,28 @@ def web_reports_tab(username):
         if not audit_df.empty and 'Parsed_Date' in audit_df.columns:
             audit_df = audit_df[(audit_df['Parsed_Date'] >= start_bound) & (audit_df['Parsed_Date'] <= end_bound)]
 
-    # CORE REVENUE & COST OF GOODS SOLD (COGS) CALCULATIONS
-    total_revenue = float(sales_df['Total_Amount'].sum()) if not sales_df.empty else 0.0
-    total_sales_count = len(sales_df) if not sales_df.empty else 0
-    total_cogs = calculate_sales_cogs(sales_df, db_path)
+    # =================================================================
+    # GROSS-TO-NET REVENUE BRIDGE & COSTING CALCULATIONS
+    # =================================================================
+    gross_sales = 0.0
+    total_discounts = 0.0
+    net_sales = 0.0
+    total_sales_count = 0
 
+    if not sales_df.empty:
+        # Separate positive product/modifier sales from negative discount rows
+        pos_sales = sales_df[sales_df['Total_Amount'] > 0]
+        neg_discounts = sales_df[sales_df['Total_Amount'] < 0]
+        
+        gross_sales = float(pos_sales['Total_Amount'].sum())
+        total_discounts = abs(float(neg_discounts['Total_Amount'].sum()))
+        net_sales = float(sales_df['Total_Amount'].sum())
+        
+        # Product line volume count
+        product_rows = sales_df[~sales_df['Product_Name'].astype(str).str.startswith('Discount:')]
+        total_sales_count = len(product_rows)
+
+    total_cogs = calculate_sales_cogs(sales_df, db_path)
     total_expenses = float(expenses_df['Amount'].sum()) if not expenses_df.empty else 0.0
 
     total_waste_cost = 0.0
@@ -355,10 +372,6 @@ def web_reports_tab(username):
         audit_df['Ingredient_Name'] = audit_df['Ingredient_Name'].astype(str).str.strip()
         audit_df['Variance'] = pd.to_numeric(audit_df['Variance'], errors='coerce').fillna(0.0)
         
-        # Comprehensive loss recognition:
-        # WST: Manual ingredient waste
-        # PRD: Scrapped finished menu products
-        # AUD with Variance < 0: Physical count deficits / operational shrinkage
         waste_mask = (
             audit_df['Audit_ID'].str.startswith('WST') | 
             audit_df['Audit_ID'].str.startswith('PRD') |
@@ -394,7 +407,8 @@ def web_reports_tab(username):
                     
                 opportunity_cost += (row_financial_cost * retail_multiplier)
 
-    gross_profit_margin = total_revenue - total_cogs
+    # Margins and bottom-line profit calculated strictly from Net Sales
+    gross_profit_margin = net_sales - total_cogs
     net_profit = gross_profit_margin - total_expenses - total_waste_cost
 
     warehouse_asset_value = 0.0
@@ -407,8 +421,8 @@ def web_reports_tab(username):
     total_liabilities = 0.0 
     owners_equity = total_assets - total_liabilities
 
-    if total_revenue > 0:
-        gross_margin_pct = (gross_profit_margin / total_revenue) * 100.0
+    if net_sales > 0:
+        gross_margin_pct = (gross_profit_margin / net_sales) * 100.0
     elif not products_df.empty:
         p_temp = products_df.copy()
         p_temp['Selling_Price'] = pd.to_numeric(p_temp['Selling_Price'], errors='coerce').fillna(0.0)
@@ -431,32 +445,32 @@ def web_reports_tab(username):
 
     daily_break_even = break_even_target / 30.0
 
-    if total_sales_count > 0 and total_revenue > 0:
-        aov = total_revenue / total_sales_count
+    if total_sales_count > 0 and net_sales > 0:
+        aov = net_sales / total_sales_count
     else:
         aov = 150.0 
 
     daily_tickets_needed = int(round(daily_break_even / aov)) if aov > 0 else 0
 
     if break_even_target > 0:
-        bep_progress_pct = min(100.0, (total_revenue / break_even_target) * 100.0)
+        bep_progress_pct = min(100.0, (net_sales / break_even_target) * 100.0)
     else:
         bep_progress_pct = 0.0
 
-    if total_revenue >= break_even_target and break_even_target > 0:
+    if net_sales >= break_even_target and break_even_target > 0:
         bep_status_text = "PROFIT ZONE"
-        bep_status_desc = f"Revenue exceeds fixed operating costs by PHP {total_revenue - break_even_target:,.2f}."
+        bep_status_desc = f"Net revenue exceeds fixed operating costs by PHP {net_sales - break_even_target:,.2f}."
         bep_status_color = "#10b981"
         bep_badge_class = "bg-success"
-    elif total_revenue >= (break_even_target * 0.8) and break_even_target > 0:
+    elif net_sales >= (break_even_target * 0.8) and break_even_target > 0:
         bep_status_text = "CAUTION ZONE"
-        bep_status_desc = f"You need PHP {break_even_target - total_revenue:,.2f} more in gross sales to reach break-even."
+        bep_status_desc = f"You need PHP {break_even_target - net_sales:,.2f} more in net sales to reach break-even."
         bep_status_color = "#f59e0b"
         bep_badge_class = "bg-warning text-dark"
     else:
         bep_status_text = "LOSS ZONE"
-        needed = break_even_target - total_revenue
-        bep_status_desc = f"Current revenue is PHP {needed:,.2f} short of covering operating overhead." if break_even_target > 0 else "Log operating expenses and products to calculate your break-even threshold."
+        needed = break_even_target - net_sales
+        bep_status_desc = f"Current net revenue is PHP {needed:,.2f} short of covering operating overhead." if break_even_target > 0 else "Log operating expenses and products to calculate your break-even threshold."
         bep_status_color = "#ef4444"
         bep_badge_class = "bg-danger"
 
@@ -501,7 +515,7 @@ def web_reports_tab(username):
                     
             menu_data_json = json.dumps(chart_points)
 
-    # COST VARIANCE & INFLATION TRACKER ENGINE
+    # COST VARIANCE & INFLATION TRACKER
     inflation_data = []
     full_audit_df = db.read_tab('Inventory_Audit_Log')
     
@@ -509,7 +523,6 @@ def web_reports_tab(username):
         rcv_df = full_audit_df[full_audit_df['Audit_ID'].astype(str).str.startswith('RCV')].copy()
         if not rcv_df.empty:
             rcv_df['Date'] = pd.to_datetime(rcv_df['Date'], errors='coerce')
-            # Flexible regex extraction matching any base unit (/g, /ml, /pcs)
             rcv_df['Extracted_Price'] = rcv_df['Notes'].astype(str).str.extract(r'Intake Cost: PHP ([\d,\.]+)/')[0]
             rcv_df['Extracted_Price'] = pd.to_numeric(rcv_df['Extracted_Price'].astype(str).str.replace(',', ''), errors='coerce')
             rcv_df = rcv_df.dropna(subset=['Extracted_Price', 'Date'])
@@ -522,7 +535,6 @@ def web_reports_tab(username):
                 
             active_ingredients = current_period_rcv['Ingredient_Name'].unique()
             
-            # Build baseline price dictionary from Ingredients catalog
             baseline_map = {}
             if not ingredients_df.empty:
                 for _, ing_r in ingredients_df.iterrows():
@@ -540,7 +552,6 @@ def web_reports_tab(username):
                     newest_price = float(ing_current.iloc[-1]['Extracted_Price'])
                     last_date_str = ing_current.iloc[-1]['Date'].strftime("%Y-%m-%d") if pd.notnull(ing_current.iloc[-1]['Date']) else datetime.now().strftime("%Y-%m-%d")
                     
-                    # If multiple deliveries exist, compare oldest vs newest; otherwise compare against catalog baseline
                     if len(ing_all_time) > 1:
                         oldest_price = float(ing_all_time.iloc[0]['Extracted_Price'])
                     else:
@@ -561,7 +572,7 @@ def web_reports_tab(username):
     recent_sales = []
     if not sales_df.empty:
         sort_col = 'Parsed_Date' if 'Parsed_Date' in sales_df.columns and sales_df['Parsed_Date'].notna().any() else 'Sale_Date'
-        sales_sorted = sales_df.sort_values(sort_col, ascending=False).head(8)
+        sales_sorted = sales_df.sort_values(sort_col, ascending=False).head(12)
         for _, row in sales_sorted.iterrows():
             p_id = str(row.get('Product_ID', ''))
             stored_name = row.get('Product_Name')
@@ -579,8 +590,11 @@ def web_reports_tab(username):
                 date_str = str(row.get('Sale_Date', datetime.now().strftime("%Y-%m-%d")))
                 
             recent_sales.append({
-                'Sale_Date': date_str, 'Sale_Time': str(row.get('Sale_Time', '')),
-                'Product_Name': p_name, 'Quantity': float(row.get('Quantity', 0.0) or 0.0), 'Total_Amount': float(row.get('Total_Amount', 0.0) or 0.0)
+                'Sale_Date': date_str, 
+                'Sale_Time': str(row.get('Sale_Time', '')),
+                'Product_Name': p_name, 
+                'Quantity': float(row.get('Quantity', 0.0) or 0.0), 
+                'Total_Amount': float(row.get('Total_Amount', 0.0) or 0.0)
             })
 
     incidents_list = []
@@ -590,13 +604,15 @@ def web_reports_tab(username):
         conn.close()
         if not inc_df.empty:
             incidents_list = inc_df.to_dict(orient='records')
-    except:
+    except Exception:
         pass
 
     return render_template(
         'reports.html',
         username=username,
-        total_revenue=total_revenue,
+        gross_sales=gross_sales,
+        total_discounts=total_discounts,
+        total_revenue=net_sales,
         total_cogs=total_cogs,
         gross_margin=gross_profit_margin,
         total_expenses=total_expenses,

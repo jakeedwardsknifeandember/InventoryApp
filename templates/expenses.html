@@ -5,6 +5,10 @@
 <style>
     .expenses-workspace table tbody td {
         color: #f8fafc !important; 
+        vertical-align: middle;
+        padding: 12px 16px;
+        font-size: 13.5px;
+        border-bottom: 1px solid #27272c;
     }
     
     .expenses-workspace .text-muted {
@@ -12,7 +16,14 @@
     }
     
     .expenses-workspace table thead th {
-        color: #cbd5e1 !important; 
+        background-color: #151518 !important;
+        color: #cbd5e1 !important;
+        font-size: 11px;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        padding: 12px 16px;
+        border-bottom: 2px solid #2d2d34;
     }
     
     .expenses-workspace .form-control::placeholder {
@@ -45,9 +56,9 @@
 <div class="expenses-workspace">
     <!-- DYNAMIC OPERATIONAL NOTIFICATION BANNER -->
     {% if msg %}
-    <div class="alert alert-{{ alert_type }} alert-dismissible fade show border-0 mb-4 text-white custom-alert" role="alert" style="background-color: {% if alert_type == 'danger' %}#dc3545{% elif alert_type == 'warning' %}#ffc107{% else %}#198754{% endif %};">
+    <div class="alert alert-{{ alert_type if alert_type else 'success' }} alert-dismissible fade show border-0 mb-4 text-white custom-alert" role="alert" style="border-radius: 6px; font-weight: 600;">
         <div class="d-flex align-items-center">
-            <span class="fs-5 me-2 font-monospace">{% if alert_type == 'danger' %}[ERROR]{% elif alert_type == 'warning' %}[WARNING]{% else %}[INFO]{% endif %}</span>
+            <span class="fs-5 me-2 font-monospace">{% if alert_type == 'danger' %}[ERROR]{% elif alert_type == 'warning' %}[WARNING]{% else %}[SUCCESS]{% endif %}</span>
             <div>{{ msg }}</div>
         </div>
         <button type="button" class="btn-close btn-close-white" data-bs-dismiss="alert" aria-label="Close"></button>
@@ -57,31 +68,33 @@
     <!-- HEADER ACTIONS SECTION -->
     <div class="d-flex justify-content-between align-items-center mb-4">
         <div>
-            <h3 class="m-0" style="font-weight: 800; letter-spacing: -0.5px; text-transform: uppercase; color: #ffffff;">Expenses Management</h3>
-            <p class="text-muted m-0 small">Track overhead outflows, monitor operational burn rates, and review cash positions.</p>
+            <h3 class="m-0" style="font-weight: 800; letter-spacing: -0.5px; text-transform: uppercase; color: #ffffff;">Store Operating Expenses</h3>
+            <p class="text-muted m-0 small">Track overhead outflows, monitor operational burn rates, and manage cash positions.</p>
         </div>
         <button class="btn btn-primary d-flex align-items-center gap-2 px-4 py-2" data-bs-toggle="modal" data-bs-target="#addExpenseModal" style="font-weight: 600; border-radius: 8px;">
-            Log New Expense
+            + Log New Expense
         </button>
     </div>
 
     <!-- INTEL TRIPLE METRIC KPI CARDS -->
     <div class="row g-3 mb-4">
-        <div class="col-12 col-md-4">
+        <div class="col-12 col-md-3">
             <div class="p-3" style="background: #1e1e24; border-left: 4px solid #3b82f6; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.15);">
-                <div class="text-muted small mb-1" style="font-weight: 700; letter-spacing: 0.5px; text-transform: uppercase;">Outflow (This Month)</div>
-                <div class="fs-3" style="font-weight: 800; color: #ffffff;">PHP {{ "{:,.2f}".format(kpi_month_total) }}</div>
+                <div class="text-muted small mb-1" style="font-weight: 700; letter-spacing: 0.5px; text-transform: uppercase;">Period Outflow</div>
+                <div class="fs-3" style="font-weight: 800; color: #ffffff;">PHP {{ "{:,.2f}".format(kpi_filtered_total if kpi_filtered_total is defined else kpi_month_total) }}</div>
+                <small class="text-info font-monospace" style="font-size: 11px;">MTD Total: PHP {{ "{:,.2f}".format(kpi_month_total) }}</small>
             </div>
         </div>
         
-        <div class="col-12 col-md-4">
+        <div class="col-12 col-md-3">
             <div class="p-3" style="background: #1e1e24; border-left: 4px solid #ef4444; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.15);">
                 <div class="text-muted small mb-1" style="font-weight: 700; letter-spacing: 0.5px; text-transform: uppercase;">Top Burn Category</div>
-                <div class="fs-5 text-truncate" style="font-weight: 800; color: #f3f4f6; padding-top: 6px; padding-bottom: 6px;">{{ kpi_top_burn }}</div>
+                <div class="fs-6 text-truncate" style="font-weight: 800; color: #f3f4f6; padding-top: 4px; padding-bottom: 4px;">{{ kpi_top_burn }}</div>
+                <small class="text-danger font-monospace" style="font-size: 11px;">{{ kpi_top_burn_pct|default('—') }} of period budget</small>
             </div>
         </div>
         
-        <div class="col-12 col-md-4">
+        <div class="col-12 col-md-3">
             <div class="p-3" style="background: #1e1e24; border-left: 4px solid #10b981; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.15);">
                 <div class="text-muted small mb-1" style="font-weight: 700; letter-spacing: 0.5px; text-transform: uppercase;">Cash vs Digital Mix</div>
                 <div class="d-flex align-items-center justify-content-between pt-1">
@@ -91,10 +104,18 @@
                     </div>
                     <div style="width: 2px; height: 28px; background: #374151;"></div>
                     <div class="text-center">
-                        <span class="d-block small text-muted" style="font-size: 10px; font-weight: 700;">DIGITAL</span>
+                        <span class="d-block small text-muted" style="font-size: 10px; font-weight: 700;">DIGITAL / BANK</span>
                         <strong style="color: #60a5fa;">{{ kpi_digital_ratio }}%</strong>
                     </div>
                 </div>
+            </div>
+        </div>
+
+        <div class="col-12 col-md-3">
+            <div class="p-3" style="background: #1e1e24; border-left: 4px solid #f59e0b; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.15);">
+                <div class="text-muted small mb-1" style="font-weight: 700; letter-spacing: 0.5px; text-transform: uppercase;">Active Outflow Logs</div>
+                <div class="fs-3" style="font-weight: 800; color: #ffffff;">{{ expenses|length }} <small class="fs-6 text-muted font-monospace">records</small></div>
+                <small class="text-warning font-monospace" style="font-size: 11px;">Avg: PHP {{ "{:,.2f}".format(kpi_avg_outflow|default(0.0)) }}</small>
             </div>
         </div>
     </div>
@@ -108,7 +129,7 @@
             <div class="col-12 col-md-3">
                 <div class="input-group">
                     <span class="input-group-text border-0 text-muted" style="background: #27272c; font-weight: bold;">FIND</span>
-                    <input type="text" name="search" value="{{ current_search }}" class="form-control text-white border-0" placeholder="Search description..." style="background: #27272c;">
+                    <input type="text" name="search" value="{{ current_search }}" class="form-control text-white border-0" placeholder="Search description, notes..." style="background: #27272c;">
                 </div>
             </div>
             
@@ -141,109 +162,297 @@
 
     <!-- LIVE FINANCIAL DATA LEDGER GRID -->
     <div class="content-card p-0 overflow-hidden" style="background: #1e1e24; border: 1px solid #2d2d34; border-radius: 8px;">
-        <table class="table table-hover text-white m-0" style="background: transparent;">
-            <thead style="background: #151518;">
-                <tr style="border-bottom: 2px solid #2d2d34;">
-                    <th class="ps-4 py-3 text-muted" style="font-weight: 700; font-size: 12px; uppercase; letter-spacing: 0.5px;">ACCOUNTING DATE</th>
-                    <th class="py-3 text-muted" style="font-weight: 700; font-size: 12px; uppercase; letter-spacing: 0.5px;">ITEM DESCRIPTION</th>
-                    <th class="py-3 text-muted" style="font-weight: 700; font-size: 12px; uppercase; letter-spacing: 0.5px;">CATEGORY</th>
-                    <th class="py-3 text-muted" style="font-weight: 700; font-size: 12px; uppercase; letter-spacing: 0.5px;">PAYMENT METHOD</th>
-                    <th class="pe-4 py-3 text-end text-muted" style="font-weight: 700; font-size: 12px; uppercase; letter-spacing: 0.5px;">TOTAL AMOUNT</th>
-                </tr>
-            </thead>
-            <tbody>
-                {% if expenses %}
-                    {% for e in expenses %}
-                    <tr style="border-bottom: 1px solid #2d2d34; transition: background 0.2s ease;">
-                        <td class="align-middle ps-4 font-monospace text-info" style="font-weight: 600;">{{ e.Expense_Date }}</td>
-                        <td class="align-middle" style="font-weight: 500;">{{ e.Description }}</td>
-                        <td class="align-middle">
-                            <span class="badge px-2.5 py-1.5 rounded-pill" style="background: #2d2d34; color: #e5e7eb; font-size: 11px;">{{ e.Category }}</span>
-                        </td>
-                        <td class="align-middle text-muted">
-                            <span class="d-flex align-items-center gap-1.5 font-monospace" style="font-size: 12px;">
-                                {{ e.Payment_Method }}
-                            </span>
-                        </td>
-                        <td class="align-middle pe-4 text-end text-danger font-monospace" style="font-weight: 700; font-size: 15px;">PHP {{ "%.2f"|format(e.Amount) }}</td>
+        <div class="table-responsive">
+            <table class="table table-hover text-white m-0" style="background: transparent;">
+                <thead style="background: #151518;">
+                    <tr style="border-bottom: 2px solid #2d2d34;">
+                        <th class="ps-4 py-3 text-muted" style="font-weight: 700; font-size: 12px; letter-spacing: 0.5px; width: 14%;">ACCOUNTING DATE</th>
+                        <th class="py-3 text-muted" style="font-weight: 700; font-size: 12px; letter-spacing: 0.5px; width: 28%;">ITEM DESCRIPTION & VENDOR</th>
+                        <th class="py-3 text-muted" style="font-weight: 700; font-size: 12px; letter-spacing: 0.5px; width: 16%;">CATEGORY</th>
+                        <th class="py-3 text-muted" style="font-weight: 700; font-size: 12px; letter-spacing: 0.5px; width: 14%;">PAYMENT CHANNEL</th>
+                        <th class="pe-4 py-3 text-end text-muted" style="font-weight: 700; font-size: 12px; letter-spacing: 0.5px; width: 14%;">TOTAL AMOUNT</th>
+                        <th class="pe-4 py-3 text-end text-muted" style="font-weight: 700; font-size: 12px; letter-spacing: 0.5px; width: 14%;">ACTIONS</th>
                     </tr>
-                    {% endfor %}
-                {% else %}
-                    <tr>
-                        <td colspan="5" class="text-center py-5 text-muted">
-                            <div style="font-weight: 600; color: #ffffff;">No matching ledger expenses found</div>
-                            <div class="small mt-1 text-muted">Try adjusting your category configurations or time window scopes.</div>
-                        </td>
-                    </tr>
-                {% endif %}
-            </tbody>
-        </table>
+                </thead>
+                <tbody>
+                    {% if expenses %}
+                        {% for e in expenses %}
+                        <tr style="border-bottom: 1px solid #2d2d34; transition: background 0.2s ease; {% if e.is_voided %}opacity: 0.45;{% endif %}">
+                            <td class="align-middle ps-4 font-monospace {% if e.is_voided %}text-secondary{% else %}text-info{% endif %}" style="font-weight: 600;">
+                                {{ e.Expense_Date }}
+                            </td>
+                            <td class="align-middle" style="font-weight: 500;">
+                                <div class="{% if e.is_voided %}text-decoration-line-through text-secondary{% else %}text-white fw-bold{% endif %}">
+                                    {{ e.Description }}
+                                    {% if e.is_voided %}
+                                        <span class="badge bg-danger font-monospace ms-2" style="font-size: 10px;">VOIDED</span>
+                                    {% endif %}
+                                </div>
+                                {% if e.Notes %}
+                                    <small class="text-muted font-italic d-block" style="font-size: 11px;">Memo: {{ e.Notes }}</small>
+                                {% endif %}
+                            </td>
+                            <td class="align-middle">
+                                <span class="badge px-2.5 py-1.5 rounded-pill font-monospace" style="background: #2d2d34; color: #e5e7eb; font-size: 11px;">{{ e.Category }}</span>
+                            </td>
+                            <td class="align-middle text-muted">
+                                <span class="d-flex align-items-center gap-1.5 font-monospace" style="font-size: 12px;">
+                                    {{ e.Payment_Method }}
+                                </span>
+                            </td>
+                            <td class="align-middle pe-4 text-end font-monospace" style="font-weight: 700; font-size: 14.5px;">
+                                {% if e.is_voided %}
+                                    <span class="text-secondary text-decoration-line-through">PHP 0.00</span>
+                                {% else %}
+                                    <span class="text-danger">PHP {{ "%.2f"|format(e.Amount) }}</span>
+                                {% endif %}
+                            </td>
+                            <td class="align-middle pe-4 text-end text-nowrap">
+                                {% if e.is_voided %}
+                                    <span class="badge bg-dark border border-secondary text-muted font-monospace" style="font-size: 11px;">Neutralized</span>
+                                {% else %}
+                                    <button type="button" class="btn btn-sm btn-warning text-dark fw-bold px-2 py-1 me-1" style="font-size: 11px;" 
+                                            data-rowid="{{ e.rowid }}"
+                                            data-id="{{ e.Expense_ID }}"
+                                            data-date="{{ e.Expense_Date }}"
+                                            data-desc="{{ e.Description }}"
+                                            data-amount="{{ e.Amount }}"
+                                            data-category="{{ e.Category }}"
+                                            data-method="{{ e.Payment_Method }}"
+                                            data-notes="{{ e.Notes }}"
+                                            onclick="openEditExpenseModal(this)">
+                                        Edit
+                                    </button>
+                                    <button type="button" class="btn btn-sm btn-outline-danger fw-bold px-2 py-1" style="font-size: 11px;"
+                                            data-rowid="{{ e.rowid }}"
+                                            data-desc="{{ e.Description }}"
+                                            data-amount="{{ e.Amount }}"
+                                            onclick="openVoidExpenseModal(this)">
+                                        Void
+                                    </button>
+                                {% endif %}
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    {% else %}
+                        <tr>
+                            <td colspan="6" class="text-center py-5 text-muted">
+                                <div style="font-weight: 600; color: #ffffff;">No matching ledger expenses found</div>
+                                <div class="small mt-1 text-muted">Try adjusting your category configurations or time window scopes.</div>
+                            </td>
+                        </tr>
+                    {% endif %}
+                </tbody>
+            </table>
+        </div>
     </div>
 
-    <!-- GUARDRAILED EXPENSE ENTRY CREATION MODAL CONTAINER -->
+    <!-- LOG NEW EXPENSE CREATION MODAL CONTAINER -->
     <div class="modal fade" id="addExpenseModal" tabindex="-1" aria-hidden="true">
         <div class="modal-dialog modal-dialog-centered">
-            <div class="modal-content text-white border-0 shadow-lg" style="background: #1e1e24; border-radius: 12px;">
+            <div class="modal-content text-white border-secondary shadow-lg" style="background: #1e1e24; border-radius: 12px;">
                 <form method="post">
                     <input type="hidden" name="action_type" value="add_expense">
                     
-                    <div class="modal-header" style="border-bottom: 1px solid #2d2d34; background: #151518; border-top-left-radius: 12px; border-top-right-radius: 12px;">
-                        <h5 class="modal-title" style="font-weight: 700; letter-spacing: -0.3px;">Log Corporate Expense Payout</h5>
+                    <div class="modal-header border-secondary" style="background: #151518; border-top-left-radius: 12px; border-top-right-radius: 12px;">
+                        <h5 class="modal-title fw-bold" style="letter-spacing: -0.3px;">Log Store Operating Expense</h5>
                         <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
                     </div>
                     
                     <div class="modal-body p-4">
                         <div class="mb-3">
-                            <label class="form-label text-muted small" style="font-weight: 600;">TRANSACTION RECORD ACCOUNTING DATE:</label>
-                            <input type="date" name="expense_date" class="form-control text-white border-0" value="{{ current_date }}" style="background: #27272c; height: 44px; border-radius: 6px;" required>
+                            <label class="form-label text-muted small fw-bold">ACCOUNTING DATE:</label>
+                            <input type="date" name="expense_date" class="form-control text-white bg-dark border-secondary" value="{{ current_date }}" style="height: 44px; border-radius: 6px; color-scheme: dark;" required>
                         </div>
                         
                         <div class="mb-3">
-                            <label class="form-label text-muted small" style="font-weight: 600;">TRANSACTION DESCRIPTION / MERCHANT VENDOR:</label>
-                            <input type="text" name="description" class="form-control text-white border-0" placeholder="e.g., Meralco Power Bill - June Batch Production" style="background: #27272c; height: 44px; border-radius: 6px;" required>
+                            <label class="form-label text-muted small fw-bold">TRANSACTION DESCRIPTION / VENDOR MERCHANT:</label>
+                            <input type="text" name="description" class="form-control text-white bg-dark border-secondary" placeholder="e.g., Meralco Power Bill, Emergency Ice, Store Cleaning" style="height: 44px; border-radius: 6px;" required autocomplete="off">
                         </div>
                         
                         <div class="mb-3">
-                            <label class="form-label text-muted small" style="font-weight: 600;">OUTFLOW COST VALUE AMOUNT (PHP):</label>
+                            <label class="form-label text-muted small fw-bold">OUTFLOW VALUE AMOUNT (PHP):</label>
                             <div class="input-group">
-                                <span class="input-group-text border-0 text-white font-monospace" style="background: #373742; font-weight:700;">PHP</span>
-                                <input type="number" step="0.01" min="0.01" name="amount" class="form-control text-white border-0 font-monospace" placeholder="0.00" style="background: #27272c; height: 44px; font-weight:700; font-size:16px;" required>
+                                <span class="input-group-text border-secondary text-white font-monospace" style="background: #2d2d35; font-weight:700;">PHP</span>
+                                <input type="number" step="0.01" min="0.01" name="amount" class="form-control text-white bg-dark border-secondary font-monospace fw-bold fs-6" placeholder="0.00" style="height: 44px;" required>
                             </div>
                         </div>
                         
-                        <div class="row g-3">
+                        <div class="row g-3 mb-3">
                             <div class="col-6">
-                                <label class="form-label text-muted small" style="font-weight: 600;">CATEGORY:</label>
-                                <select name="category" class="form-select text-white border-0" style="background: #27272c; height: 44px; border-radius: 6px;" required>
-                                    <option value="Raw Ingredients">Raw Ingredients</option>
-                                    <option value="Utilities">Utilities</option>
-                                    <option value="Rent & Lease">Rent & Lease</option>
-                                    <option value="Staff Salaries">Staff Salaries</option>
-                                    <option value="Packaging">Packaging</option>
-                                    <option value="Equipment Maintenance">Equipment Maintenance</option>
-                                    <option value="Misc" selected>Misc Overhead</option>
+                                <label class="form-label text-muted small fw-bold">CATEGORY:</label>
+                                <select name="category" class="form-select text-white bg-dark border-secondary" style="height: 44px; border-radius: 6px;" required>
+                                    {% for cat in categories %}
+                                    <option value="{{ cat }}" {% if cat == 'Misc Overhead' or cat == 'Misc' %}selected{% endif %}>{{ cat }}</option>
+                                    {% endfor %}
                                 </select>
                             </div>
                             
                             <div class="col-6">
-                                <label class="form-label text-muted small" style="font-weight: 600;">PAYMENT METHOD:</label>
-                                <select name="payment_method" class="form-select text-white border-0" style="background: #27272c; height: 44px; border-radius: 6px;" required>
-                                    <option value="Petty Cash" selected>Petty Cash</option>
+                                <label class="form-label text-muted small fw-bold">PAYMENT METHOD:</label>
+                                <select name="payment_method" class="form-select text-white bg-dark border-secondary" style="height: 44px; border-radius: 6px;" required>
+                                    <option value="Petty Cash" selected>Petty Cash Drawer</option>
                                     <option value="GCash">GCash Wallet</option>
+                                    <option value="Maya">Maya Wallet</option>
                                     <option value="Bank Transfer">Bank Transfer</option>
-                                    <option value="Credit Card">Credit Card</option>
+                                    <option value="Credit Card">Corporate Credit Card</option>
                                 </select>
                             </div>
                         </div>
+
+                        <div>
+                            <label class="form-label text-muted small fw-bold">OPTIONAL MEMO / RECEIPT REF #:</label>
+                            <input type="text" name="notes" class="form-control text-white bg-dark border-secondary" placeholder="e.g., Official Receipt #9981, Check #102" style="height: 40px; border-radius: 6px;" autocomplete="off">
+                        </div>
                     </div>
                     
-                    <div class="modal-footer p-3" style="border-top: 1px solid #2d2d34; background: #151518; border-bottom-left-radius: 12px; border-bottom-right-radius: 12px;">
-                        <button type="submit" class="btn btn-success w-100 py-2.5" style="font-weight: 700; font-size: 14px; border-radius: 6px;">Commit Outflow Entry to Ledger</button>
+                    <div class="modal-footer p-3 border-secondary" style="background: #151518; border-bottom-left-radius: 12px; border-bottom-right-radius: 12px;">
+                        <button type="submit" class="btn btn-success fw-bold w-100 py-2.5" style="border-radius: 6px;">Commit Outflow Entry to Ledger</button>
                     </div>
                 </form>
             </div>
         </div>
     </div>
+
+    <!-- EDIT EXPENSE MODAL CONTAINER (SHARED DYNAMIC MODAL) -->
+    <div class="modal fade" id="editExpenseModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content text-white border-secondary shadow-lg" style="background: #1e1e24; border-radius: 12px;">
+                <form method="post">
+                    <input type="hidden" name="action_type" value="edit_expense">
+                    <input type="hidden" name="expense_rowid" id="editExpenseRowId" value="">
+                    <input type="hidden" name="expense_id" id="editExpenseId" value="">
+                    
+                    <div class="modal-header border-secondary" style="background: #151518;">
+                        <h5 class="modal-title fw-bold text-warning" style="letter-spacing: -0.3px;">Edit Expense Record</h5>
+                        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                    </div>
+                    
+                    <div class="modal-body p-4">
+                        <div class="mb-3">
+                            <label class="form-label text-muted small fw-bold">ACCOUNTING DATE:</label>
+                            <input type="date" name="expense_date" id="editExpenseDate" class="form-control text-white bg-dark border-secondary" style="height: 44px; border-radius: 6px; color-scheme: dark;" required>
+                        </div>
+                        
+                        <div class="mb-3">
+                            <label class="form-label text-muted small fw-bold">TRANSACTION DESCRIPTION / VENDOR:</label>
+                            <input type="text" name="description" id="editExpenseDesc" class="form-control text-white bg-dark border-secondary" style="height: 44px; border-radius: 6px;" required autocomplete="off">
+                        </div>
+                        
+                        <div class="mb-3">
+                            <label class="form-label text-muted small fw-bold">AMOUNT (PHP):</label>
+                            <div class="input-group">
+                                <span class="input-group-text border-secondary text-white font-monospace" style="background: #2d2d35; font-weight:700;">PHP</span>
+                                <input type="number" step="0.01" min="0.01" name="amount" id="editExpenseAmount" class="form-control text-white bg-dark border-secondary font-monospace fw-bold fs-6" style="height: 44px;" required>
+                            </div>
+                        </div>
+                        
+                        <div class="row g-3 mb-3">
+                            <div class="col-6">
+                                <label class="form-label text-muted small fw-bold">CATEGORY:</label>
+                                <select name="category" id="editExpenseCategory" class="form-select text-white bg-dark border-secondary" style="height: 44px; border-radius: 6px;" required>
+                                    {% for cat in categories %}
+                                    <option value="{{ cat }}">{{ cat }}</option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                            
+                            <div class="col-6">
+                                <label class="form-label text-muted small fw-bold">PAYMENT METHOD:</label>
+                                <select name="payment_method" id="editExpensePaymentMethod" class="form-select text-white bg-dark border-secondary" style="height: 44px; border-radius: 6px;" required>
+                                    <option value="Petty Cash">Petty Cash Drawer</option>
+                                    <option value="GCash">GCash Wallet</option>
+                                    <option value="Maya">Maya Wallet</option>
+                                    <option value="Bank Transfer">Bank Transfer</option>
+                                    <option value="Credit Card">Corporate Credit Card</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <div>
+                            <label class="form-label text-muted small fw-bold">OPTIONAL MEMO / RECEIPT REF #:</label>
+                            <input type="text" name="notes" id="editExpenseNotes" class="form-control text-white bg-dark border-secondary" style="height: 40px; border-radius: 6px;" autocomplete="off">
+                        </div>
+                    </div>
+                    
+                    <div class="modal-footer p-3 border-secondary" style="background: #151518;">
+                        <button type="button" class="btn btn-secondary fw-bold" data-bs-dismiss="modal">Cancel</button>
+                        <button type="submit" class="btn btn-warning text-dark fw-bold px-4">Update Expense Changes</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- VOID EXPENSE MODAL CONTAINER -->
+    <div class="modal fade" id="voidExpenseModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content text-white border-danger shadow-lg" style="background: #1e1e24; border-radius: 12px;">
+                <form method="post">
+                    <input type="hidden" name="action_type" value="void_expense">
+                    <input type="hidden" name="expense_rowid" id="voidExpenseRowId" value="">
+                    
+                    <div class="modal-header border-danger" style="background: linear-gradient(180deg, #dc3545 0%, #bd2130 100%);">
+                        <h5 class="modal-title fw-bold text-white">Confirm Expense Void</h5>
+                        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                    </div>
+                    
+                    <div class="modal-body p-4" style="background: #1a1a1a;">
+                        <p class="mb-2 text-light" style="font-size: 14.5px;">
+                            You are about to neutralize this expense entry from active ledger calculations:
+                        </p>
+                        <div class="p-3 mb-3 rounded border border-secondary font-monospace" style="background: #151518;">
+                            <div class="fw-bold text-white fs-6" id="voidExpenseDisplayDesc"></div>
+                            <div class="text-danger fw-bold fs-5 mt-1" id="voidExpenseDisplayAmount"></div>
+                        </div>
+                        <p class="small text-muted mb-3">
+                            The amount will be neutralized to PHP 0.00 to keep the general ledger and financial reports reconciled.
+                        </p>
+                        
+                        <label class="form-label text-danger fw-bold small mb-1">MANDATORY VOID EXPLANATION NOTE:</label>
+                        <input type="text" name="void_reason" class="form-control text-white bg-dark border-danger" placeholder="e.g., Logged twice, refunded by vendor, incorrect amount..." required autocomplete="off">
+                    </div>
+                    
+                    <div class="modal-footer border-secondary justify-content-between" style="background: #1a1a1a;">
+                        <button type="button" class="btn btn-secondary fw-bold" data-bs-dismiss="modal">Cancel</button>
+                        <button type="submit" class="btn btn-danger fw-bold px-4 shadow-sm">Confirm & Neutralize Outflow</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
 </div>
+
+<script>
+function openEditExpenseModal(btn) {
+    document.getElementById('editExpenseRowId').value = btn.getAttribute('data-rowid') || '';
+    document.getElementById('editExpenseId').value = btn.getAttribute('data-id') || '';
+    document.getElementById('editExpenseDate').value = btn.getAttribute('data-date') || '';
+    document.getElementById('editExpenseDesc').value = btn.getAttribute('data-desc') || '';
+    document.getElementById('editExpenseAmount').value = parseFloat(btn.getAttribute('data-amount') || 0).toFixed(2);
+    
+    const catSelect = document.getElementById('editExpenseCategory');
+    const catVal = btn.getAttribute('data-category') || '';
+    if (catSelect) catSelect.value = catVal;
+
+    const pmSelect = document.getElementById('editExpensePaymentMethod');
+    const pmVal = btn.getAttribute('data-method') || 'Petty Cash';
+    if (pmSelect) pmSelect.value = pmVal;
+
+    document.getElementById('editExpenseNotes').value = btn.getAttribute('data-notes') || '';
+    
+    new bootstrap.Modal(document.getElementById('editExpenseModal')).show();
+}
+
+function openVoidExpenseModal(btn) {
+    document.getElementById('voidExpenseRowId').value = btn.getAttribute('data-rowid') || '';
+    document.getElementById('voidExpenseDisplayDesc').innerText = btn.getAttribute('data-desc') || '';
+    const amt = parseFloat(btn.getAttribute('data-amount') || 0).toFixed(2);
+    document.getElementById('voidExpenseDisplayAmount').innerText = 'PHP ' + amt;
+    
+    new bootstrap.Modal(document.getElementById('voidExpenseModal')).show();
+}
+</script>
 
 {% endblock %}

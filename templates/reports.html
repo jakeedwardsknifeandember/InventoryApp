@@ -89,29 +89,34 @@
         </form>
     </div>
 
+    <!-- TOP KPI 4-CARD HUD (REFLECTS NET SALES & GROSS SUBTEXT) -->
     <div class="row g-3 mb-4">
         <div class="col-6 col-md-3">
             <div class="p-3" style="background: #1e1e24; border-bottom: 4px solid #10b981; border-radius: 8px;">
-                <div class="text-muted small mb-1" style="font-weight: 700; text-transform: uppercase; font-size:11px;">Gross Sales Revenue</div>
+                <div class="text-muted small mb-1" style="font-weight: 700; text-transform: uppercase; font-size:11px;">Net Sales Revenue</div>
                 <h3 class="m-0 font-monospace" style="font-weight: 800; color: #10b981;">PHP {{ "{:,.2f}".format(total_revenue) }}</h3>
+                <small class="text-muted font-monospace" style="font-size: 11px;">Gross: PHP {{ "{:,.2f}".format(gross_sales|default(total_revenue)) }}</small>
             </div>
         </div>
         <div class="col-6 col-md-3">
             <div class="p-3" style="background: #1e1e24; border-bottom: 4px solid #ef4444; border-radius: 8px;">
                 <div class="text-muted small mb-1" style="font-weight: 700; text-transform: uppercase; font-size:11px;">Total Cash Expenses</div>
                 <h3 class="m-0 font-monospace" style="font-weight: 800; color: #ef4444;">PHP {{ "{:,.2f}".format(total_expenses) }}</h3>
+                <small class="text-muted font-monospace" style="font-size: 11px;">Overhead Outflows</small>
             </div>
         </div>
         <div class="col-6 col-md-3">
             <div class="p-3" style="background: #1e1e24; border-bottom: 4px solid #f59e0b; border-radius: 8px;">
                 <div class="text-muted small mb-1" style="font-weight: 700; text-transform: uppercase; font-size:11px;">Kitchen Waste Loss</div>
                 <h3 class="m-0 font-monospace" style="font-weight: 800; color: #f59e0b;">PHP {{ "{:,.2f}".format(waste_cost) }}</h3>
+                <small class="text-muted font-monospace" style="font-size: 11px;">Shrinkage & Spoilage</small>
             </div>
         </div>
         <div class="col-6 col-md-3">
             <div class="p-3" style="background: #1e1e24; border-bottom: 4px solid #3b82f6; border-radius: 8px;">
                 <div class="text-muted small mb-1" style="font-weight: 700; text-transform: uppercase; font-size:11px;">Break-Even Target</div>
                 <h3 class="m-0 font-monospace" style="font-weight: 800; color: #3b82f6;">PHP {{ "{:,.2f}".format(break_even_target) }}</h3>
+                <small class="text-muted font-monospace" style="font-size: 11px;">Required Volume</small>
             </div>
         </div>
     </div>
@@ -151,7 +156,21 @@
                         <table class="w-100 financial-table">
                             <tr>
                                 <td class="financial-title">Gross Sales Revenue</td>
-                                <td class="text-end font-monospace text-success" style="font-weight: 700;">PHP {{ "{:,.2f}".format(total_revenue) }}</td>
+                                <td class="text-end font-monospace text-white" style="font-weight: 700;">PHP {{ "{:,.2f}".format(gross_sales|default(total_revenue)) }}</td>
+                            </tr>
+                            <tr>
+                                <td class="financial-title text-warning">(-) Sales Discounts & Allowances</td>
+                                <td class="text-end font-monospace text-warning" style="font-weight: 700;">
+                                    {% if total_discounts is defined and total_discounts > 0 %}
+                                        - PHP {{ "{:,.2f}".format(total_discounts) }}
+                                    {% else %}
+                                        - PHP 0.00
+                                    {% endif %}
+                                </td>
+                            </tr>
+                            <tr style="background: #17255422; border-top: 1px solid #3b82f644; border-bottom: 1px solid #3b82f644;">
+                                <td style="font-weight: 700; color: #60a5fa; padding-left: 20px;">Net Sales Revenue</td>
+                                <td class="text-end font-monospace text-info" style="font-weight: 800; font-size: 15px;">PHP {{ "{:,.2f}".format(total_revenue) }}</td>
                             </tr>
                             <tr>
                                 <td class="financial-title text-muted">(-) Cost of Sales (COGS)</td>
@@ -232,9 +251,9 @@
                                 <tr>
                                     <th class="ps-4 py-3">DATE</th>
                                     <th class="py-3">TIME</th>
-                                    <th class="py-3">PRODUCT DETAILS</th>
-                                    <th class="py-3">QUANTITY SOLD</th>
-                                    <th class="pe-4 py-3 text-end">TOTAL REVENUE GENERATED</th>
+                                    <th class="py-3">PRODUCT / DISCOUNT DETAILS</th>
+                                    <th class="py-3">QUANTITY</th>
+                                    <th class="pe-4 py-3 text-end">TOTAL AMOUNT</th>
                                 </tr>
                             </thead>
                             <tbody>
@@ -242,9 +261,19 @@
                                 <tr>
                                     <td class="align-middle ps-4 font-monospace text-info">{{ s.Sale_Date }}</td>
                                     <td class="align-middle text-muted small font-monospace">{{ s.Sale_Time }}</td>
-                                    <td class="align-middle" style="font-weight:600;">{{ s.Product_Name }}</td>
-                                    <td class="align-middle font-monospace">{{ s.Quantity }} pcs</td>
-                                    <td class="align-middle pe-4 text-end text-success font-monospace" style="font-weight:700;">PHP {{ "{:,.2f}".format(s.Total_Amount) }}</td>
+                                    <td class="align-middle" style="font-weight:600;">
+                                        <span class="{% if s.Total_Amount < 0 %}text-warning{% else %}text-white{% endif %}">
+                                            {{ s.Product_Name }}
+                                        </span>
+                                    </td>
+                                    <td class="align-middle font-monospace">{{ s.Quantity }}</td>
+                                    <td class="align-middle pe-4 text-end font-monospace" style="font-weight:700;">
+                                        {% if s.Total_Amount < 0 %}
+                                            <span class="text-danger">-PHP {{ "{:,.2f}".format(s.Total_Amount|abs) }}</span>
+                                        {% else %}
+                                            <span class="text-success">PHP {{ "{:,.2f}".format(s.Total_Amount) }}</span>
+                                        {% endif %}
+                                    </td>
                                 </tr>
                                 {% else %}
                                 <tr><td colspan="5" class="text-center py-4 text-muted">No sales metrics captured inside this chronological scope period window.</td></tr>
@@ -256,12 +285,12 @@
             </div>
         </div>
 
-        <!-- NEW PANEL: ACTUAL ROI & CAPEX TRACKER -->
+        <!-- PANEL: ACTUAL ROI & CAPEX TRACKER -->
         <div class="tab-pane fade text-white" id="roi-panel" role="tabpanel">
             <div class="d-flex justify-content-between align-items-center mb-3">
                 <div>
                     <h5 class="m-0 text-white" style="font-weight: 700; color: #a6e3a1;">Real-Time Capital Recovery Tracker</h5>
-                    <p class="text-muted small m-0">Unlike the Feasibility Sandbox, this module tracks your exact historical equipment investments against your store's true All-Time Net Operating Income to calculate actual ROI status.</p>
+                    <p class="text-muted small m-0">Tracks your historical equipment investments against your store's true All-Time Net Operating Income to calculate actual ROI status.</p>
                 </div>
                 <button class="btn btn-sm btn-success px-3 py-2" data-bs-toggle="modal" data-bs-target="#addCapexModal" style="font-weight:600; border-radius:6px;">Log Capital Investment</button>
             </div>
@@ -410,14 +439,11 @@
         <!-- PANEL 3: CONCEPT FEASIBILITY SANDBOX -->
         <div class="tab-pane fade text-white" id="sandbox-panel" role="tabpanel">
             <div class="row g-4">
-                
-                <!-- INPUT PARAMETERS COLUMN -->
                 <div class="col-12 col-lg-6">
                     <div class="p-4 rounded h-100" style="background: #1e1e24; border: 1px solid #2d2d34;">
                         <h5 class="mb-1" style="font-weight: 700; color: #60a5fa;">Pre-Opening Model Inputs</h5>
                         <p class="text-muted small mb-4">Input prospective capital expenditures, operating overhead, and sales unit economics.</p>
 
-                        <!-- SECTION 1: CAPEX -->
                         <div class="p-3 mb-3 rounded" style="background: #151518; border: 1px solid #2d2d34;">
                             <h6 style="color: #facc15; font-size: 13px; font-weight: 700;" class="mb-2">1. Capital Expenditure (CapEx / Initial Setup)</h6>
                             <div class="row g-2 sandbox-input">
@@ -432,7 +458,6 @@
                             </div>
                         </div>
 
-                        <!-- SECTION 2: OPEX -->
                         <div class="p-3 mb-3 rounded" style="background: #151518; border: 1px solid #2d2d34;">
                             <h6 style="color: #ef4444; font-size: 13px; font-weight: 700;" class="mb-2">2. Monthly Fixed Operating Expenses (OpEx)</h6>
                             <div class="row g-2 sandbox-input">
@@ -455,7 +480,6 @@
                             </div>
                         </div>
 
-                        <!-- SECTION 3: UNIT ECONOMICS -->
                         <div class="p-3 rounded" style="background: #151518; border: 1px solid #2d2d34;">
                             <h6 style="color: #10b981; font-size: 13px; font-weight: 700;" class="mb-2">3. Unit Economics & Traffic Projections</h6>
                             <div class="row g-2 sandbox-input">
@@ -476,13 +500,11 @@
                     </div>
                 </div>
 
-                <!-- FEASIBILITY RESULTS COLUMN -->
                 <div class="col-12 col-lg-6">
                     <div class="p-4 rounded h-100 d-flex flex-column" style="background: #1e1e24; border: 1px solid #2d2d34;">
                         <h5 class="mb-1" style="font-weight: 700; color: #a6e3a1;">Dynamic Pro-Forma Outputs</h5>
                         <p class="text-muted small mb-3">Live financial feasibility metrics computed directly from input models.</p>
 
-                        <!-- STATUS BADGE -->
                         <div id="sbStatusBox" class="p-3 rounded mb-3 text-center" style="background: #151518; border: 2px solid #10b981;">
                             <span id="sbBadgeText" class="badge bg-success px-3 py-1 mb-1" style="font-size: 13px;">HIGHLY VIABLE CONCEPT</span>
                             <div id="sbStatusSub" style="font-size: 12px; color: #cbd5e1;">Projected payback period is healthy and within investor standards.</div>
@@ -789,19 +811,15 @@
 
 <script>
     document.addEventListener("DOMContentLoaded", function () {
-        
-        // 1. TAB MEMORY SYSTEM INTEGRATION (DOM-Forced Override)
         const activeTabId = localStorage.getItem('reportsActiveTab');
         if (activeTabId) {
             const tabTrigger = document.querySelector(activeTabId);
             if (tabTrigger) {
-                // Strip all active classes first to prevent layout collisions
                 document.querySelectorAll('.nav-link').forEach(t => t.classList.remove('active'));
                 document.querySelectorAll('.tab-pane').forEach(p => {
                     p.classList.remove('show', 'active');
                 });
                 
-                // Force active state to the specific tab
                 tabTrigger.classList.add('active');
                 const targetPane = document.querySelector(tabTrigger.getAttribute('data-bs-target'));
                 if (targetPane) {
@@ -815,13 +833,11 @@
             tab.addEventListener('shown.bs.tab', function (e) {
                 localStorage.setItem('reportsActiveTab', `#${e.target.id}`);
             });
-            // Click fallback for edge-case caching
             tab.addEventListener('click', function (e) {
                 localStorage.setItem('reportsActiveTab', `#${e.target.id}`);
             });
         });
 
-        // 2. CHART GENERATION
         const rawPointsData = {{ menu_data_json|safe }};
         const dataSets = [
             { label: 'Stars', data: rawPointsData.filter(p => p.quadrant === 'Stars'), backgroundColor: '#10b981', radius: 9, hoverRadius: 12 },
