@@ -13,6 +13,7 @@
         font-size: 11px;
         font-weight: 700;
         text-transform: uppercase;
+        letter-spacing: 0.5px;
         padding: 12px 16px;
         border-bottom: 2px solid #2d2d34;
     }
@@ -25,14 +26,16 @@
     }
     .loyverse-table tbody td {
         padding: 14px 16px;
-        font-size: 14px;
+        font-size: 13.5px;
         color: #e2e8f0 !important;
         border-bottom: 1px solid #27272c;
+        vertical-align: middle;
     }
     .modal-content label {
         color: #ffffff !important;
         font-weight: 700 !important;
         font-size: 12px !important;
+        letter-spacing: 0.3px;
         margin-bottom: 6px;
     }
     .modal-content .form-control,
@@ -41,52 +44,174 @@
         background-color: #27272c !important;
         border: 1px solid #4a4a58 !important;
     }
+    .modal-content .form-select option {
+        background-color: #27272c !important;
+        color: #ffffff !important;
+    }
+    
+    .badge-statutory {
+        background: #1e3a8a33;
+        color: #60a5fa;
+        border: 1px solid #3b82f644;
+    }
+    .badge-promo {
+        background: #064e3b33;
+        color: #34d399;
+        border: 1px solid #10b98144;
+    }
+    .badge-staff {
+        background: #581c8733;
+        color: #c084fc;
+        border: 1px solid #a855f744;
+    }
+    .badge-comp {
+        background: #88133733;
+        color: #fb7185;
+        border: 1px solid #f43f5e44;
+    }
 </style>
 
 <div class="d-flex justify-content-between align-items-center mb-3">
     <div>
-        <h3 class="m-0 text-white" style="font-weight: 800; text-transform: uppercase;">Discounts Management</h3>
-        <small style="color: #cbd5e1;">Define promo campaigns, staff discounts, and senior citizen rates.</small>
+        <h3 class="m-0 text-white" style="font-weight: 800; text-transform: uppercase;">Discounts & Statutory Policy Hub</h3>
+        <small style="color: #cbd5e1;">Configure statutory compliance (RA 9994 / RA 10754), marketing campaigns, staff privileges, and fraud controls.</small>
     </div>
-    <button class="btn btn-primary fw-bold px-4 py-2" data-bs-toggle="modal" data-bs-target="#addDiscountModal">+ Add Discount</button>
+    <button class="btn btn-primary fw-bold px-4 py-2" data-bs-toggle="modal" data-bs-target="#addDiscountModal">+ Add Discount Policy</button>
+</div>
+
+{% with messages = get_flashed_messages(with_categories=true) %}
+  {% if messages %}
+    {% for category, message in messages %}
+      <div class="alert alert-{{ category if category != 'error' else 'danger' }} border-0 text-white fw-bold mb-3 shadow-sm" style="border-radius: 6px; font-size: 14px;">
+        {{ message }}
+      </div>
+    {% endfor %}
+  {% endif %}
+{% endwith %}
+
+{% if msg %}
+<div class="alert alert-{{ alert_type if alert_type else 'success' }} border-0 text-white fw-bold mb-3 shadow-sm" style="border-radius: 6px; font-size: 14px;">
+    {{ msg }}
+</div>
+{% endif %}
+
+<!-- LIVE SEARCH & CATEGORY FILTER BAR -->
+<div class="content-card mb-3 p-3" style="background-color: #2b2b2b; border: 1px solid #3f3f46; border-radius: 8px;">
+    <div class="row g-2 align-items-center">
+        <div class="col-md-6">
+            <input type="text" id="discountSearchInput" class="form-control bg-dark text-white border-secondary" placeholder="Search discount policy name or ID in real time..." autocomplete="off" onkeyup="filterDiscountsTable()">
+        </div>
+        <div class="col-md-4">
+            <select id="discountCategoryFilter" class="form-select bg-dark text-white border-secondary" onchange="filterDiscountsTable()">
+                <option value="All">All Discount Classifications</option>
+                <option value="Statutory (SC/PWD)">Statutory (SC/PWD RA 9994/10754)</option>
+                <option value="Promotional / Marketing">Promotional / Marketing</option>
+                <option value="Staff & Internal">Staff & Internal Privileges</option>
+                <option value="Operational Comp">Operational Comps & Recovery</option>
+            </select>
+        </div>
+        <div class="col-md-2">
+            <button type="button" onclick="clearDiscountFilters()" class="btn btn-secondary fw-bold w-100">Clear Filter</button>
+        </div>
+    </div>
 </div>
 
 <div class="content-card p-0 overflow-hidden" style="background: #1e1e24; border: 1px solid #2d2d34; border-radius: 8px;">
     <div class="table-responsive">
-        <table class="loyverse-table align-middle m-0">
+        <table class="loyverse-table align-middle m-0" id="discountsMainTable">
             <thead>
                 <tr>
-                    <th style="width: 20%;">ID</th>
-                    <th style="width: 40%;">DISCOUNT NAME</th>
-                    <th style="width: 25%;">VALUE</th>
-                    <th class="text-end pe-4" style="width: 15%;">ACTIONS</th>
+                    <th style="width: 10%;">ID</th>
+                    <th style="width: 28%;">POLICY & CLASSIFICATION</th>
+                    <th style="width: 16%;">BENEFIT VALUE</th>
+                    <th style="width: 18%;">FRAUD GOVERNANCE</th>
+                    <th style="width: 12%;">STATUS</th>
+                    <th class="text-end pe-4" style="width: 16%;">ACTIONS</th>
                 </tr>
             </thead>
             <tbody>
                 {% for d in discounts %}
-                <tr>
-                    <td class="font-monospace text-info ps-3">{{ d.Discount_ID }}</td>
-                    <td class="fw-bold text-white">{{ d.Discount_Name }}</td>
-                    <td class="font-monospace text-white fw-bold">
-                        {% if d.Discount_Type == 'Percentage' %}
-                            {{ "%.1f"|format(d.Value) }}%
+                <tr class="discount-data-row {% if d.Active != 'Yes' %}opacity-50{% endif %}" 
+                    data-name="{{ d.Discount_Name|lower }}" 
+                    data-id="{{ d.Discount_ID|lower }}" 
+                    data-category="{{ d.Category }}">
+                    
+                    <td class="font-monospace text-info ps-3 fw-bold">{{ d.Discount_ID }}</td>
+                    
+                    <td>
+                        <span class="fw-bold {% if d.Active != 'Yes' %}text-secondary text-decoration-line-through{% else %}text-white{% endif %} fs-6 d-block mb-1">
+                            {{ d.Discount_Name }}
+                        </span>
+                        <span class="badge font-monospace 
+                            {% if 'Statutory' in d.Category %}badge-statutory
+                            {% elif 'Staff' in d.Category %}badge-staff
+                            {% elif 'Comp' in d.Category %}badge-comp
+                            {% else %}badge-promo{% endif %}" 
+                            style="font-size: 10.5px;">
+                            {{ d.Category }}
+                        </span>
+                    </td>
+                    
+                    <td>
+                        <span class="font-monospace fw-bold text-white fs-6">
+                            {% if d.Discount_Type == 'Percentage' %}
+                                {{ "%.1f"|format(d.Value) }}%
+                            {% else %}
+                                ₱{{ "%.2f"|format(d.Value) }}
+                            {% endif %}
+                        </span>
+                        <small class="text-muted font-monospace d-block" style="font-size: 11px;">
+                            {{ d.Discount_Type }}
+                        </small>
+                    </td>
+                    
+                    <td>
+                        {% if d.Requires_Approval == 'Yes' %}
+                            <span class="badge bg-danger border border-danger-subtle font-monospace px-2 py-1" style="font-size: 11px;">
+                                Manager PIN Required
+                            </span>
                         {% else %}
-                            PHP {{ "%.2f"|format(d.Value) }}
+                            <span class="badge bg-secondary text-light font-monospace px-2 py-1" style="font-size: 11px;">
+                                Cashier Line Access
+                            </span>
                         {% endif %}
                     </td>
-                    <td class="text-end pe-4">
-                        <form method="post" style="display: inline;" onsubmit="return confirm('Are you sure you want to delete this discount?');">
+                    
+                    <td>
+                        {% if d.Active == 'Yes' %}
+                            <span class="badge bg-success font-monospace px-2 py-1" style="font-size: 11px;">Active</span>
+                        {% else %}
+                            <span class="badge bg-secondary text-muted font-monospace px-2 py-1" style="font-size: 11px;">Archived</span>
+                        {% endif %}
+                    </td>
+                    
+                    <td class="text-end pe-4 text-nowrap">
+                        <button class="btn btn-sm btn-primary fw-bold px-2 py-1 me-1" style="font-size: 11px;" data-bs-toggle="modal" data-bs-target="#editDiscountModal{{ d.Discount_ID }}">Edit</button>
+                        
+                        <!-- 1-Click Status Toggle -->
+                        <form method="post" style="display: inline;">
+                            <input type="hidden" name="action_type" value="toggle_status">
+                            <input type="hidden" name="discount_id" value="{{ d.Discount_ID }}">
+                            <button type="submit" class="btn btn-sm {% if d.Active == 'Yes' %}btn-outline-warning{% else %}btn-outline-success{% endif %} fw-bold px-2 py-1 me-1" style="font-size: 11px;">
+                                {% if d.Active == 'Yes' %}Archive{% else %}Activate{% endif %}
+                            </button>
+                        </form>
+                        
+                        <form method="post" style="display: inline;" onsubmit="return confirm('Permanently delete discount policy \'{{ d.Discount_Name }}\'? Historical sales logs will remain intact.');">
                             <input type="hidden" name="action_type" value="delete_discount">
                             <input type="hidden" name="discount_id" value="{{ d.Discount_ID }}">
-                            <button type="submit" class="btn btn-sm btn-danger fw-bold px-2 py-0" style="font-size: 11px;">Delete</button>
+                            <button type="submit" class="btn btn-sm btn-danger fw-bold px-2 py-1" style="font-size: 11px;">Delete</button>
                         </form>
                     </td>
                 </tr>
                 {% else %}
-                <tr>
-                    <td colspan="4" class="text-center py-5 text-muted">No discounts created yet. Click + Add Discount to start.</td>
+                <tr id="noDiscountsFallbackRow">
+                    <td colspan="6" class="text-center py-5 text-muted">No discount policies registered yet. Click + Add Discount Policy to start.</td>
                 </tr>
                 {% endfor %}
+                <tr id="noSearchResultsRow" style="display: none;">
+                    <td colspan="6" class="text-center py-4 text-muted">No discount policies match your search criteria.</td>
+                </tr>
             </tbody>
         </table>
     </div>
@@ -95,32 +220,169 @@
 <!-- ADD DISCOUNT MODAL -->
 <div class="modal fade" id="addDiscountModal" tabindex="-1">
     <div class="modal-dialog modal-dialog-centered">
-        <div class="modal-content bg-dark text-white border-secondary shadow-lg" style="background-color: #1e1e24 !important;">
+        <div class="modal-content bg-dark text-white border-secondary shadow-lg" style="background-color: #1e1e24 !important; border-radius: 10px;">
             <form method="post">
                 <input type="hidden" name="action_type" value="add_discount">
                 <div class="modal-header border-secondary" style="background-color: #151518;">
-                    <h5 class="modal-title fw-bold text-white">Add New Discount</h5>
+                    <h5 class="modal-title fw-bold text-white">Create Discount Policy</h5>
                     <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
                 </div>
                 <div class="modal-body p-4">
-                    <label class="form-label">DISCOUNT NAME:</label>
-                    <input type="text" name="discount_name" class="form-control text-white border-secondary mb-3" required placeholder="e.g., Senior Citizen 20%, Staff Perk" autocomplete="off">
-                    
-                    <label class="form-label">DISCOUNT TYPE:</label>
-                    <select name="discount_type" class="form-select text-white border-secondary mb-3">
-                        <option value="Percentage">Percentage (%)</option>
-                        <option value="Fixed Amount">Fixed Amount (PHP)</option>
-                    </select>
+                    <div class="mb-3">
+                        <label class="form-label">POLICY NAME:</label>
+                        <input type="text" name="discount_name" class="form-control text-white border-secondary" required placeholder="e.g., Senior Citizen (SC 20%), Happy Hour 15%" autocomplete="off">
+                    </div>
 
-                    <label class="form-label">VALUE:</label>
-                    <input type="number" step="0.01" name="value" class="form-control text-white border-secondary font-monospace" required placeholder="20.00">
+                    <div class="row g-2 mb-3">
+                        <div class="col-md-6">
+                            <label class="form-label">CALCULATION TYPE:</label>
+                            <select name="discount_type" class="form-select text-white border-secondary">
+                                <option value="Percentage" selected>Percentage (%)</option>
+                                <option value="Fixed Amount">Fixed Amount (₱)</option>
+                            </select>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label">VALUE:</label>
+                            <input type="number" step="0.01" min="0.01" name="value" class="form-control text-white border-secondary font-monospace fw-bold" required placeholder="20.00">
+                        </div>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label">DISCOUNT CLASSIFICATION:</label>
+                        <select name="category" class="form-select text-white border-secondary">
+                            <option value="Statutory (SC/PWD)">Statutory (SC / PWD / Solo Parent RA Mandate)</option>
+                            <option value="Promotional / Marketing" selected>Promotional / Marketing Campaign</option>
+                            <option value="Staff & Internal">Staff & Internal Courtesy Privilege</option>
+                            <option value="Operational Comp">Operational Comp & Service Recovery</option>
+                        </select>
+                    </div>
+
+                    <div class="p-3 rounded border border-secondary" style="background: #15151d;">
+                        <div class="form-check form-switch m-0">
+                            <input class="form-check-input" type="checkbox" name="requires_approval" value="Yes" id="addRequiresApprovalSwitch">
+                            <label class="form-check-label text-white fw-bold ms-2" for="addRequiresApprovalSwitch">
+                                Require Supervisor / Manager Approval
+                            </label>
+                        </div>
+                        <small class="text-muted d-block mt-1" style="font-size: 11px;">
+                            Recommended for statutory benefits and operational comps to mitigate cashier skimming.
+                        </small>
+                    </div>
                 </div>
                 <div class="modal-footer border-secondary" style="background-color: #151518;">
-                    <button type="submit" class="btn btn-success fw-bold w-100 py-2">Save Discount</button>
+                    <button type="submit" class="btn btn-success text-white fw-bold w-100 py-2">Save Discount Policy</button>
                 </div>
             </form>
         </div>
     </div>
 </div>
+
+<!-- EDIT DISCOUNT MODALS -->
+{% for d in discounts %}
+<div class="modal fade" id="editDiscountModal{{ d.Discount_ID }}" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content bg-dark text-white border-secondary shadow-lg" style="background-color: #1e1e24 !important; border-radius: 10px;">
+            <form method="post">
+                <input type="hidden" name="action_type" value="edit_discount">
+                <input type="hidden" name="discount_id" value="{{ d.Discount_ID }}">
+                <div class="modal-header border-secondary" style="background-color: #151518;">
+                    <h5 class="modal-title fw-bold text-white">Edit Policy: {{ d.Discount_Name }}</h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body p-4">
+                    <div class="mb-3">
+                        <label class="form-label">POLICY NAME:</label>
+                        <input type="text" name="discount_name" class="form-control text-white border-secondary" value="{{ d.Discount_Name }}" required autocomplete="off">
+                    </div>
+
+                    <div class="row g-2 mb-3">
+                        <div class="col-md-6">
+                            <label class="form-label">CALCULATION TYPE:</label>
+                            <select name="discount_type" class="form-select text-white border-secondary">
+                                <option value="Percentage" {% if d.Discount_Type == 'Percentage' %}selected{% endif %}>Percentage (%)</option>
+                                <option value="Fixed Amount" {% if d.Discount_Type == 'Fixed Amount' %}selected{% endif %}>Fixed Amount (₱)</option>
+                            </select>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label">VALUE:</label>
+                            <input type="number" step="0.01" min="0.01" name="value" class="form-control text-white border-secondary font-monospace fw-bold" value="{{ "%.2f"|format(d.Value) }}" required>
+                        </div>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label">DISCOUNT CLASSIFICATION:</label>
+                        <select name="category" class="form-select text-white border-secondary">
+                            <option value="Statutory (SC/PWD)" {% if d.Category == 'Statutory (SC/PWD)' %}selected{% endif %}>Statutory (SC / PWD / Solo Parent RA Mandate)</option>
+                            <option value="Promotional / Marketing" {% if d.Category == 'Promotional / Marketing' %}selected{% endif %}>Promotional / Marketing Campaign</option>
+                            <option value="Staff & Internal" {% if d.Category == 'Staff & Internal' %}selected{% endif %}>Staff & Internal Courtesy Privilege</option>
+                            <option value="Operational Comp" {% if d.Category == 'Operational Comp' %}selected{% endif %}>Operational Comp & Service Recovery</option>
+                        </select>
+                    </div>
+
+                    <div class="p-3 mb-3 rounded border border-secondary" style="background: #15151d;">
+                        <div class="form-check form-switch m-0">
+                            <input class="form-check-input" type="checkbox" name="requires_approval" value="Yes" id="editRequiresApprovalSwitch{{ d.Discount_ID }}" {% if d.Requires_Approval == 'Yes' %}checked{% endif %}>
+                            <label class="form-check-label text-white fw-bold ms-2" for="editRequiresApprovalSwitch{{ d.Discount_ID }}">
+                                Require Supervisor / Manager Approval
+                            </label>
+                        </div>
+                    </div>
+
+                    <div class="p-3 rounded border border-secondary" style="background: #15151d;">
+                        <div class="form-check form-switch m-0">
+                            <input class="form-check-input" type="checkbox" name="active_status" value="Yes" id="editActiveStatusSwitch{{ d.Discount_ID }}" {% if d.Active == 'Yes' %}checked{% endif %}>
+                            <label class="form-check-label text-white fw-bold ms-2" for="editActiveStatusSwitch{{ d.Discount_ID }}">
+                                Active in Shift POS Terminals
+                            </label>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer border-secondary" style="background-color: #151518;">
+                    <button type="submit" class="btn btn-success text-white fw-bold w-100 py-2">Save Changes</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endfor %}
+
+<script>
+function filterDiscountsTable() {
+    const searchInput = document.getElementById('discountSearchInput');
+    const filterText = searchInput.value.toLowerCase().trim();
+    const categorySelect = document.getElementById('discountCategoryFilter');
+    const selectedCategory = categorySelect.value;
+    
+    const rows = document.querySelectorAll('.discount-data-row');
+    const noResults = document.getElementById('noSearchResultsRow');
+    
+    let visibleCount = 0;
+    rows.forEach(row => {
+        const name = row.getAttribute('data-name') || '';
+        const id = row.getAttribute('data-id') || '';
+        const cat = row.getAttribute('data-category') || '';
+        
+        const matchesSearch = name.includes(filterText) || id.includes(filterText);
+        const matchesCategory = (selectedCategory === 'All' || cat === selectedCategory);
+        
+        if (matchesSearch && matchesCategory) {
+            row.style.display = '';
+            visibleCount++;
+        } else {
+            row.style.display = 'none';
+        }
+    });
+
+    if (noResults) {
+        noResults.style.display = (visibleCount === 0 && rows.length > 0) ? '' : 'none';
+    }
+}
+
+function clearDiscountFilters() {
+    document.getElementById('discountSearchInput').value = '';
+    document.getElementById('discountCategoryFilter').value = 'All';
+    filterDiscountsTable();
+}
+</script>
 
 {% endblock %}
