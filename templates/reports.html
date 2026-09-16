@@ -70,6 +70,28 @@
         letter-spacing: 0.5px;
         text-transform: uppercase;
     }
+
+    /* Sales Analytics View Switcher Pills */
+    .analytics-view-pill {
+        background: #181822;
+        border: 1px solid #2d2d3e;
+        color: #94a3b8;
+        font-weight: 700;
+        font-size: 12px;
+        padding: 6px 16px;
+        border-radius: 6px;
+        cursor: pointer;
+        transition: all 0.15s ease;
+    }
+    .analytics-view-pill:hover {
+        background: #252536;
+        color: #ffffff;
+    }
+    .analytics-view-pill.active {
+        background: #3b82f6;
+        color: #ffffff;
+        border-color: #3b82f6;
+    }
 </style>
 
 <div class="reports-workspace">
@@ -137,6 +159,9 @@
     <ul class="nav nav-tabs border-bottom border-secondary mb-4" id="commandTabs" role="tablist">
         <li class="nav-item">
             <button class="nav-link active" id="financials-tab" data-bs-toggle="tab" data-bs-target="#financials-panel" type="button" role="tab">Financial Statements</button>
+        </li>
+        <li class="nav-item">
+            <button class="nav-link" id="sales-analytics-tab" data-bs-toggle="tab" data-bs-target="#sales-analytics-panel" type="button" role="tab">Sales Breakdown & Analytics</button>
         </li>
         <li class="nav-item">
             <button class="nav-link" id="roi-tab" data-bs-toggle="tab" data-bs-target="#roi-panel" type="button" role="tab">Actual ROI & CapEx</button>
@@ -454,6 +479,260 @@
             </div>
         </div>
 
+        <!-- PANEL 2: LOYVERSE-STYLE SALES BREAKDOWN & ANALYTICS -->
+        <div class="tab-pane fade text-white" id="sales-analytics-panel" role="tabpanel">
+            
+            <!-- LOYVERSE 5-KEY STATS BANNER -->
+            <div class="row g-3 mb-4">
+                <div class="col-6 col-md">
+                    <div class="p-3 h-100 rounded" style="background: #181822; border: 1px solid #2d2d3e;">
+                        <small class="text-muted d-block fw-bold text-uppercase" style="font-size: 10.5px;">Gross Sales</small>
+                        <h4 class="m-0 font-monospace text-white fw-bold mt-1">PHP {{ "{:,.2f}".format(gross_sales) }}</h4>
+                    </div>
+                </div>
+                <div class="col-6 col-md">
+                    <div class="p-3 h-100 rounded" style="background: #181822; border: 1px solid #2d2d3e;">
+                        <small class="text-muted d-block fw-bold text-uppercase" style="font-size: 10.5px;">Refunds & Voids</small>
+                        <h4 class="m-0 font-monospace text-danger fw-bold mt-1">-PHP {{ "{:,.2f}".format(total_voids) }}</h4>
+                    </div>
+                </div>
+                <div class="col-6 col-md">
+                    <div class="p-3 h-100 rounded" style="background: #181822; border: 1px solid #2d2d3e;">
+                        <small class="text-muted d-block fw-bold text-uppercase" style="font-size: 10.5px;">Discounts</small>
+                        <h4 class="m-0 font-monospace text-warning fw-bold mt-1">-PHP {{ "{:,.2f}".format(total_discounts) }}</h4>
+                    </div>
+                </div>
+                <div class="col-6 col-md">
+                    <div class="p-3 h-100 rounded" style="background: #181822; border: 1px solid #2d2d3e;">
+                        <small class="text-muted d-block fw-bold text-uppercase" style="font-size: 10.5px;">Net Sales</small>
+                        <h4 class="m-0 font-monospace text-info fw-bold mt-1">PHP {{ "{:,.2f}".format(total_revenue) }}</h4>
+                    </div>
+                </div>
+                <div class="col-12 col-md">
+                    <div class="p-3 h-100 rounded" style="background: #181822; border: 1px solid #2d2d3e;">
+                        <small class="text-muted d-block fw-bold text-uppercase" style="font-size: 10.5px;">Gross Profit</small>
+                        <h4 class="m-0 font-monospace text-success fw-bold mt-1">PHP {{ "{:,.2f}".format(gross_margin) }}</h4>
+                    </div>
+                </div>
+            </div>
+
+            <!-- SALES VOLUME TREND BAR CHART -->
+            <div class="p-4 mb-4 rounded" style="background: #1e1e24; border: 1px solid #2d2d34;">
+                <div class="d-flex justify-content-between align-items-center mb-3">
+                    <div>
+                        <h5 class="m-0 fw-bold text-white">Sales Volume Trend</h5>
+                        <small class="text-muted">
+                            {% if current_period == 'today' %}
+                                Hourly distribution of net transactions for today.
+                            {% else %}
+                                Chronological daily net revenue movement across the selected period.
+                            {% endif %}
+                        </small>
+                    </div>
+                </div>
+                <div style="position: relative; height: 260px; width: 100%;">
+                    <canvas id="salesTrendBarChart"></canvas>
+                </div>
+            </div>
+
+            <!-- DRILL-DOWN SUB-VIEW CONTROLS (PILL SWITCHER) -->
+            <div class="d-flex gap-2 mb-3 flex-wrap align-items-center">
+                <span class="text-muted small fw-bold me-2 text-uppercase">Drill-Down By:</span>
+                <button type="button" class="analytics-view-pill active" onclick="switchSalesAnalyticsView('item', this)">By Item (Menu)</button>
+                <button type="button" class="analytics-view-pill" onclick="switchSalesAnalyticsView('category', this)">By Category</button>
+                <button type="button" class="analytics-view-pill" onclick="switchSalesAnalyticsView('employee', this)">By Employee / Cashier</button>
+                <button type="button" class="analytics-view-pill" onclick="switchSalesAnalyticsView('modifier', this)">By Modifier</button>
+                <button type="button" class="analytics-view-pill" onclick="switchSalesAnalyticsView('discounts', this)">Discounts Audit</button>
+            </div>
+
+            <!-- VIEW 1: SALES BY ITEM -->
+            <div id="analyticsViewItem" class="analytics-table-view">
+                <div class="content-card p-0 overflow-hidden" style="background: #1e1e24; border: 1px solid #2d2d34; border-radius: 8px;">
+                    <table class="table table-hover text-white m-0">
+                        <thead style="background: #151518;">
+                            <tr>
+                                <th class="ps-4 py-3">ITEM NAME</th>
+                                <th class="py-3">CATEGORY</th>
+                                <th class="py-3 text-center">UNITS SOLD</th>
+                                <th class="py-3 text-end">GROSS SALES</th>
+                                <th class="py-3 text-end">RECIPE COGS</th>
+                                <th class="py-3 text-end">GROSS PROFIT</th>
+                                <th class="pe-4 py-3 text-end">MARGIN %</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for item in sales_by_item %}
+                            <tr style="border-bottom: 1px solid #2d2d34;">
+                                <td class="align-middle ps-4 fw-bold text-white">{{ item.name }}</td>
+                                <td class="align-middle">
+                                    <span class="badge bg-dark border border-secondary text-light">{{ item.category }}</span>
+                                </td>
+                                <td class="align-middle text-center font-monospace">{{ "{:,.1f}".format(item.quantity) }}</td>
+                                <td class="align-middle text-end font-monospace text-white">PHP {{ "{:,.2f}".format(item.gross_sales) }}</td>
+                                <td class="align-middle text-end font-monospace text-muted">PHP {{ "{:,.2f}".format(item.cogs) }}</td>
+                                <td class="align-middle text-end font-monospace text-success fw-bold">PHP {{ "{:,.2f}".format(item.gross_margin) }}</td>
+                                <td class="align-middle pe-4 text-end font-monospace">
+                                    <span class="badge {% if item.margin_pct >= 65 %}bg-success{% elif item.margin_pct > 0 %}bg-warning text-dark{% else %}bg-danger{% endif %} px-2 py-1">
+                                        {{ "{:,.1f}".format(item.margin_pct) }}%
+                                    </span>
+                                </td>
+                            </tr>
+                            {% else %}
+                            <tr><td colspan="7" class="text-center py-5 text-muted">No item sales recorded in this period.</td></tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- VIEW 2: SALES BY CATEGORY -->
+            <div id="analyticsViewCategory" class="analytics-table-view" style="display: none;">
+                <div class="content-card p-0 overflow-hidden" style="background: #1e1e24; border: 1px solid #2d2d34; border-radius: 8px;">
+                    <table class="table table-hover text-white m-0">
+                        <thead style="background: #151518;">
+                            <tr>
+                                <th class="ps-4 py-3">CATEGORY NAME</th>
+                                <th class="py-3 text-center">ITEMS SOLD</th>
+                                <th class="py-3 text-end">GROSS SALES</th>
+                                <th class="py-3 text-end">RECIPE COGS</th>
+                                <th class="py-3 text-end">GROSS PROFIT</th>
+                                <th class="py-3 text-end">MARGIN %</th>
+                                <th class="pe-4 py-3 text-end">SALES SHARE</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for cat in sales_by_category %}
+                            <tr style="border-bottom: 1px solid #2d2d34;">
+                                <td class="align-middle ps-4 fw-bold text-info">{{ cat.category }}</td>
+                                <td class="align-middle text-center font-monospace">{{ "{:,.1f}".format(cat.quantity) }}</td>
+                                <td class="align-middle text-end font-monospace text-white">PHP {{ "{:,.2f}".format(cat.gross_sales) }}</td>
+                                <td class="align-middle text-end font-monospace text-muted">PHP {{ "{:,.2f}".format(cat.cogs) }}</td>
+                                <td class="align-middle text-end font-monospace text-success fw-bold">PHP {{ "{:,.2f}".format(cat.gross_margin) }}</td>
+                                <td class="align-middle text-end font-monospace">
+                                    <span class="badge {% if cat.margin_pct >= 65 %}bg-success{% elif cat.margin_pct > 0 %}bg-warning text-dark{% else %}bg-danger{% endif %} px-2 py-1">
+                                        {{ "{:,.1f}".format(cat.margin_pct) }}%
+                                    </span>
+                                </td>
+                                <td class="align-middle pe-4 text-end font-monospace text-white fw-bold">
+                                    {{ "{:,.1f}".format(cat.share_pct) }}%
+                                </td>
+                            </tr>
+                            {% else %}
+                            <tr><td colspan="7" class="text-center py-5 text-muted">No category data recorded in this period.</td></tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- VIEW 3: SALES BY EMPLOYEE / CASHIER -->
+            <div id="analyticsViewEmployee" class="analytics-table-view" style="display: none;">
+                <div class="content-card p-0 overflow-hidden" style="background: #1e1e24; border: 1px solid #2d2d34; border-radius: 8px;">
+                    <table class="table table-hover text-white m-0">
+                        <thead style="background: #151518;">
+                            <tr>
+                                <th class="ps-4 py-3">STAFF / CASHIER</th>
+                                <th class="py-3 text-center">TICKETS / ORDERS</th>
+                                <th class="py-3 text-end">GROSS RUNG UP</th>
+                                <th class="py-3 text-end">DISCOUNTS GRANTED</th>
+                                <th class="py-3 text-end">NET SALES</th>
+                                <th class="pe-4 py-3 text-end">AVG TICKET SIZE</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for emp in sales_by_employee %}
+                            <tr style="border-bottom: 1px solid #2d2d34;">
+                                <td class="align-middle ps-4 fw-bold text-white">{{ emp.employee }}</td>
+                                <td class="align-middle text-center font-monospace">{{ emp.orders_count }}</td>
+                                <td class="align-middle text-end font-monospace text-light">PHP {{ "{:,.2f}".format(emp.gross_sales) }}</td>
+                                <td class="align-middle text-end font-monospace text-warning">-PHP {{ "{:,.2f}".format(emp.discounts) }}</td>
+                                <td class="align-middle text-end font-monospace text-success fw-bold">PHP {{ "{:,.2f}".format(emp.net_sales) }}</td>
+                                <td class="align-middle pe-4 text-end font-monospace text-info fw-bold">PHP {{ "{:,.2f}".format(emp.avg_ticket) }}</td>
+                            </tr>
+                            {% else %}
+                            <tr><td colspan="6" class="text-center py-5 text-muted">No employee sales transactions recorded.</td></tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- VIEW 4: SALES BY MODIFIER -->
+            <div id="analyticsViewModifier" class="analytics-table-view" style="display: none;">
+                <div class="content-card p-0 overflow-hidden" style="background: #1e1e24; border: 1px solid #2d2d34; border-radius: 8px;">
+                    <table class="table table-hover text-white m-0">
+                        <thead style="background: #151518;">
+                            <tr>
+                                <th class="ps-4 py-3">MODIFIER NAME</th>
+                                <th class="py-3 text-center">QUANTITY ATTACHED</th>
+                                <th class="py-3 text-end">ADD-ON REVENUE</th>
+                                <th class="py-3 text-end">INGREDIENT COGS</th>
+                                <th class="pe-4 py-3 text-end">NET PROFIT CONTRIBUTION</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for mod in sales_by_modifier %}
+                            <tr style="border-bottom: 1px solid #2d2d34;">
+                                <td class="align-middle ps-4 fw-bold text-white">{{ mod.name }}</td>
+                                <td class="align-middle text-center font-monospace">{{ "{:,.1f}".format(mod.quantity) }}</td>
+                                <td class="align-middle text-end font-monospace text-success fw-bold">PHP {{ "{:,.2f}".format(mod.gross_sales) }}</td>
+                                <td class="align-middle text-end font-monospace text-muted">PHP {{ "{:,.2f}".format(mod.cogs) }}</td>
+                                <td class="align-middle pe-4 text-end font-monospace text-info fw-bold">PHP {{ "{:,.2f}".format(mod.gross_margin) }}</td>
+                            </tr>
+                            {% else %}
+                            <tr><td colspan="5" class="text-center py-5 text-muted">No modifier add-ons sold in this period.</td></tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- VIEW 5: DISCOUNTS & STATUTORY AUDIT -->
+            <div id="analyticsViewDiscounts" class="analytics-table-view" style="display: none;">
+                <div class="row g-3 mb-3">
+                    {% for ds in discounts_summary %}
+                    <div class="col-md-4">
+                        <div class="p-3 rounded" style="background: #15151e; border: 1px solid #2b2b3a;">
+                            <span class="text-warning fw-bold d-block small">{{ ds.type }}</span>
+                            <h4 class="m-0 font-monospace text-white fw-bold mt-1">-PHP {{ "{:,.2f}".format(ds.total) }}</h4>
+                            <small class="text-muted font-monospace">{{ ds.count }} transaction(s)</small>
+                        </div>
+                    </div>
+                    {% else %}
+                    <div class="col-12 text-muted small py-2">No discounts registered in active filter.</div>
+                    {% endfor %}
+                </div>
+
+                <div class="content-card p-0 overflow-hidden" style="background: #1e1e24; border: 1px solid #2d2d34; border-radius: 8px;">
+                    <table class="table table-hover text-white m-0">
+                        <thead style="background: #151518;">
+                            <tr>
+                                <th class="ps-4 py-3">DATE & TIME</th>
+                                <th class="py-3">DISCOUNT RULE & ID BOOKLET</th>
+                                <th class="py-3 text-end">DISCOUNT DEDUCTION</th>
+                                <th class="pe-4 py-3 text-end">LOGGED BY CASHIER</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for d in discounts_audit %}
+                            <tr style="border-bottom: 1px solid #2d2d34;">
+                                <td class="align-middle ps-4 font-monospace text-info">{{ d.date }} {{ d.time }}</td>
+                                <td class="align-middle fw-bold text-white">{{ d.type }}</td>
+                                <td class="align-middle text-end font-monospace text-danger fw-bold">-PHP {{ "{:,.2f}".format(d.amount) }}</td>
+                                <td class="align-middle pe-4 text-end">
+                                    <span class="badge bg-secondary text-white">{{ d.cashier }}</span>
+                                </td>
+                            </tr>
+                            {% else %}
+                            <tr><td colspan="4" class="text-center py-5 text-muted">No statutory discount deductions recorded in this period.</td></tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+        </div>
+
         <!-- PANEL: ACTUAL ROI & CAPEX TRACKER -->
         <div class="tab-pane fade text-white" id="roi-panel" role="tabpanel">
             <div class="d-flex justify-content-between align-items-center mb-3">
@@ -530,7 +809,7 @@
             </div>
         </div>
 
-        <!-- PANEL 2: BREAK-EVEN ANALYTICS ENGINE -->
+        <!-- PANEL 3: BREAK-EVEN ANALYTICS ENGINE -->
         <div class="tab-pane fade text-white" id="breakeven-panel" role="tabpanel">
             <div class="p-4 mb-4 rounded shadow-sm d-flex flex-column flex-md-row align-items-md-center justify-content-between" style="background: #1e1e24; border-left: 6px solid {{ bep_status_color }}; border-top: 1px solid #2d2d34; border-right: 1px solid #2d2d34; border-bottom: 1px solid #2d2d34;">
                 <div>
@@ -605,7 +884,7 @@
             </div>
         </div>
 
-        <!-- PANEL 3: CONCEPT FEASIBILITY SANDBOX -->
+        <!-- PANEL 4: CONCEPT FEASIBILITY SANDBOX -->
         <div class="tab-pane fade text-white" id="sandbox-panel" role="tabpanel">
             <div class="row g-4">
                 <div class="col-12 col-lg-6">
@@ -735,7 +1014,7 @@
             </div>
         </div>
 
-        <!-- PANEL 4: MENU ENGINEERING MATRIX WORKSPACE -->
+        <!-- PANEL 5: MENU ENGINEERING MATRIX WORKSPACE -->
         <div class="tab-pane fade" id="menu-panel" role="tabpanel">
             <div class="row g-4">
                 <div class="col-12 col-lg-8">
@@ -761,7 +1040,7 @@
             </div>
         </div>
 
-        <!-- PANEL 5: COST VARIANCE & INFLATION TRACKER -->
+        <!-- PANEL 6: COST VARIANCE & INFLATION TRACKER -->
         <div class="tab-pane fade text-white" id="inflation-panel" role="tabpanel">
             <div class="row g-4">
                 <div class="col-12 col-lg-8">
@@ -820,7 +1099,7 @@
             </div>
         </div>
 
-        <!-- PANEL 6: HR COMPLIANCE AND WORKSPACE EVENTS REGISTER -->
+        <!-- PANEL 7: HR COMPLIANCE AND WORKSPACE EVENTS REGISTER -->
         <div class="tab-pane fade" id="incidents-panel" role="tabpanel">
             <div class="d-flex justify-content-between align-items-center mb-3">
                 <h5 class="m-0 text-white" style="font-weight: 700;">Operational Event Register & Customer Complaint Logs</h5>
@@ -835,7 +1114,7 @@
                             <th class="py-3">DATE</th>
                             <th class="py-3">CLASSIFICATION TYPE</th>
                             <th class="py-3">PERSONNEL INVOLVED</th>
-                            <th class="py-3" style="width: 40%;">INCIDENT SUMMARY SUMMARY</th>
+                            <th class="py-3" style="width: 40%;">INCIDENT SUMMARY</th>
                             <th class="pe-4 py-3 text-end">ACTION STATUS</th>
                         </tr>
                     </thead>
@@ -979,6 +1258,25 @@
 </div>
 
 <script>
+    function switchSalesAnalyticsView(viewType, btnEl) {
+        document.querySelectorAll('.analytics-view-pill').forEach(b => b.classList.remove('active'));
+        if (btnEl) btnEl.classList.add('active');
+
+        document.querySelectorAll('.analytics-table-view').forEach(v => v.style.display = 'none');
+
+        if (viewType === 'item') {
+            document.getElementById('analyticsViewItem').style.display = 'block';
+        } else if (viewType === 'category') {
+            document.getElementById('analyticsViewCategory').style.display = 'block';
+        } else if (viewType === 'employee') {
+            document.getElementById('analyticsViewEmployee').style.display = 'block';
+        } else if (viewType === 'modifier') {
+            document.getElementById('analyticsViewModifier').style.display = 'block';
+        } else if (viewType === 'discounts') {
+            document.getElementById('analyticsViewDiscounts').style.display = 'block';
+        }
+    }
+
     document.addEventListener("DOMContentLoaded", function () {
         const activeTabId = localStorage.getItem('reportsActiveTab');
         if (activeTabId) {
@@ -1007,6 +1305,7 @@
             });
         });
 
+        // 1. Menu Engineering Scatter Chart
         const rawPointsData = {{ menu_data_json|safe }};
         const dataSets = [
             { label: 'Stars', data: rawPointsData.filter(p => p.quadrant === 'Stars'), backgroundColor: '#10b981', radius: 9, hoverRadius: 12 },
@@ -1015,29 +1314,80 @@
             { label: 'Dogs', data: rawPointsData.filter(p => p.quadrant === 'Dogs'), backgroundColor: '#ef4444', radius: 9, hoverRadius: 12 }
         ];
 
-        const ctx = document.getElementById('menuMatrixChart').getContext('2d');
-        new Chart(ctx, {
-            type: 'scatter',
-            data: { datasets: dataSets },
-            options: {
-                responsive: true, maintainAspectRatio: false,
-                scales: {
-                    x: { title: { display: true, text: 'Volume Units Sold (Popularity)', color: '#94a3b8', font: { weight: 'bold' } }, grid: { color: '#2d2d34' }, ticks: { color: '#94a3b8' } },
-                    y: { title: { display: true, text: 'Unit Profit Margin (PHP Profitability)', color: '#94a3b8', font: { weight: 'bold' } }, grid: { color: '#2d2d34' }, ticks: { color: '#94a3b8' } }
-                },
-                plugins: {
-                    legend: { labels: { color: '#e2e8f0' }, position: 'top' },
-                    tooltip: {
-                        callbacks: {
-                            label: function (context) {
-                                const item = context.raw;
-                                return `Item: ${item.label} | Sold: ${item.x} pcs | Margin: PHP ${item.y.toFixed(2)} (Price: PHP ${item.selling_price.toFixed(2)})`;
+        const ctxMenu = document.getElementById('menuMatrixChart');
+        if (ctxMenu) {
+            new Chart(ctxMenu.getContext('2d'), {
+                type: 'scatter',
+                data: { datasets: dataSets },
+                options: {
+                    responsive: true, maintainAspectRatio: false,
+                    scales: {
+                        x: { title: { display: true, text: 'Volume Units Sold (Popularity)', color: '#94a3b8', font: { weight: 'bold' } }, grid: { color: '#2d2d34' }, ticks: { color: '#94a3b8' } },
+                        y: { title: { display: true, text: 'Unit Profit Margin (PHP Profitability)', color: '#94a3b8', font: { weight: 'bold' } }, grid: { color: '#2d2d34' }, ticks: { color: '#94a3b8' } }
+                    },
+                    plugins: {
+                        legend: { labels: { color: '#e2e8f0' }, position: 'top' },
+                        tooltip: {
+                            callbacks: {
+                                label: function (context) {
+                                    const item = context.raw;
+                                    return `Item: ${item.label} | Sold: ${item.x} pcs | Margin: PHP ${item.y.toFixed(2)} (Price: PHP ${item.selling_price.toFixed(2)})`;
+                                }
                             }
                         }
                     }
                 }
-            }
-        });
+            });
+        }
+
+        // 2. Loyverse-Style Sales Volume Trend Bar Chart
+        const trendLabels = {{ sales_trend_labels_json|safe }};
+        const trendValues = {{ sales_trend_values_json|safe }};
+        const ctxTrend = document.getElementById('salesTrendBarChart');
+        if (ctxTrend) {
+            new Chart(ctxTrend.getContext('2d'), {
+                type: 'bar',
+                data: {
+                    labels: trendLabels,
+                    datasets: [{
+                        label: 'Net Sales Volume (PHP)',
+                        data: trendValues,
+                        backgroundColor: '#10b981',
+                        borderRadius: 4,
+                        hoverBackgroundColor: '#059669',
+                        maxBarThickness: 45
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        x: {
+                            grid: { display: false },
+                            ticks: { color: '#94a3b8', font: { weight: 'bold', size: 11 } }
+                        },
+                        y: {
+                            grid: { color: '#282836' },
+                            ticks: {
+                                color: '#94a3b8',
+                                font: { family: 'monospace' },
+                                callback: function (value) { return 'PHP ' + value.toLocaleString(); }
+                            }
+                        }
+                    },
+                    plugins: {
+                        legend: { display: false },
+                        tooltip: {
+                            callbacks: {
+                                label: function (context) {
+                                    return 'Sales: PHP ' + Number(context.raw).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+        }
 
         runProFormaSandbox();
     });

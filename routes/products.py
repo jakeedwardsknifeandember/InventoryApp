@@ -349,17 +349,26 @@ def web_products_tab(username):
         if category != 'All':
             df = df[df['Category'] == category]
 
+        # CLICKABLE COLUMN HEADER SORTING HANDLERS
         ascending = (order == 'asc')
         if sort_by == 'id':
             df = df.sort_values('Product_ID', ascending=ascending)
         elif sort_by == 'name':
-            df = df.sort_values('Product_Name', ascending=ascending)
+            df = df.sort_values(['Parent_Item', 'Variant_Name'], ascending=[ascending, True])
+        elif sort_by == 'category':
+            df = df.sort_values(['Category', 'Parent_Item'], ascending=[ascending, True])
         elif sort_by == 'price':
             df = df.sort_values('Selling_Price', ascending=ascending)
+        elif sort_by == 'cost':
+            df = df.sort_values('Cost_Price', ascending=ascending)
         elif sort_by == 'margin':
             df = df.sort_values('Margin_Percentage', ascending=ascending)
         elif sort_by == 'food_cost':
             df = df.sort_values('Food_Cost_Pct', ascending=ascending)
+        elif sort_by == 'status':
+            df = df.sort_values(['Active', 'Parent_Item'], ascending=[ascending, True])
+        else:
+            df = df.sort_values('Product_ID', ascending=True)
 
         total_count = len(df)
         

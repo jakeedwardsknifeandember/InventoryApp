@@ -17,6 +17,7 @@
         letter-spacing: 0.5px;
         padding: 12px 14px;
         border-bottom: 2px solid #2d2d34;
+        white-space: nowrap;
     }
     .loyverse-parent-row {
         background-color: #1e1e24 !important;
@@ -55,6 +56,31 @@
     .high-contrast-subtext {
         color: #94a3b8 !important;
         font-weight: 500;
+    }
+
+    /* CLICKABLE COLUMN HEADER SORTING STYLES */
+    .sort-header-link {
+        color: #cbd5e1 !important;
+        text-decoration: none !important;
+        display: inline-flex;
+        align-items: center;
+        gap: 5px;
+        transition: color 0.15s ease;
+        white-space: nowrap;
+        cursor: pointer;
+    }
+    .sort-header-link:hover {
+        color: #60a5fa !important;
+    }
+    .sort-indicator {
+        font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+        font-size: 11px;
+        color: #64748b;
+        font-weight: bold;
+    }
+    .sort-indicator.active {
+        color: #60a5fa;
+        font-weight: 900;
     }
 
     /* INLINE EDIT INPUT & SELECT STYLING */
@@ -192,32 +218,19 @@
     </li>
 </ul>
 
-<!-- CONTROL & FILTER BAR -->
+<!-- STREAMLINED CONTROL & FILTER BAR (MATCHING INGREDIENTS TAB) -->
 <div class="content-card mb-3 p-3" style="background-color: #18181c; border: 1px solid #2d2d34; border-radius: 8px;">
     <form method="GET" class="row gx-2 gy-3 align-items-center">
         <input type="hidden" name="status" value="{{ current_status }}">
+        <input type="hidden" name="sort_by" value="{{ current_sort }}">
+        <input type="hidden" name="order" value="{{ current_order }}">
 
-        <div class="col-md-4 d-flex align-items-center">
-            <label class="text-light me-2 mb-0 small fw-bold">Search:</label>
+        <div class="col-md-5 d-flex align-items-center">
+            <label class="text-light me-2 mb-0 small fw-bold text-nowrap">Live Instant Search:</label>
             <input type="text" name="search" value="{{ current_search }}" class="form-control bg-dark text-white border-secondary" placeholder="Search product name or ID..." autocomplete="off">
         </div>
-        
-        <div class="col-md-4 d-flex align-items-center">
-            <label class="text-light me-2 mb-0 small fw-bold">Sort by:</label>
-            <select name="sort_by" class="form-select bg-dark text-white border-secondary" style="width: auto;" onchange="this.form.submit()">
-                <option value="id" {% if current_sort == 'id' %}selected{% endif %}>Product ID</option>
-                <option value="name" {% if current_sort == 'name' %}selected{% endif %}>Product Name</option>
-                <option value="price" {% if current_sort == 'price' %}selected{% endif %}>Selling Price</option>
-                <option value="margin" {% if current_sort == 'margin' %}selected{% endif %}>Margin %</option>
-                <option value="food_cost" {% if current_sort == 'food_cost' %}selected{% endif %}>Food Cost %</option>
-            </select>
-            <select name="order" class="form-select bg-dark text-white border-secondary ms-2" style="width: auto;" onchange="this.form.submit()">
-                <option value="asc" {% if current_order == 'asc' %}selected{% endif %}>Ascending</option>
-                <option value="desc" {% if current_order == 'desc' %}selected{% endif %}>Descending</option>
-            </select>
-        </div>
 
-        <div class="col-md-3 d-flex align-items-center">
+        <div class="col-md-4 d-flex align-items-center">
             <label class="text-light me-2 mb-0 small fw-bold">Category:</label>
             <select name="category" class="form-select bg-dark text-white border-secondary" onchange="this.form.submit()">
                 <option value="All" {% if current_category == 'All' %}selected{% endif %}>All Categories</option>
@@ -228,7 +241,7 @@
         </div>
 
         <div class="col-md-auto ms-auto d-flex align-items-end">
-            <a href="/portal/{{ username }}/products?status={{ current_status }}" class="btn btn-secondary fw-bold px-4">Clear Filters</a>
+            <a href="/portal/{{ username }}/products?status={{ current_status }}" class="btn btn-secondary fw-bold px-4">Clear</a>
         </div>
     </form>
 </div>
@@ -237,20 +250,76 @@
     Showing <span class="text-white fw-bold">{{ total_count }}</span> product option(s) in this view
 </div>
 
-<!-- UNIFIED LOYVERSE NESTED PRODUCT LEDGER WITH INLINE QUICK EDITING -->
+<!-- UNIFIED LOYVERSE NESTED PRODUCT LEDGER WITH CLICKABLE SORT HEADERS -->
 <div class="content-card p-0 overflow-hidden" style="background: #1e1e24; border: 1px solid #2d2d34; border-radius: 8px;">
     <div class="table-responsive">
         <table class="loyverse-table align-middle m-0">
             <thead>
                 <tr>
-                    <th style="width: 10%;">PRODUCT ID</th>
-                    <th style="width: 21%;">PRODUCT / VARIANT ITEM</th>
-                    <th style="width: 14%;">CATEGORY</th>
-                    <th style="width: 13%;">SELLING PRICE</th>
-                    <th style="width: 10%;">BOM COST</th>
-                    <th style="width: 14%;">GROSS MARGIN</th>
-                    <th style="width: 10%;">FOOD COST %</th>
-                    <th class="text-center" style="width: 6%;">STATUS</th>
+                    <th style="width: 11%;">
+                        <a href="?status={{ current_status }}&search={{ current_search }}&category={{ current_category }}&sort_by=id&order={{ 'desc' if current_sort == 'id' and current_order == 'asc' else 'asc' }}" class="sort-header-link" title="Click to sort by Product ID">
+                            PRODUCT ID 
+                            <span class="sort-indicator {% if current_sort == 'id' %}active{% endif %}">
+                                {% if current_sort == 'id' %}{{ '▲' if current_order == 'asc' else '▼' }}{% else %}-{% endif %}
+                            </span>
+                        </a>
+                    </th>
+                    <th style="width: 22%;">
+                        <a href="?status={{ current_status }}&search={{ current_search }}&category={{ current_category }}&sort_by=name&order={{ 'desc' if current_sort == 'name' and current_order == 'asc' else 'asc' }}" class="sort-header-link" title="Click to sort by Product Name">
+                            PRODUCT / VARIANT ITEM 
+                            <span class="sort-indicator {% if current_sort == 'name' %}active{% endif %}">
+                                {% if current_sort == 'name' %}{{ '▲' if current_order == 'asc' else '▼' }}{% else %}-{% endif %}
+                            </span>
+                        </a>
+                    </th>
+                    <th style="width: 14%;">
+                        <a href="?status={{ current_status }}&search={{ current_search }}&category={{ current_category }}&sort_by=category&order={{ 'desc' if current_sort == 'category' and current_order == 'asc' else 'asc' }}" class="sort-header-link" title="Click to sort by Category">
+                            CATEGORY 
+                            <span class="sort-indicator {% if current_sort == 'category' %}active{% endif %}">
+                                {% if current_sort == 'category' %}{{ '▲' if current_order == 'asc' else '▼' }}{% else %}-{% endif %}
+                            </span>
+                        </a>
+                    </th>
+                    <th style="width: 12%;">
+                        <a href="?status={{ current_status }}&search={{ current_search }}&category={{ current_category }}&sort_by=price&order={{ 'desc' if current_sort == 'price' and current_order == 'asc' else 'asc' }}" class="sort-header-link" title="Click to sort by Selling Price">
+                            SELLING PRICE 
+                            <span class="sort-indicator {% if current_sort == 'price' %}active{% endif %}">
+                                {% if current_sort == 'price' %}{{ '▲' if current_order == 'asc' else '▼' }}{% else %}-{% endif %}
+                            </span>
+                        </a>
+                    </th>
+                    <th style="width: 10%;">
+                        <a href="?status={{ current_status }}&search={{ current_search }}&category={{ current_category }}&sort_by=cost&order={{ 'desc' if current_sort == 'cost' and current_order == 'asc' else 'asc' }}" class="sort-header-link" title="Click to sort by Recipe BOM Cost">
+                            BOM COST 
+                            <span class="sort-indicator {% if current_sort == 'cost' %}active{% endif %}">
+                                {% if current_sort == 'cost' %}{{ '▲' if current_order == 'asc' else '▼' }}{% else %}-{% endif %}
+                            </span>
+                        </a>
+                    </th>
+                    <th style="width: 13%;">
+                        <a href="?status={{ current_status }}&search={{ current_search }}&category={{ current_category }}&sort_by=margin&order={{ 'desc' if current_sort == 'margin' and current_order == 'asc' else 'asc' }}" class="sort-header-link" title="Click to sort by Gross Margin">
+                            GROSS MARGIN 
+                            <span class="sort-indicator {% if current_sort == 'margin' %}active{% endif %}">
+                                {% if current_sort == 'margin' %}{{ '▲' if current_order == 'asc' else '▼' }}{% else %}-{% endif %}
+                            </span>
+                        </a>
+                    </th>
+                    <th style="width: 10%;">
+                        <a href="?status={{ current_status }}&search={{ current_search }}&category={{ current_category }}&sort_by=food_cost&order={{ 'desc' if current_sort == 'food_cost' and current_order == 'asc' else 'asc' }}" class="sort-header-link" title="Click to sort by Food Cost %">
+                            FOOD COST % 
+                            <span class="sort-indicator {% if current_sort == 'food_cost' %}active{% endif %}">
+                                {% if current_sort == 'food_cost' %}{{ '▲' if current_order == 'asc' else '▼' }}{% else %}-{% endif %}
+                            </span>
+                        </a>
+                    </th>
+                    <th class="text-center" style="width: 6%;">
+                        <a href="?status={{ current_status }}&search={{ current_search }}&category={{ current_category }}&sort_by=status&order={{ 'desc' if current_sort == 'status' and current_order == 'asc' else 'asc' }}" class="sort-header-link justify-content-center" title="Click to sort by Active/Inactive Status">
+                            STATUS 
+                            <span class="sort-indicator {% if current_sort == 'status' %}active{% endif %}">
+                                {% if current_sort == 'status' %}{{ '▲' if current_order == 'asc' else '▼' }}{% else %}-{% endif %}
+                            </span>
+                        </a>
+                    </th>
                     <th class="text-end pe-4" style="width: 12%;">ACTIONS</th>
                 </tr>
             </thead>

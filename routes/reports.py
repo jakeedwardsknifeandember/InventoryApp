@@ -392,9 +392,9 @@ def web_reports_tab(username):
     total_discounts = 0.0
     net_sales = 0.0
     total_sales_count = 0
+    total_voids = 0.0
 
     if not sales_df.empty:
-        # Match discounts across both normal ('Discount:') and voided ('[VOID] Discount:') records
         is_discount_row = sales_df['Product_Name'].astype(str).str.contains('Discount:', case=False, na=False)
         
         discount_rows = sales_df[is_discount_row]
@@ -402,16 +402,195 @@ def web_reports_tab(username):
         total_discounts = abs(net_discount_val) if net_discount_val < -0.001 else 0.0
         
         product_rows = sales_df[~is_discount_row]
-        sum_products = float(product_rows['Total_Amount'].sum()) if not product_rows.empty else 0.0
+        
+        void_mask = (product_rows['Quantity'] < 0) | (product_rows['Total_Amount'] < 0) | (product_rows['Product_Name'].astype(str).str.startswith('[VOID]'))
+        total_voids = abs(float(product_rows[void_mask]['Total_Amount'].sum())) if not product_rows[void_mask].empty else 0.0
+
+        positive_products = product_rows[product_rows['Quantity'] > 0]
+        sum_products = float(positive_products['Total_Amount'].sum()) if not positive_products.empty else 0.0
         gross_sales = max(0.0, sum_products)
         
         sum_net = float(sales_df['Total_Amount'].sum())
         net_sales = 0.0 if abs(sum_net) < 0.001 else sum_net
-        total_sales_count = len(product_rows[product_rows['Quantity'] > 0])
+        total_sales_count = len(positive_products)
 
     total_cogs = calculate_sales_cogs(sales_df, db_path)
     total_cogs = 0.0 if abs(total_cogs) < 0.001 else total_cogs
     total_expenses = float(expenses_df['Amount'].sum()) if not expenses_df.empty else 0.0
+
+    # =================================================================
+    # LOYVERSE-INSPIRED SALES DRILL-DOWN & ANALYTICS ENGINE
+    # =================================================================
+    sales_by_item = []
+    sales_by_category = []
+    sales_by_employee = []
+    sales_by_modifier = []
+    discounts_audit = []
+    discounts_summary = []
+    sales_trend_labels = []
+    sales_trend_values = []
+
+    if not sales_df.empty:
+        prod_meta_map = {}
+        if not products_df.empty:
+            for _, p_row in products_df.iterrows():
+                pid = str(p_row.get('Product_ID', '')).strip()
+                prod_meta_map[pid] = {
+                    'name': str(p_row.get('Product_Name', pid)).strip(),
+                    'category': str(p_row.get('Category', 'General')).strip(),
+                    'cost': float(pd.to_numeric(p_row.get('Cost_Price', 0.0), errors='coerce') or 0.0)
+                }
+
+        # 1. Drill-down: Sales by Item
+        is_disc = sales_df['Product_Name'].astype(str).str.contains('Discount:', case=False, na=False)
+        items_sales_df = sales_df[~is_disc].copy()
+        
+        item_agg = defaultdict(lambda: {'qty': 0.0, 'gross': 0.0, 'cogs': 0.0, 'category': 'General', 'name': ''})
+        
+        for _, row in items_sales_df.iterrows():
+            pid = str(row.get('Product_ID', '')).strip()
+            raw_pname = str(row.get('Product_Name', '')).strip()
+            qty = float(row.get('Quantity', 0.0) or 0.0)
+            amt = float(row.get('Total_Amount', 0.0) or 0.0)
+
+            clean_name = raw_pname.replace('[VOID]', '').strip()
+            info = prod_meta_map.get(pid, {})
+            cat = info.get('category', 'General')
+            if clean_name.lower().startswith('modifier:') or 'modifier' in str(row.get('Reason', '')).lower():
+                cat = 'Modifiers'
+
+            display_name = info.get('name', clean_name) if info.get('name') else clean_name
+            unit_cost = info.get('cost', 0.0)
+            line_cogs = qty * unit_cost if qty > 0 else 0.0
+
+            item_agg[display_name]['qty'] += qty
+            item_agg[display_name]['gross'] += amt
+            item_agg[display_name]['cogs'] += line_cogs
+            item_agg[display_name]['category'] = cat
+            item_agg[display_name]['name'] = display_name
+
+        total_catalog_gross = sum(v['gross'] for v in item_agg.values()) or 1.0
+
+        for it_name, it_data in item_agg.items():
+            if abs(it_data['qty']) < 0.0001 and abs(it_data['gross']) < 0.0001:
+                continue
+            margin = it_data['gross'] - it_data['cogs']
+            margin_pct = (margin / it_data['gross'] * 100.0) if it_data['gross'] > 0 else 0.0
+            sales_by_item.append({
+                'name': it_name,
+                'category': it_data['category'],
+                'quantity': it_data['qty'],
+                'gross_sales': it_data['gross'],
+                'cogs': it_data['cogs'],
+                'gross_margin': margin,
+                'margin_pct': margin_pct
+            })
+        sales_by_item.sort(key=lambda x: x['gross_sales'], reverse=True)
+
+        # 2. Drill-down: Sales by Category
+        cat_agg = defaultdict(lambda: {'qty': 0.0, 'gross': 0.0, 'cogs': 0.0})
+        for it in sales_by_item:
+            c = it['category']
+            cat_agg[c]['qty'] += it['quantity']
+            cat_agg[c]['gross'] += it['gross_sales']
+            cat_agg[c]['cogs'] += it['cogs']
+
+        for c_name, c_data in cat_agg.items():
+            c_margin = c_data['gross'] - c_data['cogs']
+            c_margin_pct = (c_margin / c_data['gross'] * 100.0) if c_data['gross'] > 0 else 0.0
+            share_pct = (c_data['gross'] / total_catalog_gross * 100.0)
+            sales_by_category.append({
+                'category': c_name,
+                'quantity': c_data['qty'],
+                'gross_sales': c_data['gross'],
+                'cogs': c_data['cogs'],
+                'gross_margin': c_margin,
+                'margin_pct': c_margin_pct,
+                'share_pct': share_pct
+            })
+        sales_by_category.sort(key=lambda x: x['gross_sales'], reverse=True)
+
+        # 3. Drill-down: Sales by Employee / Cashier
+        emp_agg = defaultdict(lambda: {'orders': set(), 'gross': 0.0, 'discounts': 0.0, 'net': 0.0})
+        for _, row in sales_df.iterrows():
+            emp = str(row.get('Recorded_By', 'Counter Terminal')).strip().title()
+            if not emp or emp.lower() in ['none', 'nan']:
+                emp = 'Floor Staff'
+            raw_id = str(row.get('Sale_ID', ''))
+            txn_root = raw_id.replace('VOID-', '').split('-')[0]
+            amt = float(row.get('Total_Amount', 0.0) or 0.0)
+            p_name = str(row.get('Product_Name', ''))
+
+            emp_agg[emp]['orders'].add(txn_root)
+            emp_agg[emp]['net'] += amt
+            if 'discount:' in p_name.lower():
+                emp_agg[emp]['discounts'] += abs(amt)
+            else:
+                emp_agg[emp]['gross'] += max(0.0, amt)
+
+        for emp_name, emp_data in emp_agg.items():
+            ord_count = len(emp_data['orders'])
+            avg_ticket = (emp_data['net'] / ord_count) if ord_count > 0 else 0.0
+            sales_by_employee.append({
+                'employee': emp_name,
+                'orders_count': ord_count,
+                'gross_sales': emp_data['gross'],
+                'discounts': emp_data['discounts'],
+                'net_sales': emp_data['net'],
+                'avg_ticket': avg_ticket
+            })
+        sales_by_employee.sort(key=lambda x: x['net_sales'], reverse=True)
+
+        # 4. Drill-down: Sales by Modifier
+        sales_by_modifier = [it for it in sales_by_item if it['category'] == 'Modifiers' or it['name'].lower().startswith('modifier:')]
+
+        # 5. Drill-down: Statutory & Promotional Discounts Audit
+        disc_slice = sales_df[is_disc].copy()
+        disc_summary_map = defaultdict(lambda: {'count': 0, 'total': 0.0})
+        if not disc_slice.empty:
+            for _, d_row in disc_slice.iterrows():
+                raw_label = str(d_row.get('Product_Name', 'Discount')).replace('Discount:', '').replace('[VOID]', '').strip()
+                amt_val = abs(float(d_row.get('Total_Amount', 0.0) or 0.0))
+                cashier_tag = str(d_row.get('Recorded_By', 'Floor Staff')).strip().title()
+                
+                type_name = raw_label.split('(')[0].strip() if '(' in raw_label else raw_label
+                disc_summary_map[type_name]['count'] += 1
+                disc_summary_map[type_name]['total'] += amt_val
+
+                discounts_audit.append({
+                    'date': str(d_row.get('Sale_Date', '')),
+                    'time': str(d_row.get('Sale_Time', '')),
+                    'type': raw_label,
+                    'amount': amt_val,
+                    'cashier': cashier_tag
+                })
+
+        for d_type, d_info in disc_summary_map.items():
+            discounts_summary.append({
+                'type': d_type,
+                'count': d_info['count'],
+                'total': d_info['total']
+            })
+        discounts_summary.sort(key=lambda x: x['total'], reverse=True)
+
+        # 6. Bar Chart: Daily or Hourly Sales Volume Trend
+        if 'Parsed_Date' in sales_df.columns and sales_df['Parsed_Date'].notna().any():
+            trend_df = sales_df.dropna(subset=['Parsed_Date']).sort_values('Parsed_Date').copy()
+            if selected_period == 'today':
+                trend_df['Hour'] = trend_df['Parsed_Date'].dt.hour
+                hourly_sum = trend_df.groupby('Hour')['Total_Amount'].sum()
+                for h in range(7, 23):
+                    sales_trend_labels.append(datetime(2000, 1, 1, h, 0).strftime('%I %p'))
+                    sales_trend_values.append(round(float(hourly_sum.get(h, 0.0)), 2))
+            else:
+                trend_df['Day_Label'] = trend_df['Parsed_Date'].dt.strftime('%b %d')
+                daily_sum = trend_df.groupby('Day_Label', sort=False)['Total_Amount'].sum()
+                sales_trend_labels = list(daily_sum.index)
+                sales_trend_values = [round(float(v), 2) for v in daily_sum.values]
+
+    if not sales_trend_labels:
+        sales_trend_labels = ['Period Start', 'Period End']
+        sales_trend_values = [0.0, 0.0]
 
     total_waste_cost = 0.0
     opportunity_cost = 0.0
@@ -483,13 +662,11 @@ def web_reports_tab(username):
     }
 
     if not drawer_logs_df.empty:
-        # 1. Filter out drawer logs explicitly marked [VOIDED]
         if 'Explanation_Notes' in drawer_logs_df.columns:
             drawer_logs_df = drawer_logs_df[
                 ~drawer_logs_df['Explanation_Notes'].astype(str).str.contains(r'\[VOIDED\]', case=False, na=False)
             ]
 
-        # 2. Filter out drawer logs whose entire parent sales batch has been fully voided to 0.00
         if not sales_df.empty and not drawer_logs_df.empty:
             temp_sales = sales_df.copy()
             temp_sales['Batch_Prefix'] = temp_sales['Sale_ID'].astype(str).str.replace('VOID-', '').str.split('-').str[0]
@@ -526,7 +703,6 @@ def web_reports_tab(username):
 
     cash_discrepancy_over_short = tender_summary['over_short'] if tender_summary['has_entries'] else 0.0
 
-    # Margins and bottom-line profit calculated strictly from Net Sales + Cash Discrepancy
     gross_profit_margin = net_sales - total_cogs
     gross_profit_margin = 0.0 if abs(gross_profit_margin) < 0.001 else gross_profit_margin
 
@@ -774,5 +950,14 @@ def web_reports_tab(username):
         all_time_net_profit=all_time_net_profit,
         roi_percentage=roi_percentage,
         remaining_roi=remaining_roi,
-        capex_list=capex_list
+        capex_list=capex_list,
+        sales_by_item=sales_by_item,
+        sales_by_category=sales_by_category,
+        sales_by_employee=sales_by_employee,
+        sales_by_modifier=sales_by_modifier,
+        discounts_audit=discounts_audit,
+        discounts_summary=discounts_summary,
+        total_voids=total_voids,
+        sales_trend_labels_json=json.dumps(sales_trend_labels),
+        sales_trend_values_json=json.dumps(sales_trend_values)
     )
