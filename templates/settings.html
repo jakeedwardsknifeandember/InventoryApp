@@ -10,10 +10,10 @@
     .card-title { margin-top: 0; margin-bottom: 15px; font-size: 18px; font-weight: bold; }
     
     label { font-size: 12.5px; color: #cbd5e1; font-weight: 600; display: block; margin-bottom: 6px; }
-    input[type="text"], input[type="password"], input[type="number"], select { 
+    input[type="text"], input[type="password"], input[type="number"], select, textarea { 
         width: 100%; padding: 10px; background: #242424; color: #fff; border: 1px solid #3f3f46; border-radius: 4px; margin-bottom: 15px; box-sizing: border-box; font-size: 13.5px;
     }
-    input[type="text"]:focus, input[type="password"]:focus, input[type="number"]:focus, select:focus {
+    input[type="text"]:focus, input[type="password"]:focus, input[type="number"]:focus, select:focus, textarea:focus {
         border-color: #3b8ed0; outline: none; background: #2a2a2a;
     }
     
@@ -46,10 +46,64 @@
     .maintenance-checkbox-row { display: flex; align-items: center; gap: 12px; padding: 10px 12px; background: #161622; border-radius: 4px; border: 1px solid #252535; margin-bottom: 8px; cursor: pointer; transition: background 0.15s; }
     .maintenance-checkbox-row:hover { background: #1c1c2e; }
     .maintenance-checkbox-row input[type="checkbox"] { width: 18px; height: 18px; cursor: pointer; margin: 0; }
+
+    /* REALISTIC THERMAL PAPER SIMULATOR STYLES */
+    .receipt-designer-wrapper {
+        display: flex;
+        gap: 24px;
+        flex-wrap: wrap;
+        align-items: flex-start;
+    }
+    .designer-form-pane {
+        flex: 1.2;
+        min-width: 320px;
+    }
+    .designer-preview-pane {
+        flex: 0.8;
+        min-width: 300px;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        background: #15151c;
+        padding: 20px;
+        border-radius: 8px;
+        border: 1px solid #2c2c3e;
+    }
+    .thermal-paper {
+        background: #ffffff;
+        color: #000000;
+        font-family: "Courier New", Courier, monospace;
+        font-size: 11.5px;
+        line-height: 1.35;
+        padding: 18px 16px;
+        box-shadow: 0 10px 30px rgba(0,0,0,0.8), 0 0 0 1px #d1d5db;
+        border-radius: 2px;
+        width: 310px; /* Default 80mm preview */
+        transition: width 0.25s ease;
+        box-sizing: border-box;
+    }
+    .thermal-paper.paper-58mm {
+        width: 235px; /* 58mm compact preview */
+        font-size: 10px;
+        padding: 14px 10px;
+    }
+    .receipt-center { text-align: center; }
+    .receipt-right { text-align: right; }
+    .receipt-row { display: flex; justify-content: space-between; align-items: baseline; }
+    .receipt-dashed { border-top: 1px dashed #000000; margin: 7px 0; }
+    .receipt-feed-spacer {
+        border-top: 1px dotted #9ca3af;
+        margin-top: 8px;
+        padding-top: 4px;
+        color: #6b7280;
+        font-size: 9px;
+        text-align: center;
+        letter-spacing: 0.5px;
+    }
 </style>
 
 <div class="module-headline">Account Security & Provisioning Matrix</div>
-<div class="module-subtitle">Manage system execution parameters, profile preferences, and role-based staff permissions fields.</div>
+<div class="module-subtitle">Manage system execution parameters, thermal print layout, profile preferences, and role-based staff permissions fields.</div>
 
 {% if msg %}
     <div class="alert-banner {% if 'Error' in msg %}alert-danger{% elif 'Sweep' in msg or 'Restoration' in msg or 'terminated' in msg or 'Notice' in msg or 'skipped' in msg %}alert-warning{% else %}alert-success{% endif %}">
@@ -73,6 +127,211 @@
     </div>
 {% endif %}
 
+<!-- SECTION: BACK OFFICE THERMAL RECEIPT & HARDWARE DESIGNER -->
+<div class="settings-card" style="border-color: #10b981; max-width: 100%; margin-bottom: 30px;">
+    <div style="display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid #313244; padding-bottom:15px; margin-bottom:20px;">
+        <div>
+            <h3 class="card-title" style="color:#10b981; margin:0;">Thermal Receipt Template & Hardware Designer</h3>
+            <small style="color:#a1a1aa; font-size: 12.5px;">Configure your ESC/POS receipt layout, auto-cut clearance lines, and tax compliance details with live thermal print simulation.</small>
+        </div>
+        <span class="badge bg-dark border border-secondary text-success font-monospace" style="font-size: 11px;">ESC/POS Standard</span>
+    </div>
+
+    <form method="post" action="/portal/{{ username }}/settings">
+        <input type="hidden" name="action_type" value="save_receipt_config">
+
+        <div class="receipt-designer-wrapper">
+            <!-- LEFT: CONFIGURATION FORM INPUTS -->
+            <div class="designer-form-pane">
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+                    <div>
+                        <label>Business / Brand Name (Header):</label>
+                        <input type="text" id="cfg_header_name" name="receipt_header_name" value="{{ store_settings.get('receipt_header_name', username|upper) }}" required placeholder="e.g. KNIFE & EMBER BAKERY" oninput="updateReceiptLivePreview()">
+                    </div>
+                    <div>
+                        <label>Concept Line / Tagline:</label>
+                        <input type="text" id="cfg_tagline" name="receipt_tagline" value="{{ store_settings.get('receipt_tagline', 'FOOD & BEVERAGE SERVICES') }}" placeholder="e.g. SPECIALTY COFFEE & ARTISANAL BREAD" oninput="updateReceiptLivePreview()">
+                    </div>
+                </div>
+
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+                    <div>
+                        <label>Store Branch Address:</label>
+                        <input type="text" id="cfg_address" name="receipt_address" value="{{ store_settings.get('receipt_address', 'San Jose del Monte, Bulacan') }}" placeholder="e.g. San Jose del Monte, Bulacan" oninput="updateReceiptLivePreview()">
+                    </div>
+                    <div>
+                        <label>Contact Phone / Social Handle:</label>
+                        <input type="text" id="cfg_contact" name="receipt_contact" value="{{ store_settings.get('receipt_contact', '+63 900 000 0000') }}" placeholder="e.g. +63 912 345 6789 | @knifeandember" oninput="updateReceiptLivePreview()">
+                    </div>
+                </div>
+
+                <div style="display: grid; grid-template-columns: 1.2fr 0.8fr; gap: 12px;">
+                    <div>
+                        <label>TIN / Tax Registration Number:</label>
+                        <input type="text" id="cfg_tin" name="receipt_tin" value="{{ store_settings.get('receipt_tin', 'TIN: 000-000-000-000 Non-VAT') }}" placeholder="e.g. TIN: 123-456-789-000 NV" oninput="updateReceiptLivePreview()">
+                    </div>
+                    <div>
+                        <label>Receipt Document Type Title:</label>
+                        <input type="text" id="cfg_title" name="receipt_title" value="{{ store_settings.get('receipt_title', 'OFFICIAL ACKNOWLEDGMENT RECEIPT') }}" required placeholder="e.g. OFFICIAL ACKNOWLEDGMENT RECEIPT" oninput="updateReceiptLivePreview()">
+                    </div>
+                </div>
+
+                <!-- PRINTER HARDWARE CONTROLS -->
+                <div style="background: #161622; padding: 14px; border-radius: 6px; border: 1px solid #2d2d3e; margin-bottom: 15px;">
+                    <div style="color: #60a5fa; font-weight: bold; font-size: 12.5px; text-transform: uppercase; margin-bottom: 10px;">
+                        Hardware Printing Dimensions & ESC/POS Auto-Cut
+                    </div>
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+                        <div>
+                            <label>Printer Thermal Paper Roll Width:</label>
+                            <select id="cfg_width" name="receipt_width" onchange="updateReceiptLivePreview()">
+                                <option value="80mm" {% if store_settings.get('receipt_width', '80mm') == '80mm' %}selected{% endif %}>Standard 80mm Counter POS (48 Cols)</option>
+                                <option value="58mm" {% if store_settings.get('receipt_width', '80mm') == '58mm' %}selected{% endif %}>Compact 58mm Mobile Bluetooth (32 Cols)</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label>Auto-Cut Feed Lines (Buffer Margins):</label>
+                            <input type="number" min="1" max="10" id="cfg_feed_lines" name="receipt_feed_lines" value="{{ store_settings.get('receipt_feed_lines', '4') }}" required placeholder="4" oninput="updateReceiptLivePreview()">
+                        </div>
+                    </div>
+                </div>
+
+                <!-- FOOTER & POLICIES -->
+                <div>
+                    <label>Sign-Off Greeting / Promotion Note:</label>
+                    <input type="text" id="cfg_footer" name="receipt_footer" value="{{ store_settings.get('receipt_footer', 'Thank you for dining with us! Have a great day!') }}" placeholder="e.g. Thank you for dining with us! Have a great day!" oninput="updateReceiptLivePreview()">
+                </div>
+
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+                    <div>
+                        <label>Store Guest Wi-Fi Note:</label>
+                        <input type="text" id="cfg_wifi" name="receipt_wifi" value="{{ store_settings.get('receipt_wifi', 'WiFi: CafeGuest / Pass: coffee2026') }}" placeholder="e.g. WiFi: CafeGuest / Pass: coffee2026" oninput="updateReceiptLivePreview()">
+                    </div>
+                    <div>
+                        <label>Return / Policy Disclaimer:</label>
+                        <input type="text" id="cfg_policy" name="receipt_policy_note" value="{{ store_settings.get('receipt_policy_note', 'Items served are non-refundable.') }}" placeholder="e.g. Items served are non-refundable." oninput="updateReceiptLivePreview()">
+                    </div>
+                </div>
+
+                <!-- TOGGLE SWITCHES -->
+                <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; margin-bottom: 20px;">
+                    <label class="maintenance-checkbox-row" style="font-size: 11.5px;">
+                        <input type="checkbox" id="cfg_show_tin" name="receipt_show_tin" value="yes" {% if store_settings.get('receipt_show_tin', 'yes') == 'yes' %}checked{% endif %} onchange="updateReceiptLivePreview()">
+                        <span>Print TIN Number</span>
+                    </label>
+                    <label class="maintenance-checkbox-row" style="font-size: 11.5px;">
+                        <input type="checkbox" id="cfg_show_wifi" name="receipt_show_wifi" value="yes" {% if store_settings.get('receipt_show_wifi', 'no') == 'yes' %}checked{% endif %} onchange="updateReceiptLivePreview()">
+                        <span>Print Guest Wi-Fi</span>
+                    </label>
+                    <label class="maintenance-checkbox-row" style="font-size: 11.5px;">
+                        <input type="checkbox" id="cfg_show_signature" name="receipt_show_signature" value="yes" {% if store_settings.get('receipt_show_signature', 'no') == 'yes' %}checked{% endif %} onchange="updateReceiptLivePreview()">
+                        <span>Print Signature Line</span>
+                    </label>
+                </div>
+
+                <button type="submit" class="action-btn btn-green" style="width:100%; padding:12px; font-size: 14px;">Save Thermal Receipt Template</button>
+            </div>
+
+            <!-- RIGHT: REAL-TIME PHYSICAL THERMAL PAPER SIMULATOR -->
+            <div class="designer-preview-pane">
+                <div style="display: flex; justify-content: space-between; width: 100%; align-items: center; margin-bottom: 12px;">
+                    <span style="font-size: 12px; font-weight: 700; color: #94a3b8; text-transform: uppercase;">Live Thermal Print Preview</span>
+                    <span id="previewWidthBadge" class="badge bg-dark border border-secondary text-info font-monospace" style="font-size: 10px;">80mm (48 Columns)</span>
+                </div>
+
+                <!-- THERMAL SLIP CONTAINER -->
+                <div class="thermal-paper shadow-lg" id="thermalPaperSlip">
+                    <div class="receipt-center">
+                        <strong style="font-size: 14.5px; display: block;" id="pv_header_name">{{ store_settings.get('receipt_header_name', username|upper) }}</strong>
+                        <span style="font-size: 10px; display: block;" id="pv_tagline">{{ store_settings.get('receipt_tagline', 'FOOD & BEVERAGE SERVICES') }}</span>
+                        <span style="font-size: 10px; display: block;" id="pv_address">{{ store_settings.get('receipt_address', 'San Jose del Monte, Bulacan') }}</span>
+                        <span style="font-size: 10px; display: block;" id="pv_contact">{{ store_settings.get('receipt_contact', '+63 900 000 0000') }}</span>
+                        <span style="font-size: 10px; display: block;" id="pv_tin_block">{{ store_settings.get('receipt_tin', 'TIN: 000-000-000-000 Non-VAT') }}</span>
+                        <strong style="font-size: 11px; display: block; margin-top: 4px;" id="pv_title">{{ store_settings.get('receipt_title', 'OFFICIAL ACKNOWLEDGMENT RECEIPT') }}</strong>
+                    </div>
+
+                    <div class="receipt-dashed"></div>
+
+                    <div class="receipt-row">
+                        <span>TXN: POS20260916_120000</span>
+                        <span>2026-09-16</span>
+                    </div>
+                    <div class="receipt-row">
+                        <span>CASHIER: Maria S.</span>
+                        <span>12:00:00 PM</span>
+                    </div>
+
+                    <div class="receipt-dashed"></div>
+
+                    <!-- SAMPLE LINE ITEMS TO PROVE NESTING & PRICING -->
+                    <div class="receipt-row">
+                        <span>1x Iced - Brown Sugar Coffee</span>
+                        <span>140.00</span>
+                    </div>
+                    <div class="receipt-row" style="padding-left: 8px; font-size: 10px; color: #374151;">
+                        <span>+ Extra Espresso Shot</span>
+                        <span>(+50.00)</span>
+                    </div>
+                    <div class="receipt-row" style="padding-left: 8px; font-size: 10px; color: #374151;">
+                        <span>* Less Ice | 50% Sugar</span>
+                        <span></span>
+                    </div>
+                    <div class="receipt-row" style="margin-top: 4px;">
+                        <span>1x Butter Croissant</span>
+                        <span>85.00</span>
+                    </div>
+
+                    <div class="receipt-dashed"></div>
+
+                    <div class="receipt-row">
+                        <span>GROSS SUBTOTAL:</span>
+                        <span>275.00</span>
+                    </div>
+                    <div class="receipt-row" style="color: #4b5563;">
+                        <span>DISCOUNT (None):</span>
+                        <span>-0.00</span>
+                    </div>
+                    <div class="receipt-row" style="font-weight: bold; font-size: 13.5px; margin-top: 4px;">
+                        <span>AMOUNT DUE:</span>
+                        <span>PHP 275.00</span>
+                    </div>
+
+                    <div class="receipt-dashed"></div>
+
+                    <div class="receipt-row">
+                        <span>TENDER (CASH):</span>
+                        <span>500.00</span>
+                    </div>
+                    <div class="receipt-row">
+                        <span>CHANGE DUE:</span>
+                        <span>225.00</span>
+                    </div>
+
+                    <div id="pv_signature_block" style="display: none; margin-top: 15px;">
+                        <div style="border-bottom: 1px solid #000; width: 80%; margin: 15px auto 4px auto;"></div>
+                        <div class="receipt-center" style="font-size: 9.5px;">CUSTOMER SIGNATURE</div>
+                    </div>
+
+                    <div class="receipt-dashed"></div>
+
+                    <!-- FOOTER & POLICIES -->
+                    <div class="receipt-center">
+                        <span id="pv_footer" style="display: block; font-size: 10.5px;">{{ store_settings.get('receipt_footer', 'Thank you for dining with us! Have a great day!') }}</span>
+                        <span id="pv_wifi_block" style="display: none; font-size: 10px; margin-top: 3px;">{{ store_settings.get('receipt_wifi', '') }}</span>
+                        <span id="pv_policy_block" style="display: block; font-size: 9.5px; color: #4b5563; margin-top: 4px;">{{ store_settings.get('receipt_policy_note', 'Items served are non-refundable.') }}</span>
+                    </div>
+
+                    <!-- AUTO-CUT FEED BUFFER ILLUSTRATOR -->
+                    <div class="receipt-feed-spacer" id="pv_feed_indicator">
+                        ---- [ESC/POS AUTO-CUT LINE: 4 FEED LINES] ----
+                    </div>
+                </div>
+            </div>
+        </div>
+    </form>
+</div>
+
+<!-- SECTION: SAAS PROFILE & PORTAL PASSWORD -->
 <div class="settings-grid">
     <div class="settings-card">
         <h3 class="card-title" style="color:#3b8ed0;">SaaS Profile Parameters</h3>
@@ -312,9 +571,9 @@
         
         <div style="margin-top: 15px; padding-top: 15px; border-top: 1px dashed #3f3f46;">
             <p style="font-size: 12px; color: #cbd5e1; font-weight: bold; margin-bottom: 5px;">Formatting Instructions:</p>
-            <p style="font-size: 11px; color: #a1a1aa; margin-bottom: 5px;">* <b>Ingredients & Products:</b> To add entirely new items, leave the ID column blank. To bulk update existing items, keep the ID intact in your spreadsheet. Token-sorted matching automatically reconciles word order variations (e.g. "White Onion" vs "Onion White").</p>
-            <p style="font-size: 11px; color: #a1a1aa; margin-bottom: 5px;">* <b>Menu Recipes:</b> Map Product_ID (or Product_Name), Ingredient_ID (or Ingredient_Name), Quantity_Required, and Unit (e.g., g, ml, pcs). Automatically updates retail food costs and profit margins.</p>
-            <p style="font-size: 11px; color: #a1a1aa; margin-bottom: 5px;">* <b>Kitchen Prep Recipes:</b> Map Prepped_ID (or Prepped_Name), Raw_Ingredient_ID (or Raw_Ingredient_Name), Quantity_Required, Unit, and Batch_Yield (e.g. 3424 g). Automatically calculates cost-per-UOM for in-house sub-assemblies.</p>
+            <p style="font-size: 11px; color: #a1a1aa; margin-bottom: 5px;">* <b>Ingredients & Products:</b> To add entirely new items, leave the ID column blank. To bulk update existing items, keep the ID intact in your spreadsheet. Token-sorted matching automatically reconciles word order variations.</p>
+            <p style="font-size: 11px; color: #a1a1aa; margin-bottom: 5px;">* <b>Menu Recipes:</b> Map Product_ID (or Product_Name), Ingredient_ID (or Ingredient_Name), Quantity_Required, and Unit. Automatically updates retail food costs and profit margins.</p>
+            <p style="font-size: 11px; color: #a1a1aa; margin-bottom: 5px;">* <b>Kitchen Prep Recipes:</b> Map Prepped_ID, Raw_Ingredient_ID, Quantity_Required, Unit, and Batch_Yield. Automatically calculates cost-per-UOM for in-house sub-assemblies.</p>
         </div>
     </div>
 
@@ -357,7 +616,7 @@
                 </label>
                 <label class="maintenance-checkbox-row" style="color: #cbd5e1;">
                     <input type="checkbox" name="wipe_products" value="yes">
-                    <span>Flush Retail Finished Menu Product Catalogs</span>
+                    <span>Flush Retail Finished Menu Product Catalogs & Modifiers</span>
                 </label>
             </div>
 
@@ -400,6 +659,83 @@ function openNativePasswordResetOverlay(staffId, staffName) {
 function closeNativePasswordResetOverlay() {
     document.getElementById('nativePasswordResetBackdrop').style.display = 'none';
 }
+
+// REAL-TIME PHYSICAL THERMAL RECEIPT LIVE-PREVIEW ENGINE
+function updateReceiptLivePreview() {
+    const headerName = document.getElementById('cfg_header_name').value.trim() || 'STORE NAME';
+    const tagline = document.getElementById('cfg_tagline').value.trim();
+    const address = document.getElementById('cfg_address').value.trim();
+    const contact = document.getElementById('cfg_contact').value.trim();
+    const tin = document.getElementById('cfg_tin').value.trim();
+    const title = document.getElementById('cfg_title').value.trim() || 'OFFICIAL RECEIPT';
+    const footer = document.getElementById('cfg_footer').value.trim();
+    const wifi = document.getElementById('cfg_wifi').value.trim();
+    const policy = document.getElementById('cfg_policy').value.trim();
+    
+    const width = document.getElementById('cfg_width').value;
+    const feedLines = parseInt(document.getElementById('cfg_feed_lines').value) || 4;
+
+    const showTin = document.getElementById('cfg_show_tin').checked;
+    const showWifi = document.getElementById('cfg_show_wifi').checked;
+    const showSig = document.getElementById('cfg_show_signature').checked;
+
+    // Update Header Text
+    document.getElementById('pv_header_name').textContent = headerName;
+    
+    const tagEl = document.getElementById('pv_tagline');
+    tagEl.textContent = tagline;
+    tagEl.style.display = tagline ? 'block' : 'none';
+
+    const addrEl = document.getElementById('pv_address');
+    addrEl.textContent = address;
+    addrEl.style.display = address ? 'block' : 'none';
+
+    const contEl = document.getElementById('pv_contact');
+    contEl.textContent = contact;
+    contEl.style.display = contact ? 'block' : 'none';
+
+    const tinEl = document.getElementById('pv_tin_block');
+    tinEl.textContent = tin;
+    tinEl.style.display = (showTin && tin) ? 'block' : 'none';
+
+    document.getElementById('pv_title').textContent = title;
+
+    // Update Footer & Notes
+    const footEl = document.getElementById('pv_footer');
+    footEl.textContent = footer;
+    footEl.style.display = footer ? 'block' : 'none';
+
+    const wifiEl = document.getElementById('pv_wifi_block');
+    wifiEl.textContent = wifi;
+    wifiEl.style.display = (showWifi && wifi) ? 'block' : 'none';
+
+    const polEl = document.getElementById('pv_policy_block');
+    polEl.textContent = policy;
+    polEl.style.display = policy ? 'block' : 'none';
+
+    document.getElementById('pv_signature_block').style.display = showSig ? 'block' : 'none';
+
+    // Width Simulation (80mm vs 58mm)
+    const slip = document.getElementById('thermalPaperSlip');
+    const badge = document.getElementById('previewWidthBadge');
+    if (width === '58mm') {
+        slip.classList.add('paper-58mm');
+        badge.textContent = '58mm Compact (32 Columns)';
+        badge.className = 'badge bg-dark border border-secondary text-warning font-monospace';
+    } else {
+        slip.classList.remove('paper-58mm');
+        badge.textContent = '80mm Standard (48 Columns)';
+        badge.className = 'badge bg-dark border border-secondary text-info font-monospace';
+    }
+
+    // Auto-cut Feed Line Clearance Indicator
+    const feedIndicator = document.getElementById('pv_feed_indicator');
+    feedIndicator.innerHTML = `---- [ESC/POS AUTO-CUT: ${feedLines} FEED LINE${feedLines > 1 ? 'S' : ''}] ----`;
+}
+
+document.addEventListener("DOMContentLoaded", function() {
+    updateReceiptLivePreview();
+});
 </script>
 
 {% endblock %}

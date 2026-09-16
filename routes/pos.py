@@ -1,4 +1,4 @@
-# routes/pos.py - Live Counter POS Terminal & Instant Ledger Engine
+# routes/pos.py - Live Counter POS Terminal & Instant Ledger Engine with Dynamic Thermal Printing
 from flask import Blueprint, request, jsonify, render_template, session, redirect
 from modules.database import InventoryDB
 from datetime import datetime
@@ -8,8 +8,8 @@ import json
 
 pos_bp = Blueprint('pos', __name__)
 
-def ensure_pos_tables_exist(db_path):
-    """Ensures Sales, Cash_Drawer_Logs, Recipes, Ingredients, Modifiers, and Staff_Accounts tables are initialized."""
+def ensure_pos_tables_exist(db_path, username="STORE"):
+    """Ensures Sales, Cash_Drawer_Logs, Recipes, Ingredients, Modifiers, Modifier_Groups, Product_Modifiers, Staff_Accounts, and Store_Settings exist."""
     conn = sqlite3.connect(db_path, timeout=20.0)
     cursor = conn.cursor()
     
@@ -88,7 +88,6 @@ def ensure_pos_tables_exist(db_path):
         )
     """)
 
-    # Auto-migration: Check if existing Modifiers table is missing Group_ID or Category
     cursor.execute("PRAGMA table_info(Modifiers)")
     cols = [col[1] for col in cursor.fetchall()]
     if 'Group_ID' not in cols:
@@ -126,28 +125,50 @@ def ensure_pos_tables_exist(db_path):
         )
     """)
 
-    # Backward compatibility: assign legacy orphaned modifiers into a default "Add-ons & Upgrades" group
-    cursor.execute("SELECT COUNT(*) FROM Modifiers WHERE Group_ID IS NULL OR TRIM(Group_ID) = ''")
-    orphaned_cnt = cursor.fetchone()[0]
-    if orphaned_cnt > 0:
-        cursor.execute("SELECT Group_ID FROM Modifier_Groups WHERE Group_Name = 'Add-ons & Upgrades'")
-        row = cursor.fetchone()
-        if row:
-            grp_id = row[0]
-        else:
-            grp_id = 'MODGRP001'
-            cursor.execute("INSERT OR IGNORE INTO Modifier_Groups (Group_ID, Group_Name, Selection_Type, Active) VALUES (?, 'Add-ons & Upgrades', 'multiple', 'Yes')", (grp_id,))
-        cursor.execute("UPDATE Modifiers SET Group_ID = ? WHERE Group_ID IS NULL OR TRIM(Group_ID) = ''", (grp_id,))
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS Store_Settings (
+            Setting_Key TEXT PRIMARY KEY,
+            Setting_Value TEXT
+        )
+    """)
+
+    default_settings = {
+        'receipt_header_name': username.upper(),
+        'receipt_tagline': 'FOOD & BEVERAGE SERVICES',
+        'receipt_address': 'San Jose del Monte, Bulacan',
+        'receipt_contact': '+63 900 000 0000',
+        'receipt_tin': 'TIN: 000-000-000-000 Non-VAT',
+        'receipt_title': 'OFFICIAL ACKNOWLEDGMENT RECEIPT',
+        'receipt_footer': 'Thank you for dining with us! Have a great day!',
+        'receipt_wifi': 'WiFi: CafeGuest / Pass: coffee2026',
+        'receipt_policy_note': 'Items served are non-refundable.',
+        'receipt_width': '80mm',
+        'receipt_feed_lines': '4',
+        'receipt_show_tin': 'yes',
+        'receipt_show_wifi': 'no',
+        'receipt_show_signature': 'no'
+    }
+    for k, v in default_settings.items():
+        cursor.execute("INSERT OR IGNORE INTO Store_Settings (Setting_Key, Setting_Value) VALUES (?, ?)", (k, v))
 
     conn.commit()
     conn.close()
 
+def get_receipt_config(db_path, username="STORE"):
+    """Retrieves all customized receipt and hardware formatting options from Store_Settings."""
+    ensure_pos_tables_exist(db_path, username)
+    conn = sqlite3.connect(db_path, timeout=20.0)
+    cursor = conn.cursor()
+    cursor.execute("SELECT Setting_Key, Setting_Value FROM Store_Settings")
+    settings = {row[0]: row[1] for row in cursor.fetchall()}
+    conn.close()
+    return settings
+
 @pos_bp.route('/portal/<username>/pos/switch-staff', methods=['POST'])
 def switch_pos_staff(username):
-    """Fast cashier PIN switch endpoint."""
     username = username.lower().strip()
     db_path = f"data/client_{username}.db"
-    ensure_pos_tables_exist(db_path)
+    ensure_pos_tables_exist(db_path, username)
 
     try:
         payload = request.get_json(force=True)
@@ -199,7 +220,7 @@ def live_pos_screen(username):
         return redirect('/login')
 
     db_path = f"data/client_{username}.db"
-    ensure_pos_tables_exist(db_path)
+    ensure_pos_tables_exist(db_path, username)
     db = InventoryDB(db_path)
 
     products_df = db.read_tab('Products')
@@ -309,7 +330,7 @@ def live_pos_screen(username):
         for p in products_list:
             pid = str(p.get('Product_ID', '')).strip()
             
-            # 1. Product Bottleneck Stock
+            # Product Bottleneck Stock
             if pid in recipe_map and len(recipe_map[pid]) > 0:
                 bottleneck_val = None
                 bottleneck_name = ""
@@ -349,7 +370,7 @@ def live_pos_screen(username):
                 p['depleted_ingredients'] = []
                 p['deficit_breakdown'] = []
 
-            # 2. Attach ONLY specifically toggled modifier sets
+            # Attach ONLY specifically toggled modifier sets
             assigned_group_ids = prod_mod_links.get(pid, [])
             p['modifier_groups'] = [
                 modifier_groups_master[gid] for gid in assigned_group_ids if gid in modifier_groups_master
@@ -365,9 +386,10 @@ def live_pos_screen(username):
             p['modifier_groups'] = []
 
     active_cashier = session.get('staff_username', session.get('logged_in_user', username)).title()
+    receipt_config = get_receipt_config(db_path, username)
 
     store_info = {
-        'name': username.upper(),
+        'name': receipt_config.get('receipt_header_name', username.upper()),
         'cashier': active_cashier,
         'date': datetime.now().strftime("%Y-%m-%d")
     }
@@ -377,18 +399,18 @@ def live_pos_screen(username):
         username=username,
         products=products_list,
         categories=categories,
-        store_info=store_info
+        store_info=store_info,
+        receipt_config=receipt_config
     )
 
 @pos_bp.route('/portal/<username>/pos/checkout', methods=['POST'])
 def process_pos_checkout(username):
-    """Processes settlement, generates line sales, depletes ingredients, and logs cash drawer and audit trails."""
     username = username.lower().strip()
     if session.get('logged_in_user') != username and not session.get('is_admin'):
         return jsonify({'status': 'error', 'message': 'Unauthorized session'}), 401
 
     db_path = f"data/client_{username}.db"
-    ensure_pos_tables_exist(db_path)
+    ensure_pos_tables_exist(db_path, username)
 
     try:
         payload = request.get_json(force=True)
@@ -471,7 +493,6 @@ def process_pos_checkout(username):
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """, (sale_line_id, sale_date, sale_time, p_id, p_name, qty, unit_price, line_total, reason_str, operator))
 
-            # Deplete product ingredients
             if p_id in recipe_map:
                 for ing_id, req_qty in recipe_map[p_id]:
                     total_deplete = req_qty * qty
@@ -495,7 +516,6 @@ def process_pos_checkout(username):
                             f"POS Sale: {qty:g}x {p_name} ({txn_id})"
                         ))
 
-            # Process Modifiers attached to this item
             for mod in item.get('modifiers', []):
                 m_id = str(mod.get('id', ''))
                 m_name = str(mod.get('name', 'Modifier'))

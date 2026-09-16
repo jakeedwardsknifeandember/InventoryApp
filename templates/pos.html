@@ -5,6 +5,10 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>{{ store_info.name }} - Live Counter POS</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+    
+    <!-- SAFE JINJA2 RECEIPT CONFIGURATION EXTRACTOR: PREVENTS ANY UNDEFINEDERROR -->
+    {% set rc = receipt_config if (receipt_config is defined and receipt_config) else {} %}
+    
     <style>
         :root {
             --pos-bg: #0f0f13;
@@ -551,7 +555,7 @@
             cursor: pointer;
         }
 
-        /* 80mm ESC/POS Thermal Receipt */
+        /* DYNAMIC ESC/POS THERMAL RECEIPT PRINT MEDIA */
         #printableReceipt { display: none; }
         @media print {
             body * { visibility: hidden; }
@@ -561,18 +565,18 @@
                 position: absolute;
                 left: 0;
                 top: 0;
-                width: 80mm;
+                width: {{ '58mm' if rc.get('receipt_width') == '58mm' else '80mm' }};
                 margin: 0;
                 padding: 4mm 6mm;
                 color: #000000 !important;
                 background: #ffffff !important;
                 font-family: "Courier New", Courier, monospace;
-                font-size: 12px;
-                line-height: 1.3;
+                font-size: {{ '10px' if rc.get('receipt_width') == '58mm' else '12px' }};
+                line-height: 1.35;
             }
             .thermal-center { text-align: center; }
             .thermal-right { text-align: right; }
-            .thermal-row { display: flex; justify-content: space-between; }
+            .thermal-row { display: flex; justify-content: space-between; align-items: baseline; }
             .thermal-divider { border-top: 1px dashed #000000; margin: 6px 0; }
         }
     </style>
@@ -871,15 +875,19 @@
     </div>
 </div>
 
-<!-- 80MM THERMAL RECEIPT PRINT SHELL -->
+<!-- DYNAMIC BACK-OFFICE FORMATTED ESC/POS THERMAL RECEIPT PRINT SHELL -->
 <div id="printableReceipt">
     <div class="thermal-center">
-        <strong style="font-size: 15px;">{{ store_info.name }}</strong><br>
-        FOOD & BEVERAGE SERVICES<br>
-        San Jose del Monte, Bulacan<br>
-        OFFICIAL ACKNOWLEDGMENT RECEIPT<br>
+        <strong style="font-size: 14.5px;">{{ rc.get('receipt_header_name', store_info.name) }}</strong><br>
+        {% if rc.get('receipt_tagline') %}{{ rc.get('receipt_tagline') }}<br>{% endif %}
+        {% if rc.get('receipt_address') %}{{ rc.get('receipt_address') }}<br>{% endif %}
+        {% if rc.get('receipt_contact') %}{{ rc.get('receipt_contact') }}<br>{% endif %}
+        {% if rc.get('receipt_show_tin') == 'yes' and rc.get('receipt_tin') %}{{ rc.get('receipt_tin') }}<br>{% endif %}
+        <strong style="font-size: 11.5px; margin-top: 3px; display: inline-block;">{{ rc.get('receipt_title', 'OFFICIAL ACKNOWLEDGMENT RECEIPT') }}</strong><br>
     </div>
+
     <div class="thermal-divider"></div>
+
     <div class="thermal-row">
         <span>TXN: <span id="rTxnId">POS00000</span></span>
         <span id="rDate">2026-09-16</span>
@@ -888,9 +896,13 @@
         <span>CASHIER: <span id="rCashier">{{ store_info.cashier }}</span></span>
         <span id="rTime">12:00:00</span>
     </div>
+
     <div class="thermal-divider"></div>
+
     <div id="receiptItemsBlock"></div>
+
     <div class="thermal-divider"></div>
+
     <div class="thermal-row">
         <span>GROSS SUBTOTAL:</span>
         <span id="rSubtotal">0.00</span>
@@ -899,11 +911,13 @@
         <span id="rDiscountLabel">DISCOUNT:</span>
         <span id="rDiscount">-0.00</span>
     </div>
-    <div class="thermal-row" style="font-weight: bold; font-size: 14px; margin-top: 4px;">
+    <div class="thermal-row" style="font-weight: bold; font-size: 13.5px; margin-top: 4px;">
         <span>AMOUNT DUE:</span>
         <span id="rTotal">PHP 0.00</span>
     </div>
+
     <div class="thermal-divider"></div>
+
     <div class="thermal-row">
         <span>TENDER (<span id="rTenderType">CASH</span>):</span>
         <span id="rTendered">0.00</span>
@@ -916,11 +930,32 @@
         <span>REF #:</span>
         <span id="rRefNo">N/A</span>
     </div>
+
+    {% if rc.get('receipt_show_signature') == 'yes' %}
+    <div style="margin-top:16px; border-bottom:1px solid #000; width:75%; margin-left:auto; margin-right:auto;"></div>
+    <div class="thermal-center" style="font-size:9.5px; margin-top:2px;">CUSTOMER SIGNATURE</div>
+    {% endif %}
+
     <div class="thermal-divider"></div>
-    <div class="thermal-center" style="font-size: 11px;">
-        THANK YOU FOR DINING WITH US!<br>
-        HAVE A GREAT DAY!
+
+    <!-- DYNAMIC FOOTER & POLICIES -->
+    <div class="thermal-center">
+        {% if rc.get('receipt_footer') %}
+            {{ rc.get('receipt_footer') }}<br>
+        {% endif %}
+        {% if rc.get('receipt_show_wifi') == 'yes' and rc.get('receipt_wifi') %}
+            <span style="font-size:10px;">{{ rc.get('receipt_wifi') }}</span><br>
+        {% endif %}
+        {% if rc.get('receipt_policy_note') %}
+            <span style="font-size:9.5px; color:#333;">{{ rc.get('receipt_policy_note') }}</span>
+        {% endif %}
     </div>
+
+    <!-- MECHANICAL AUTO-CUT FEED LINE CLEARANCE BUFFER -->
+    {% set feed_lines = (rc.get('receipt_feed_lines', '4')|string)|int if rc.get('receipt_feed_lines') else 4 %}
+    {% for _ in range(feed_lines) %}
+    <div>&nbsp;</div>
+    {% endfor %}
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
@@ -1059,7 +1094,6 @@
         const container = document.getElementById('dynamicModifierGroupsContainer');
         container.innerHTML = '';
 
-        // If editing existing item, populate existing picks
         let preloadedMods = [];
         if (existingCartIndex !== null && cart[existingCartIndex]) {
             preloadedMods = cart[existingCartIndex].modifiers || [];
@@ -1084,12 +1118,10 @@
             grp.options.forEach((opt, optIdx) => {
                 const isDepleted = (opt.portions_left !== null && opt.portions_left <= 0);
                 
-                // Determine if active
                 let isActive = false;
                 if (existingCartIndex !== null) {
                     isActive = preloadedMods.some(m => m.id === opt.id);
                 } else if (isSingle && optIdx === 0 && opt.price === 0) {
-                    // Default first free option for single choice (e.g. Normal Ice)
                     isActive = true;
                 }
 
@@ -1152,7 +1184,6 @@
         }
 
         if (grpType === 'single') {
-            // Radio behavior: Uncheck other options in this group
             const parentGrid = pillElement.closest('.mod-pill-grid');
             parentGrid.querySelectorAll('.mod-option-pill').forEach(p => {
                 p.classList.remove('active');
@@ -1170,7 +1201,6 @@
                 group_id: grpId
             };
         } else {
-            // Checkbox behavior: Toggle
             if (activeCustomization.selectedModifiers[optId]) {
                 delete activeCustomization.selectedModifiers[optId];
                 pillElement.classList.remove('active');

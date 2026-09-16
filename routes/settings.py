@@ -1,4 +1,4 @@
-# routes/settings.py - Enterprise Settings Engine with Multi-Encoding CSV Sync, Token-Sorted Key Matching & Integrity Guard
+# routes/settings.py - Enterprise Settings Engine with Multi-Encoding CSV Sync, Token-Sorted Key Matching, Integrity Guard & Thermal Receipt Designer
 from flask import Blueprint, request, redirect, session, render_template, send_file
 from modules.database import InventoryDB
 import sqlite3
@@ -21,13 +21,7 @@ def normalize_text_key(text):
     return re.sub(r'\s+', ' ', s).strip()
 
 def token_sorted_key(text):
-    """
-    Bag-of-words token-sorted key.
-    Resolves word inversions automatically:
-      'Onion White' -> 'onion white'
-      'White Onion' -> 'onion white'
-      'Hot - Americano Coffee' -> 'americano coffee hot'
-    """
+    """Bag-of-words token-sorted key to resolve word order inversions."""
     norm = normalize_text_key(text)
     if not norm:
         return ""
@@ -40,10 +34,7 @@ def alphanumeric_text_key(text):
     return re.sub(r'[^a-zA-Z0-9]', '', str(text).lower())
 
 def build_entity_resolver(id_name_pairs):
-    """
-    Constructs a multi-stage entity resolver supporting exact ID, exact name,
-    normalized spacing, bag-of-words token sorting, and alphanumeric matching.
-    """
+    """Constructs a multi-stage entity resolver."""
     valid_ids = set()
     exact_map = {}
     norm_map = {}
@@ -91,8 +82,8 @@ def build_entity_resolver(id_name_pairs):
 
     return valid_ids, resolve
 
-def ensure_store_settings_exist(client_db_path):
-    """Ensures the Store_Settings key-value configuration table exists with defaults."""
+def ensure_store_settings_exist(client_db_path, username="STORE"):
+    """Ensures the Store_Settings key-value table exists with defaults including thermal printer configs."""
     conn = sqlite3.connect(client_db_path)
     cursor = conn.cursor()
     cursor.execute("""
@@ -104,16 +95,30 @@ def ensure_store_settings_exist(client_db_path):
     default_settings = {
         'enforce_blind_count': 'yes',
         'variance_alert_pct': '2.0',
-        'variance_alert_value': '100.0'
+        'variance_alert_value': '100.0',
+        'receipt_header_name': username.upper(),
+        'receipt_tagline': 'FOOD & BEVERAGE SERVICES',
+        'receipt_address': 'San Jose del Monte, Bulacan',
+        'receipt_contact': '+63 900 000 0000',
+        'receipt_tin': 'TIN: 000-000-000-000 Non-VAT',
+        'receipt_title': 'OFFICIAL ACKNOWLEDGMENT RECEIPT',
+        'receipt_footer': 'Thank you for dining with us! Have a great day!',
+        'receipt_wifi': 'WiFi: CafeGuest / Pass: coffee2026',
+        'receipt_policy_note': 'Items served are non-refundable.',
+        'receipt_width': '80mm',
+        'receipt_feed_lines': '4',
+        'receipt_show_tin': 'yes',
+        'receipt_show_wifi': 'no',
+        'receipt_show_signature': 'no'
     }
     for k, v in default_settings.items():
         cursor.execute("INSERT OR IGNORE INTO Store_Settings (Setting_Key, Setting_Value) VALUES (?, ?)", (k, v))
     conn.commit()
     conn.close()
 
-def get_store_settings(client_db_path):
+def get_store_settings(client_db_path, username="STORE"):
     """Retrieves store governance and operational policies dictionary."""
-    ensure_store_settings_exist(client_db_path)
+    ensure_store_settings_exist(client_db_path, username)
     conn = sqlite3.connect(client_db_path)
     cursor = conn.cursor()
     cursor.execute("SELECT Setting_Key, Setting_Value FROM Store_Settings")
@@ -150,12 +155,7 @@ def ensure_staff_table_exists(client_db_path):
     conn.close()
 
 def heal_database_integrity(conn):
-    """
-    Guarantees structural integrity across recipes, types, and mathematical pricing:
-    1. Restores prepped items missing from the Ingredients table.
-    2. Reasserts PREPPED status for items defined in Prep_Recipes.
-    3. Enforces Cost_Per_Unit = Purchase_Cost / Pack_Size for all RAW wholesale goods.
-    """
+    """Guarantees structural integrity across recipes, types, and mathematical pricing."""
     cursor = conn.cursor()
     try:
         cursor.execute("""
@@ -358,7 +358,7 @@ def web_settings_tab(username):
                     feedback_msg = f"Restoration Fault during file overwrite sequencing: {str(e)}"
                     alert_type = "danger"
 
-        # 7. BULK CSV IMPORT (MULTI-ENCODING, TOKEN-SORTED MATCHING & REPORTING)
+        # 7. BULK CSV IMPORT
         elif action == 'bulk_import':
             target_table = request.form.get('import_target')
             uploaded_file = request.files.get('csv_file')
@@ -385,7 +385,7 @@ def web_settings_tab(username):
                     df = pd.read_csv(stream)
                     conn = sqlite3.connect(client_db_path, timeout=20.0)
 
-                    # ===== SCENARIO A: PRODUCT FINISHED RECIPES IMPORT =====
+                    # SCENARIO A: PRODUCT RECIPES
                     if target_table == 'recipes':
                         col_map = {str(col).lower().strip().replace(' ', '_'): col for col in df.columns}
                         
@@ -472,17 +472,10 @@ def web_settings_tab(username):
                             conn.close()
 
                             client_db.update_all_product_costs()
-                            client_db.log_user_action(
-                                username=username,
-                                action_type="BULK_IMPORT_RECIPES",
-                                module="Recipes",
-                                details=f"Bulk imported recipe matrices for {len(recipes_by_product)} products ({total_lines} lines)"
-                            )
-
-                            feedback_msg = f"Successfully imported recipes for {len(recipes_by_product)} products ({total_lines} component lines)."
+                            feedback_msg = f"Successfully imported recipes for {len(recipes_by_product)} products ({total_lines} lines)."
                             if skipped_rows:
                                 session['skipped_errors'] = skipped_rows
-                                feedback_msg += f" Notice: {len(skipped_rows)} recipe line(s) skipped due to unmatched items. See details below."
+                                feedback_msg += f" Notice: {len(skipped_rows)} recipe line(s) skipped due to unmatched items."
                                 alert_type = "warning"
                             else:
                                 alert_type = "success"
@@ -490,22 +483,22 @@ def web_settings_tab(username):
                             conn.close()
                             if skipped_rows:
                                 session['skipped_errors'] = skipped_rows
-                                feedback_msg = f"Import Notice: All {len(skipped_rows)} rows were skipped because items were not found in catalogs. See details below."
+                                feedback_msg = f"Import Notice: All {len(skipped_rows)} rows skipped because items were not found."
                             else:
-                                feedback_msg = "Error: No valid recipe rows found in CSV spreadsheet."
+                                feedback_msg = "Error: No valid recipe rows found in CSV."
                             alert_type = "danger"
 
-                    # ===== SCENARIO B: KITCHEN PREP SUB-RECIPES IMPORT =====
+                    # SCENARIO B: KITCHEN PREP RECIPES
                     elif target_table == 'prep_recipes':
                         col_map = {str(col).lower().strip().replace(' ', '_'): col for col in df.columns}
                         
                         prepped_id_col = col_map.get('prepped_id') or col_map.get('prepped_ingredient_id') or col_map.get('prep_id')
-                        prepped_name_col = col_map.get('prepped_name') or col_map.get('prepped_item') or col_map.get('prepped_ingredient') or col_map.get('prep_name')
-                        raw_id_col = col_map.get('raw_ingredient_id') or col_map.get('raw_id') or col_map.get('ingredient_id') or col_map.get('ing_id')
-                        raw_name_col = col_map.get('raw_ingredient_name') or col_map.get('raw_name') or col_map.get('ingredient_name') or col_map.get('raw_item')
-                        qty_col = col_map.get('quantity_required') or col_map.get('quantity') or col_map.get('qty') or col_map.get('amount')
+                        prepped_name_col = col_map.get('prepped_name') or col_map.get('prepped_item') or col_map.get('prep_name')
+                        raw_id_col = col_map.get('raw_ingredient_id') or col_map.get('raw_id') or col_map.get('ingredient_id')
+                        raw_name_col = col_map.get('raw_ingredient_name') or col_map.get('raw_name') or col_map.get('ingredient_name')
+                        qty_col = col_map.get('quantity_required') or col_map.get('quantity') or col_map.get('qty')
                         unit_col = col_map.get('unit') or col_map.get('uom')
-                        yield_col = col_map.get('batch_yield') or col_map.get('yield') or col_map.get('output_yield') or col_map.get('batch_output_yield')
+                        yield_col = col_map.get('batch_yield') or col_map.get('yield') or col_map.get('output_yield')
 
                         ingredients_db = pd.read_sql("SELECT Ingredient_ID, Ingredient_Name, Unit FROM Ingredients", conn)
                         ing_pairs = list(zip(ingredients_db['Ingredient_ID'], ingredients_db['Ingredient_Name']))
@@ -521,7 +514,7 @@ def web_settings_tab(username):
 
                             resolved_pid = resolve_ingredient(raw_pid, raw_pname)
                             if not resolved_pid:
-                                skipped_rows.append(f"Row {row_idx+2}: Prepped component '{raw_pname or raw_pid}' not found in Ingredients catalog. Register it under Ingredients first.")
+                                skipped_rows.append(f"Row {row_idx+2}: Prepped component '{raw_pname or raw_pid}' not found in Ingredients.")
                                 continue
 
                             raw_iid = str(row[raw_id_col]).strip() if raw_id_col and pd.notna(row.get(raw_id_col)) else ""
@@ -529,7 +522,7 @@ def web_settings_tab(username):
 
                             resolved_iid = resolve_ingredient(raw_iid, raw_iname)
                             if not resolved_iid:
-                                skipped_rows.append(f"Row {row_idx+2}: Raw ingredient '{raw_iname or raw_iid}' not found in Ingredients catalog.")
+                                skipped_rows.append(f"Row {row_idx+2}: Raw ingredient '{raw_iname or raw_iid}' not found in Ingredients.")
                                 continue
 
                             try:
@@ -595,17 +588,10 @@ def web_settings_tab(username):
                             conn.close()
 
                             client_db.update_all_product_costs()
-                            client_db.log_user_action(
-                                username=username,
-                                action_type="BULK_IMPORT_PREP_RECIPES",
-                                module="Recipes",
-                                details=f"Bulk imported kitchen prep formulas for {len(prep_recipes_by_item)} components ({total_lines} lines)"
-                            )
-
-                            feedback_msg = f"Successfully imported kitchen prep blueprints for {len(prep_recipes_by_item)} items ({total_lines} constituent lines)."
+                            feedback_msg = f"Successfully imported kitchen prep blueprints for {len(prep_recipes_by_item)} items ({total_lines} lines)."
                             if skipped_rows:
                                 session['skipped_errors'] = skipped_rows
-                                feedback_msg += f" Notice: {len(skipped_rows)} kitchen prep line(s) skipped due to unmatched items. See details below."
+                                feedback_msg += f" Notice: {len(skipped_rows)} line(s) skipped due to unmatched items."
                                 alert_type = "warning"
                             else:
                                 alert_type = "success"
@@ -613,12 +599,12 @@ def web_settings_tab(username):
                             conn.close()
                             if skipped_rows:
                                 session['skipped_errors'] = skipped_rows
-                                feedback_msg = f"Import Notice: All {len(skipped_rows)} rows were skipped because constituents were not found in Ingredients. See details below."
+                                feedback_msg = f"Import Notice: All {len(skipped_rows)} rows skipped because constituents were not found in Ingredients."
                             else:
-                                feedback_msg = "Error: No valid kitchen prep rows found in CSV spreadsheet."
+                                feedback_msg = "Error: No valid kitchen prep rows found in CSV."
                             alert_type = "danger"
 
-                    # ===== SCENARIO C: INGREDIENTS OR PRODUCTS SAFE UPSERT =====
+                    # SCENARIO C: INGREDIENTS OR PRODUCTS SAFE UPSERT
                     else:
                         cursor = conn.cursor()
                         is_ingredients = (target_table == 'ingredients')
@@ -735,7 +721,7 @@ def web_settings_tab(username):
                         conn.close()
 
                         client_db.update_all_product_costs()
-                        feedback_msg = f"Success: Safely processed {processed_count} records into {target_table_name}. Packaging costs verified and sub-recipes preserved."
+                        feedback_msg = f"Success: Safely processed {processed_count} records into {target_table_name}."
                         alert_type = "success"
 
                 except Exception as e:
@@ -793,7 +779,6 @@ def web_settings_tab(username):
                     """
                     df = pd.read_sql(query, conn)
                     conn.close()
-                    
                     if not df.empty and 'Quantity_Required' in df.columns:
                         df['Quantity_Required'] = pd.to_numeric(df['Quantity_Required'], errors='coerce').fillna(0.0)
 
@@ -814,7 +799,6 @@ def web_settings_tab(username):
                     """
                     df = pd.read_sql(query, conn)
                     conn.close()
-
                     if not df.empty:
                         df['Quantity_Required'] = pd.to_numeric(df['Quantity_Required'], errors='coerce').fillna(0.0)
                         df['Batch_Yield'] = pd.to_numeric(df['Batch_Yield'], errors='coerce').fillna(1.0)
@@ -859,8 +843,8 @@ def web_settings_tab(username):
                         wiped_categories.append("Raw Material Ingredients List")
                         
                     if request.form.get('wipe_products'):
-                        tables_to_wipe.extend(['Products', 'Modifiers'])
-                        wiped_categories.append("Retail Finished Menu Product Catalogs")
+                        tables_to_wipe.extend(['Products', 'Modifiers', 'Modifier_Groups', 'Product_Modifiers'])
+                        wiped_categories.append("Retail Finished Menu Product Catalogs & Modifiers")
                     
                     if not tables_to_wipe:
                         feedback_msg = "Maintenance Notice: Deletion sweep aborted because no data components were selected."
@@ -904,7 +888,7 @@ def web_settings_tab(username):
             except (ValueError, TypeError):
                 alert_val = 100.0
 
-            ensure_store_settings_exist(client_db_path)
+            ensure_store_settings_exist(client_db_path, username)
             conn = sqlite3.connect(client_db_path)
             cursor = conn.cursor()
             cursor.execute("INSERT OR REPLACE INTO Store_Settings (Setting_Key, Setting_Value) VALUES ('enforce_blind_count', ?)", (enforce_blind,))
@@ -913,18 +897,60 @@ def web_settings_tab(username):
             conn.commit()
             conn.close()
 
-            if hasattr(client_db, 'log_user_action'):
-                try:
-                    client_db.log_user_action(
-                        username=username,
-                        action_type="UPDATE_AUDIT_POLICY",
-                        module="Settings",
-                        details=f"Updated audit policy: Blind Counting={enforce_blind}, Alert Threshold={alert_pct}%, Loss Trigger=PHP {alert_val:.2f}"
-                    )
-                except Exception:
-                    pass
-
             feedback_msg = "Success: Inventory Audit & Governance policy updated successfully."
+            alert_type = "success"
+
+        # 12. SAVE THERMAL RECEIPT TEMPLATE & PRINTER HARDWARE CONFIG
+        elif action == 'save_receipt_config':
+            receipt_header_name = request.form.get('receipt_header_name', '').strip()
+            receipt_tagline = request.form.get('receipt_tagline', '').strip()
+            receipt_address = request.form.get('receipt_address', '').strip()
+            receipt_contact = request.form.get('receipt_contact', '').strip()
+            receipt_tin = request.form.get('receipt_tin', '').strip()
+            receipt_title = request.form.get('receipt_title', '').strip()
+            receipt_footer = request.form.get('receipt_footer', '').strip()
+            receipt_wifi = request.form.get('receipt_wifi', '').strip()
+            receipt_policy_note = request.form.get('receipt_policy_note', '').strip()
+            receipt_width = request.form.get('receipt_width', '80mm').strip()
+            try:
+                receipt_feed_lines = int(request.form.get('receipt_feed_lines', 4) or 4)
+                if receipt_feed_lines < 1:
+                    receipt_feed_lines = 1
+                elif receipt_feed_lines > 10:
+                    receipt_feed_lines = 10
+            except (ValueError, TypeError):
+                receipt_feed_lines = 4
+
+            receipt_show_tin = 'yes' if request.form.get('receipt_show_tin') == 'yes' else 'no'
+            receipt_show_wifi = 'yes' if request.form.get('receipt_show_wifi') == 'yes' else 'no'
+            receipt_show_signature = 'yes' if request.form.get('receipt_show_signature') == 'yes' else 'no'
+
+            receipt_settings_data = {
+                'receipt_header_name': receipt_header_name or username.upper(),
+                'receipt_tagline': receipt_tagline,
+                'receipt_address': receipt_address,
+                'receipt_contact': receipt_contact,
+                'receipt_tin': receipt_tin,
+                'receipt_title': receipt_title or 'OFFICIAL ACKNOWLEDGMENT RECEIPT',
+                'receipt_footer': receipt_footer,
+                'receipt_wifi': receipt_wifi,
+                'receipt_policy_note': receipt_policy_note,
+                'receipt_width': receipt_width,
+                'receipt_feed_lines': str(receipt_feed_lines),
+                'receipt_show_tin': receipt_show_tin,
+                'receipt_show_wifi': receipt_show_wifi,
+                'receipt_show_signature': receipt_show_signature
+            }
+
+            ensure_store_settings_exist(client_db_path, username)
+            conn = sqlite3.connect(client_db_path)
+            cursor = conn.cursor()
+            for k, v in receipt_settings_data.items():
+                cursor.execute("INSERT OR REPLACE INTO Store_Settings (Setting_Key, Setting_Value) VALUES (?, ?)", (k, v))
+            conn.commit()
+            conn.close()
+
+            feedback_msg = "Success: Thermal Receipt Template & Printer Hardware configuration saved successfully."
             alert_type = "success"
 
         return redirect(f"/portal/{username}/settings?msg={feedback_msg}&alert_type={alert_type}")
@@ -937,7 +963,7 @@ def web_settings_tab(username):
     
     staff_list = staff_df.to_dict(orient='records') if not staff_df.empty else []
     skipped_errors = session.pop('skipped_errors', None)
-    store_settings = get_store_settings(client_db_path)
+    store_settings = get_store_settings(client_db_path, username)
 
     return render_template(
         'settings.html', 
