@@ -1,4 +1,4 @@
-# routes/sales.py - End-of-Day (EOD) Sales Entry, Recipe Deduction, Discounts & Multi-Channel Tender Balancing Engine
+# routes/sales.py - End-of-Day (EOD) Sales Entry, Live POS Integration, Recipe Deduction & Multi-Channel Tender Balancing Engine
 from flask import Blueprint, request, redirect, session, render_template
 from modules.database import InventoryDB
 import sqlite3
@@ -131,12 +131,12 @@ def ensure_sales_database_schema(conn):
             Batch_ID TEXT,
             Date TEXT,
             Time TEXT,
-            Starting_Float REAL,
-            Cash_Sales REAL,
-            Cash_Paid_Outs REAL,
-            Expected_Cash REAL,
-            Actual_Counted_Cash REAL,
-            Discrepancy_Over_Short REAL,
+            Starting_Float REAL DEFAULT 0.0,
+            Cash_Sales REAL DEFAULT 0.0,
+            Cash_Paid_Outs REAL DEFAULT 0.0,
+            Expected_Cash REAL DEFAULT 0.0,
+            Actual_Counted_Cash REAL DEFAULT 0.0,
+            Discrepancy_Over_Short REAL DEFAULT 0.0,
             GCash_Sales REAL DEFAULT 0.0,
             Maya_Sales REAL DEFAULT 0.0,
             Card_Sales REAL DEFAULT 0.0,
@@ -158,12 +158,12 @@ def ensure_sales_database_schema(conn):
         'Batch_ID': 'TEXT',
         'Date': 'TEXT',
         'Time': 'TEXT',
-        'Starting_Float': 'REAL',
-        'Cash_Sales': 'REAL',
-        'Cash_Paid_Outs': 'REAL',
-        'Expected_Cash': 'REAL',
-        'Actual_Counted_Cash': 'REAL',
-        'Discrepancy_Over_Short': 'REAL',
+        'Starting_Float': 'REAL DEFAULT 0.0',
+        'Cash_Sales': 'REAL DEFAULT 0.0',
+        'Cash_Paid_Outs': 'REAL DEFAULT 0.0',
+        'Expected_Cash': 'REAL DEFAULT 0.0',
+        'Actual_Counted_Cash': 'REAL DEFAULT 0.0',
+        'Discrepancy_Over_Short': 'REAL DEFAULT 0.0',
         'GCash_Sales': 'REAL DEFAULT 0.0',
         'Maya_Sales': 'REAL DEFAULT 0.0',
         'Card_Sales': 'REAL DEFAULT 0.0',
@@ -277,7 +277,7 @@ def web_sales_tab(username):
         sale_time_str = datetime.now().strftime("%H:%M:%S")
 
         # =================================================================
-        # STRICT INVENTORY PRE-CHECK & DEPLETION SUMMATION
+        # PROCESS MANUAL SALES, MODIFIERS & RECIPE DEPLETION
         # =================================================================
         total_required_ingredients = defaultdict(float)
         sold_summary_list = []
@@ -285,7 +285,7 @@ def web_sales_tab(username):
         valid_modifiers_payload = []
         valid_discounts_payload = []
 
-        # 1. Process Product Requirements & Prepare Itemized Payload
+        # 1. Process Product Requirements (Manual Additions only)
         for p_id, q_str in zip(prod_ids, prod_qtys):
             p_qty = parse_float_safe(q_str)
             if p_qty == 0:
@@ -311,7 +311,7 @@ def web_sales_tab(username):
                 for ing_id, req_qty in cursor.fetchall():
                     total_required_ingredients[str(ing_id)] += float(req_qty or 0.0) * p_qty
 
-        # 2. Process Modifier Requirements & Prepare Itemized Payload
+        # 2. Process Modifier Requirements (Manual Additions only)
         for m_id, mq_str in zip(mod_ids, mod_qtys):
             m_qty = parse_float_safe(mq_str)
             if m_qty == 0:
@@ -342,7 +342,7 @@ def web_sales_tab(username):
                 for ing_id, req_qty in cursor.fetchall():
                     total_required_ingredients[str(ing_id)] += float(req_qty or 0.0) * m_qty
 
-        # 3. Process Discounts from Z-Reading Tape
+        # 3. Process Manual Discounts
         discounts_total_amount = 0.0
         for d_id, d_amt_str, d_note in zip(disc_ids, disc_amts, disc_notes):
             d_amt = parse_float_safe(d_amt_str)
@@ -368,11 +368,15 @@ def web_sales_tab(username):
             })
             discounts_total_amount += d_amt
 
-        if not valid_sales_payload and not valid_modifiers_payload:
-            conn.close()
-            return redirect(f"/portal/{username}/sales?msg=Input Warning: No sales quantities entered. Provide closing units sold for at least one item before syncing.&alert_type=warning")
+        # Check existing Live POS sales count for this date
+        cursor.execute("SELECT COUNT(*) FROM Sales WHERE Sale_Date = ?", (sale_date,))
+        existing_sales_count_today = cursor.fetchone()[0]
 
-        # 4. Check Against On-Hand Inventory Balances (Deficit Prevention Guard)
+        if not valid_sales_payload and not valid_modifiers_payload and not has_drawer_entry and existing_sales_count_today == 0:
+            conn.close()
+            return redirect(f"/portal/{username}/sales?target_date={sale_date}&msg=Input Notice: No sales activity or drawer balances were entered for this date.&alert_type=warning")
+
+        # 4. Check Against On-Hand Inventory Balances for manual additions
         insufficient_ingredients = []
         for ing_id, needed_qty in total_required_ingredients.items():
             if needed_qty <= 0:
@@ -399,22 +403,22 @@ def web_sales_tab(username):
             if len(insufficient_ingredients) > 3:
                 error_details.append(f"and {len(insufficient_ingredients) - 3} more items")
             
-            err_msg = f"Inventory Depletion Block: Closing sales cannot be recorded. Insufficient stock for: {'; '.join(error_details)}."
-            return redirect(f"/portal/{username}/sales?msg={err_msg}&alert_type=danger")
+            err_msg = f"Inventory Depletion Block: Manual closing sales cannot be recorded. Insufficient stock for: {'; '.join(error_details)}."
+            return redirect(f"/portal/{username}/sales?target_date={sale_date}&msg={err_msg}&alert_type=danger")
 
         # =================================================================
-        # COMMIT TRANSACTION (SALES + DISCOUNTS + MULTI-TENDER + DEPLETION)
+        # COMMIT TRANSACTION (MANUAL SALES + DISCOUNTS + MULTI-TENDER + DEPLETION)
         # =================================================================
         if len(sold_summary_list) <= 4:
             summary_text = ", ".join(sold_summary_list)
         else:
             summary_text = ", ".join(sold_summary_list[:4]) + f" (+{len(sold_summary_list) - 4} more)"
 
-        # 1. Insert Itemized Products Sold into Sales Ledger
-        gross_sales_amount = 0.0
+        # 1. Insert Itemized Manual Products Sold into Sales Ledger
+        manual_gross_amount = 0.0
         for idx, item in enumerate(valid_sales_payload, start=1):
             sale_line_id = f"{batch_id}-P{idx:02d}"
-            gross_sales_amount += item['total']
+            manual_gross_amount += item['total']
             cursor.execute("""
                 INSERT INTO Sales (
                     Sale_ID, Sale_Date, Sale_Time, Product_ID, Product_Name,
@@ -422,13 +426,13 @@ def web_sales_tab(username):
                 ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """, (
                 sale_line_id, sale_date, sale_time_str, item['id'], item['name'],
-                item['qty'], item['price'], item['total'], audit_note or f"EOD Batch {batch_id}", recorded_by
+                item['qty'], item['price'], item['total'], audit_note or f"Manual EOD Entry {batch_id}", recorded_by
             ))
 
-        # 2. Insert Itemized Modifiers Sold into Sales Ledger
+        # 2. Insert Itemized Manual Modifiers Sold into Sales Ledger
         for idx, item in enumerate(valid_modifiers_payload, start=1):
             mod_line_id = f"{batch_id}-M{idx:02d}"
-            gross_sales_amount += item['total']
+            manual_gross_amount += item['total']
             cursor.execute("""
                 INSERT INTO Sales (
                     Sale_ID, Sale_Date, Sale_Time, Product_ID, Product_Name,
@@ -436,10 +440,10 @@ def web_sales_tab(username):
                 ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """, (
                 mod_line_id, sale_date, sale_time_str, item['id'], f"Modifier: {item['name']}",
-                item['qty'], item['price'], item['total'], audit_note or f"EOD Batch {batch_id}", recorded_by
+                item['qty'], item['price'], item['total'], audit_note or f"Manual EOD Entry {batch_id}", recorded_by
             ))
 
-        # 3. Insert Applied Discounts into Sales_Discounts & Sales (Financial Net Revenue Bridge)
+        # 3. Insert Applied Manual Discounts
         for idx, disc in enumerate(valid_discounts_payload, start=1):
             disc_line_id = f"{batch_id}-D{idx:02d}"
             
@@ -465,8 +469,9 @@ def web_sales_tab(username):
             ))
 
         # 4. Insert Multi-Channel Tender & Cash Drawer Balancing Record
-        net_sales_amount = gross_sales_amount - discounts_total_amount
-        tender_variance = total_settled_tenders - net_sales_amount
+        cursor.execute("SELECT COALESCE(SUM(Total_Amount), 0.0) FROM Sales WHERE Sale_Date = ?", (sale_date,))
+        net_sales_day_total = float(cursor.fetchone()[0] or 0.0)
+        tender_variance = total_settled_tenders - net_sales_day_total
 
         drawer_tx_id = f"{batch_id}-TNDR"
         full_drawer_notes = f"{drawer_notes} | Paid-Out Note: {cash_paid_outs_reason}".strip(" | ")
@@ -492,7 +497,6 @@ def web_sales_tab(username):
         has_expenses_table = cursor.fetchone()
 
         if has_expenses_table:
-            # Auto-book petty cash paid-out
             if cash_paid_outs > 0:
                 exp_desc = f"Till Paid-Out: {cash_paid_outs_reason}" if cash_paid_outs_reason else f"Till Cash Paid-Out (Batch {batch_id})"
                 exp_tx_id = f"EXP{batch_id.replace('EOD', '')}_PO"
@@ -501,7 +505,6 @@ def web_sales_tab(username):
                     VALUES (?, ?, 'Operational', ?, ?, 'Misc Overhead', 'Petty Cash', ?)
                 """, (exp_tx_id, sale_date, exp_desc, cash_paid_outs, f"Automatic till paid-out booked via EOD Batch {batch_id}"))
 
-            # Auto-book GrabFood merchant commission fee
             if grab_comm > 0:
                 grab_exp_id = f"EXP{batch_id.replace('EOD', '')}_GRAB"
                 cursor.execute("""
@@ -509,7 +512,6 @@ def web_sales_tab(username):
                     VALUES (?, ?, 'Operational', ?, ?, 'Logistics & Delivery', 'Bank Transfer', ?)
                 """, (grab_exp_id, sale_date, f"GrabFood Merchant Commission (Batch {batch_id})", grab_comm, f"Auto-booked commission from Grab gross sales of PHP {grab_gross:,.2f}"))
 
-            # Auto-book Foodpanda merchant commission fee
             if foodpanda_comm > 0:
                 panda_exp_id = f"EXP{batch_id.replace('EOD', '')}_PANDA"
                 cursor.execute("""
@@ -517,9 +519,9 @@ def web_sales_tab(username):
                     VALUES (?, ?, 'Operational', ?, ?, 'Logistics & Delivery', 'Bank Transfer', ?)
                 """, (panda_exp_id, sale_date, f"Foodpanda Merchant Commission (Batch {batch_id})", foodpanda_comm, f"Auto-booked commission from Foodpanda gross sales of PHP {foodpanda_gross:,.2f}"))
 
-        # 6. Consolidated Recipe Inventory Deductions
+        # 6. Consolidated Recipe Inventory Deductions (ONLY for manual additions)
         depleted_ingredients_count = 0
-        batch_audit_note = f"POS Depletion: {summary_text} | {audit_note}".strip(" | ")
+        batch_audit_note = f"Manual EOD Depletion: {summary_text} | {audit_note}".strip(" | ")
 
         for ing_id, tot_deduct in total_required_ingredients.items():
             if tot_deduct <= 0:
@@ -554,19 +556,26 @@ def web_sales_tab(username):
         conn.close()
         client_db.update_all_product_costs()
 
-        total_units_sold = sum(i['qty'] for i in valid_sales_payload) + sum(i['qty'] for i in valid_modifiers_payload)
+        total_manual_units = sum(i['qty'] for i in valid_sales_payload) + sum(i['qty'] for i in valid_modifiers_payload)
 
-        feedback_msg = (
-            f"EOD Closing Recorded: Successfully logged {total_units_sold:g} items sold under Batch {batch_id}. "
-            f"Gross Sales: ₱{gross_sales_amount:,.2f} | Discounts: -₱{discounts_total_amount:,.2f} | Net Sales: ₱{net_sales_amount:,.2f}. "
-            f"Tenders Settled: ₱{total_settled_tenders:,.2f} (Cash Over/Short: ₱{over_short:+,.2f}). "
-            f"Consolidated deductions applied across {depleted_ingredients_count} ingredients."
-        )
-        return redirect(f"/portal/{username}/sales?msg={feedback_msg}&alert_type=success")
+        if total_manual_units > 0:
+            feedback_msg = (
+                f"EOD Shift Closeout Logged: Successfully reconciled shift for {sale_date}. Added {total_manual_units:g} offline sales and saved Cash Till audit (Over/Short: ₱{over_short:+,.2f}). "
+                f"Deductions applied across {depleted_ingredients_count} manual ingredients."
+            )
+        else:
+            feedback_msg = (
+                f"EOD Shift Closeout Logged: Successfully reconciled Cash Drawer & Multi-Channel Tenders for {sale_date}. "
+                f"Total Settled: ₱{total_settled_tenders:,.2f} (Cash Over/Short: ₱{over_short:+,.2f}). "
+                f"Live POS inventory records remained safely preserved with zero duplicate deductions."
+            )
+        return redirect(f"/portal/{username}/sales?target_date={sale_date}&msg={feedback_msg}&alert_type=success")
 
     # =================================================================
-    # 2. GET METHOD: RENDER GROUPED WORKSHEET & ACTIVE DISCOUNT POLICIES
+    # 2. GET METHOD: RENDER GROUPED WORKSHEET WITH LIVE POS AUTO-POPULATION
     # =================================================================
+    target_date = request.args.get('target_date', datetime.now().strftime("%Y-%m-%d")).strip()
+
     conn = sqlite3.connect(client_db_path, timeout=20.0)
     cursor = conn.cursor()
     
@@ -613,7 +622,78 @@ def web_sales_tab(username):
             d_dict['Category'] = str(d_dict.get('Category') or 'Promotional / Marketing')
             active_discounts.append(d_dict)
 
-    # 4. Read historical sales & cash drawer balancing grouped by date
+    # =================================================================
+    # 4. QUERY LIVE POS ACTIVITY FOR TARGET DATE (NET OF VOIDS/REFUNDS)
+    # =================================================================
+    # Query Products Live Count (Net of voids)
+    cursor.execute("""
+        SELECT Product_ID, SUM(Quantity)
+        FROM Sales
+        WHERE Sale_Date = ? 
+          AND Product_ID NOT LIKE 'MOD%' 
+          AND Product_ID NOT LIKE 'DISC%' 
+          AND Product_ID != 'DISCOUNT'
+          AND (Product_Name NOT LIKE 'Discount:%' AND Product_Name NOT LIKE 'Modifier:%')
+        GROUP BY Product_ID
+    """, (target_date,))
+    pos_prod_qty = {str(r[0]): float(r[1] or 0.0) for r in cursor.fetchall()}
+
+    # Query Modifiers Live Count
+    cursor.execute("""
+        SELECT Product_ID, SUM(Quantity)
+        FROM Sales
+        WHERE Sale_Date = ? 
+          AND (Product_ID LIKE 'MOD%' OR Product_Name LIKE 'Modifier:%')
+        GROUP BY Product_ID
+    """, (target_date,))
+    pos_mod_qty = {str(r[0]): float(r[1] or 0.0) for r in cursor.fetchall()}
+
+    # Query Discounts Live Count
+    cursor.execute("""
+        SELECT Product_Name, SUM(ABS(Total_Amount))
+        FROM Sales
+        WHERE Sale_Date = ? 
+          AND (Product_ID = 'DISCOUNT' OR Product_ID LIKE 'DISC%' OR Product_Name LIKE 'Discount:%')
+        GROUP BY Product_Name
+    """, (target_date,))
+    pos_discounts = {str(r[0]): float(r[1] or 0.0) for r in cursor.fetchall()}
+
+    # Query POS Tenders (from Live Counter transactions on target_date)
+    cursor.execute("""
+        SELECT 
+            COALESCE(SUM(Cash_Sales), 0.0),
+            COALESCE(SUM(GCash_Sales), 0.0),
+            COALESCE(SUM(Maya_Sales), 0.0),
+            COALESCE(SUM(Card_Sales), 0.0)
+        FROM Cash_Drawer_Logs
+        WHERE Date = ? AND (Batch_ID LIKE 'POS%' OR Drawer_Tx_ID LIKE '%-TNDR')
+    """, (target_date,))
+    t_row = cursor.fetchone()
+    pos_tenders = {
+        'cash': float(t_row[0] or 0.0) if t_row else 0.0,
+        'gcash': float(t_row[1] or 0.0) if t_row else 0.0,
+        'maya': float(t_row[2] or 0.0) if t_row else 0.0,
+        'card': float(t_row[3] or 0.0) if t_row else 0.0
+    }
+
+    # Calculate overall financial metrics for target_date
+    cursor.execute("""
+        SELECT 
+            COALESCE(SUM(CASE WHEN Total_Amount > 0 THEN Total_Amount ELSE 0 END), 0.0),
+            COALESCE(SUM(CASE WHEN Total_Amount < 0 THEN ABS(Total_Amount) ELSE 0 END), 0.0),
+            COALESCE(SUM(Total_Amount), 0.0)
+        FROM Sales
+        WHERE Sale_Date = ?
+    """, (target_date,))
+    fin_row = cursor.fetchone()
+    live_pos_summary = {
+        'gross': float(fin_row[0] or 0.0) if fin_row else 0.0,
+        'discounts': float(fin_row[1] or 0.0) if fin_row else 0.0,
+        'net': float(fin_row[2] or 0.0) if fin_row else 0.0,
+        'total_items': sum(pos_prod_qty.values()) + sum(pos_mod_qty.values())
+    }
+
+    # 5. Read historical sales & cash drawer balancing grouped by date
     sales_history = []
     cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='Sales'")
     if cursor.fetchone():
@@ -679,10 +759,16 @@ def web_sales_tab(username):
     return render_template(
         'sales.html',
         username=username,
+        target_date=target_date,
         grouped_products=grouped_products,
         categories=categories,
         active_modifiers=active_modifiers,
         active_discounts=active_discounts,
+        pos_prod_qty=pos_prod_qty,
+        pos_mod_qty=pos_mod_qty,
+        pos_discounts=pos_discounts,
+        pos_tenders=pos_tenders,
+        live_pos_summary=live_pos_summary,
         sales_history=sales_history,
         msg=request.args.get('msg', feedback_msg),
         alert_type=request.args.get('alert_type', alert_type)

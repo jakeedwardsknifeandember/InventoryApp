@@ -165,7 +165,7 @@
                         <div class="row g-2">
                             <div class="col-md-5">
                                 <label class="form-label small text-info fw-bold mb-1">Target Accounting Date:</label>
-                                <input type="date" id="eodClosingDatePicker" name="sale_date" class="form-control bg-dark text-white border-secondary fw-bold" required>
+                                <input type="date" id="eodClosingDatePicker" name="sale_date" value="{{ target_date }}" class="form-control bg-dark text-white border-secondary fw-bold" onchange="changeTargetAccountingDate(this.value)" required>
                             </div>
                             <div class="col-md-7">
                                 <label class="form-label small text-info fw-bold mb-1">Audit Entry Notes / Shift Details:</label>
@@ -174,15 +174,30 @@
                         </div>
                     </div>
 
-                    <!-- PRODUCTS WORKSHEET -->
+                    <!-- LIVE COUNTER POS SUMMARY CALLOUT (WHEN SALES OCCURRED TODAY) -->
+                    {% if live_pos_summary.total_items > 0 %}
+                    <div class="p-2 px-3 border-bottom border-secondary d-flex justify-content-between align-items-center" style="background: #101c18; font-size: 11.5px;">
+                        <div>
+                            <span class="text-success fw-bold">⚡ Live POS Auto-Count Active:</span>
+                            <span class="text-white ms-1">{{ live_pos_summary.total_items|int }} pcs sold today</span>
+                            <span class="text-white-50 ms-1">(Net: ₱{{ "%.2f"|format(live_pos_summary.net) }})</span>
+                        </div>
+                        <span class="badge bg-dark border border-success text-success font-monospace" style="font-size: 9.5px;">
+                            Inventory Depleted Real-Time
+                        </span>
+                    </div>
+                    {% endif %}
+
+                    <!-- PRODUCTS WORKSHEET WITH UNEDITABLE LIVE POS AUTO-COUNT & MANUAL ADD INPUT -->
                     <div style="max-height: 25vh; overflow-y: auto;">
                         <table class="table table-dark table-hover align-middle mb-0">
                             <thead>
                                 <tr class="text-secondary font-monospace" style="font-size: 11px; letter-spacing: 0.5px;">
-                                    <th style="width: 45%;">PRODUCT / VARIANT NAME</th>
-                                    <th style="width: 20%;">CATEGORY</th>
-                                    <th style="width: 15%;">PRICE</th>
-                                    <th class="text-end pe-3" style="width: 20%;">UNITS SOLD</th>
+                                    <th style="width: 40%;">PRODUCT / VARIANT NAME</th>
+                                    <th style="width: 18%;">CATEGORY</th>
+                                    <th style="width: 14%;">PRICE</th>
+                                    <th class="text-center" style="width: 14%; color: #34d399;">LIVE POS</th>
+                                    <th class="text-end pe-3" style="width: 14%;">+ MANUAL</th>
                                 </tr>
                             </thead>
                             <tbody id="productTableBody">
@@ -191,19 +206,29 @@
                                     {% set has_multiple_variants = (variants|length > 1) or (variants|length == 1 and variants[0].Variant_Name != 'Regular') %}
 
                                     {% if has_multiple_variants %}
+                                        <!-- Calculate parent total from Live POS sales -->
+                                        {% set parent_pos_total = namespace(val=0) %}
+                                        {% for v in variants %}
+                                            {% set parent_pos_total.val = parent_pos_total.val + pos_prod_qty.get(v.Product_ID, 0.0) %}
+                                        {% endfor %}
+
                                         <tr class="eod-parent-row" style="cursor: pointer;" onclick="toggleParentVariants({{ parent_index }})" data-parent-index="{{ parent_index }}" data-parent-name="{{ parent|lower }}">
                                             <td class="ps-3">
                                                 <span id="caret-{{ parent_index }}" class="font-monospace text-info me-2 fw-bold" style="display: inline-block; width: 14px;">v</span>
                                                 <span class="text-white fw-bold">{{ parent }}</span>
-                                                <span class="badge bg-dark border border-secondary text-info ms-2 font-monospace" style="font-size: 11px;">{{ variants|length }} variants</span>
+                                                <span class="badge bg-dark border border-secondary text-info ms-1 font-monospace" style="font-size: 10px;">{{ variants|length }} vars</span>
+                                                {% if parent_pos_total.val > 0 %}
+                                                    <span class="badge bg-success text-white font-monospace ms-1" style="font-size: 9.5px;">{{ parent_pos_total.val|int }} Sold (POS)</span>
+                                                {% endif %}
                                             </td>
                                             <td>
                                                 <span class="badge bg-secondary text-white">{{ variants[0].Category or 'General' }}</span>
                                             </td>
-                                            <td colspan="2"></td>
+                                            <td colspan="3"></td>
                                         </tr>
 
                                         {% for prod in variants %}
+                                        {% set p_pos_sold = pos_prod_qty.get(prod.Product_ID, 0.0) %}
                                         <tr class="product-row eod-variant-row child-group-{{ parent_index }}" 
                                             style="display: none;" 
                                             data-parent-index="{{ parent_index }}"
@@ -212,7 +237,8 @@
                                             data-full-name="{{ prod.Product_Name|lower }}" 
                                             data-id="{{ prod.Product_ID|lower }}" 
                                             data-category="{{ (prod.Category or 'General')|lower }}" 
-                                            data-price="{{ prod.Selling_Price }}">
+                                            data-price="{{ prod.Selling_Price }}"
+                                            data-pos-qty="{{ p_pos_sold }}">
                                             <td class="ps-4">
                                                 <input type="hidden" name="product_id[]" value="{{ prod.Product_ID }}">
                                                 <span class="variant-indent-tree">|-</span>
@@ -221,28 +247,45 @@
                                             </td>
                                             <td><span class="badge bg-secondary" style="font-size: 11px;">{{ prod.Category or 'General' }}</span></td>
                                             <td class="text-light font-monospace">₱{{ "%.2f"|format(prod.Selling_Price) }}</td>
+                                            
+                                            <!-- UNEDITABLE LIVE POS AUTO-COUNT -->
+                                            <td class="text-center">
+                                                {% if p_pos_sold > 0 %}
+                                                    <span class="badge bg-success font-monospace px-2 py-1" style="font-size: 12.5px;" title="Sold on Live POS (Inventory already deducted)">
+                                                        {{ p_pos_sold|int if p_pos_sold % 1 == 0 else p_pos_sold }}
+                                                    </span>
+                                                {% else %}
+                                                    <span class="text-muted font-monospace small">0</span>
+                                                {% endif %}
+                                            </td>
+
+                                            <!-- EDITABLE MANUAL / OFFLINE INPUT -->
                                             <td class="text-end pe-3">
                                                 <input type="number" 
                                                        name="quantity[]" 
                                                        step="any"
                                                        value="0" 
+                                                       min="0"
                                                        class="form-control bg-light text-dark text-center fw-bold border-0 ms-auto font-monospace ingredient-qty-input" 
-                                                       style="max-width: 90px; font-size: 14px; border-radius: 4px;"
+                                                       style="max-width: 80px; font-size: 14px; border-radius: 4px;"
                                                        onfocus="if(this.value=='0') this.value='';" 
                                                        onblur="if(this.value=='') this.value='0';"
-                                                       oninput="recalculateRunningTotals()">
+                                                       oninput="recalculateRunningTotals()"
+                                                       title="Add extra offline/catering quantity if not rung up at Counter POS">
                                             </td>
                                         </tr>
                                         {% endfor %}
 
                                     {% else %}
                                         {% set prod = variants[0] %}
+                                        {% set p_pos_sold = pos_prod_qty.get(prod.Product_ID, 0.0) %}
                                         <tr class="product-row eod-variant-row" 
                                             data-name="{{ parent|lower }}" 
                                             data-full-name="{{ prod.Product_Name|lower }}" 
                                             data-id="{{ prod.Product_ID|lower }}" 
                                             data-category="{{ (prod.Category or 'General')|lower }}" 
-                                            data-price="{{ prod.Selling_Price }}">
+                                            data-price="{{ prod.Selling_Price }}"
+                                            data-pos-qty="{{ p_pos_sold }}">
                                             <td class="ps-3">
                                                 <input type="hidden" name="product_id[]" value="{{ prod.Product_ID }}">
                                                 <span class="fw-bold text-white fs-6">{{ parent }}</span>
@@ -250,58 +293,88 @@
                                             </td>
                                             <td><span class="badge bg-secondary" style="font-size: 11px;">{{ prod.Category or 'General' }}</span></td>
                                             <td class="text-light font-monospace">₱{{ "%.2f"|format(prod.Selling_Price) }}</td>
+                                            
+                                            <!-- UNEDITABLE LIVE POS AUTO-COUNT -->
+                                            <td class="text-center">
+                                                {% if p_pos_sold > 0 %}
+                                                    <span class="badge bg-success font-monospace px-2 py-1" style="font-size: 12.5px;" title="Sold on Live POS (Inventory already deducted)">
+                                                        {{ p_pos_sold|int if p_pos_sold % 1 == 0 else p_pos_sold }}
+                                                    </span>
+                                                {% else %}
+                                                    <span class="text-muted font-monospace small">0</span>
+                                                {% endif %}
+                                            </td>
+
+                                            <!-- EDITABLE MANUAL / OFFLINE INPUT -->
                                             <td class="text-end pe-3">
                                                 <input type="number" 
                                                        name="quantity[]" 
                                                        step="any"
                                                        value="0" 
+                                                       min="0"
                                                        class="form-control bg-light text-dark text-center fw-bold border-0 ms-auto font-monospace ingredient-qty-input" 
-                                                       style="max-width: 90px; font-size: 14px; border-radius: 4px;"
+                                                       style="max-width: 80px; font-size: 14px; border-radius: 4px;"
                                                        onfocus="if(this.value=='0') this.value='';" 
                                                        onblur="if(this.value=='') this.value='0';"
-                                                       oninput="recalculateRunningTotals()">
+                                                       oninput="recalculateRunningTotals()"
+                                                       title="Add extra offline/catering quantity if not rung up at Counter POS">
                                             </td>
                                         </tr>
                                     {% endif %}
                                 {% endfor %}
                                 <tr id="noResultsRow" style="display: none;">
-                                    <td colspan="4" class="text-center text-muted py-4">No product profiles found matching active search criteria.</td>
+                                    <td colspan="5" class="text-center text-muted py-4">No product profiles found matching active search criteria.</td>
                                 </tr>
                             </tbody>
                         </table>
                     </div>
 
-                    <!-- MODIFIERS WORKSHEET -->
+                    <!-- MODIFIERS WORKSHEET WITH LIVE POS AUTO-POPULATION -->
                     <div class="p-2 bg-dark border-top border-secondary">
                         <div class="d-flex justify-content-between align-items-center mb-1 px-2">
                             <span class="fw-bold text-info" style="font-size: 12px; letter-spacing: 0.5px;">MODIFIERS & ADD-ONS WORKSHEET</span>
-                            <small class="text-muted" style="font-size: 10px;">Mapped raw ingredient depletions will apply on sync</small>
+                            <small class="text-muted" style="font-size: 10px;">Live POS modifiers auto-tallied; manual additions deduct ingredients on sync</small>
                         </div>
                         <div style="max-height: 14vh; overflow-y: auto;">
                             <table class="table table-dark table-hover align-middle mb-0">
                                 <thead>
                                     <tr class="text-secondary font-monospace" style="font-size: 10px; letter-spacing: 0.5px;">
-                                        <th style="width: 50%;">MODIFIER NAME</th>
-                                        <th style="width: 25%;">ADD-ON PRICE</th>
-                                        <th class="text-end pe-3" style="width: 25%;">UNITS SOLD</th>
+                                        <th style="width: 44%;">MODIFIER NAME</th>
+                                        <th style="width: 20%;">ADD-ON PRICE</th>
+                                        <th class="text-center" style="width: 18%; color: #34d399;">LIVE POS</th>
+                                        <th class="text-end pe-3" style="width: 18%;">+ MANUAL</th>
                                     </tr>
                                 </thead>
                                 <tbody>
                                     {% for mod in active_modifiers %}
-                                    <tr class="eod-variant-row modifier-data-row" data-price="{{ mod.Price }}">
+                                    {% set m_pos_sold = pos_mod_qty.get(mod.Modifier_ID, 0.0) %}
+                                    <tr class="eod-variant-row modifier-data-row" data-price="{{ mod.Price }}" data-pos-qty="{{ m_pos_sold }}">
                                         <td class="ps-3">
                                             <input type="hidden" name="modifier_id[]" value="{{ mod.Modifier_ID }}">
                                             <span class="fw-bold text-white">{{ mod.Modifier_Name }}</span>
                                             <small class="text-info font-monospace ms-1" style="font-size: 11px;">({{ mod.Modifier_ID }})</small>
                                         </td>
                                         <td class="text-light font-monospace">₱{{ "%.2f"|format(mod.Price) }}</td>
+                                        
+                                        <!-- UNEDITABLE LIVE POS AUTO-COUNT -->
+                                        <td class="text-center">
+                                            {% if m_pos_sold > 0 %}
+                                                <span class="badge bg-success font-monospace px-2 py-1" style="font-size: 11.5px;">
+                                                    {{ m_pos_sold|int if m_pos_sold % 1 == 0 else m_pos_sold }}
+                                                </span>
+                                            {% else %}
+                                                <span class="text-muted font-monospace small">0</span>
+                                            {% endif %}
+                                        </td>
+
                                         <td class="text-end pe-3">
                                             <input type="number" 
                                                    name="modifier_quantity[]" 
                                                    step="any" 
                                                    value="0" 
+                                                   min="0"
                                                    class="form-control bg-light text-dark text-center fw-bold border-0 ms-auto font-monospace modifier-qty-input" 
-                                                   style="max-width: 90px; font-size: 14px; border-radius: 4px;"
+                                                   style="max-width: 80px; font-size: 14px; border-radius: 4px;"
                                                    onfocus="if(this.value=='0') this.value='';" 
                                                    onblur="if(this.value=='') this.value='0';"
                                                    oninput="recalculateRunningTotals()">
@@ -309,7 +382,7 @@
                                     </tr>
                                     {% else %}
                                     <tr>
-                                        <td colspan="3" class="text-center text-muted py-2" style="font-size: 11px;">No active modifiers configured.</td>
+                                        <td colspan="4" class="text-center text-muted py-2" style="font-size: 11px;">No active modifiers configured.</td>
                                     </tr>
                                     {% endfor %}
                                 </tbody>
@@ -317,23 +390,26 @@
                         </div>
                     </div>
 
-                    <!-- EOD SHIFT DISCOUNTS (Z-READING TAPE ENTRY) -->
+                    <!-- EOD SHIFT DISCOUNTS (WITH LIVE POS DISCOUNTS DISPLAY) -->
                     <div class="p-2 bg-dark border-top border-secondary">
                         <div class="d-flex justify-content-between align-items-center mb-1 px-2">
-                            <span class="fw-bold text-warning" style="font-size: 12px; letter-spacing: 0.5px;">EOD DISCOUNTS & ALLOWANCES (FROM Z-READING)</span>
-                            <small class="text-muted" style="font-size: 10px;">Enters gross-to-net financial bridge (inventory unaffected)</small>
+                            <span class="fw-bold text-warning" style="font-size: 12px; letter-spacing: 0.5px;">EOD DISCOUNTS & ALLOWANCES</span>
+                            <small class="text-muted" style="font-size: 10px;">Live discounts displayed; enter manual discounts if unrecorded</small>
                         </div>
                         <div style="max-height: 15vh; overflow-y: auto;">
                             <table class="table table-dark table-hover align-middle mb-0">
                                 <thead>
                                     <tr class="text-secondary font-monospace" style="font-size: 10px; letter-spacing: 0.5px;">
-                                        <th style="width: 42%;">DISCOUNT POLICY</th>
-                                        <th style="width: 33%;">AUDIT NOTES / BOOKLET REF</th>
-                                        <th class="text-end pe-3" style="width: 25%;">TOTAL DEDUCTED</th>
+                                        <th style="width: 38%;">DISCOUNT POLICY</th>
+                                        <th style="width: 26%;">AUDIT NOTES</th>
+                                        <th class="text-center" style="width: 18%; color: #fbbf24;">LIVE POS</th>
+                                        <th class="text-end pe-3" style="width: 18%;">+ MANUAL</th>
                                     </tr>
                                 </thead>
                                 <tbody>
                                     {% for d in active_discounts %}
+                                    {% set d_key = 'Discount: ' ~ d.Discount_Name %}
+                                    {% set d_pos_amt = pos_discounts.get(d_key, pos_discounts.get(d.Discount_Name, 0.0)) %}
                                     <tr class="eod-variant-row">
                                         <td class="ps-3">
                                             <input type="hidden" name="discount_id[]" value="{{ d.Discount_ID }}">
@@ -347,18 +423,25 @@
                                             </span>
                                         </td>
                                         <td>
-                                            <input type="text" name="discount_notes[]" class="form-control bg-dark text-white border-secondary small" placeholder="Booklet # / receipts count..." style="font-size: 11.5px;">
+                                            <input type="text" name="discount_notes[]" class="form-control bg-dark text-white border-secondary small" placeholder="Booklet #..." style="font-size: 11px;">
+                                        </td>
+                                        <td class="text-center">
+                                            {% if d_pos_amt > 0 %}
+                                                <span class="badge bg-dark border border-warning text-warning font-monospace" style="font-size: 11px;">-₱{{ "%.2f"|format(d_pos_amt) }}</span>
+                                            {% else %}
+                                                <span class="text-muted font-monospace small">₱0.00</span>
+                                            {% endif %}
                                         </td>
                                         <td class="text-end pe-3">
-                                            <div class="input-group ms-auto" style="max-width: 115px;">
-                                                <span class="input-group-text bg-secondary border-0 text-white font-monospace py-0 px-2" style="font-size: 11px;">₱</span>
+                                            <div class="input-group ms-auto" style="max-width: 105px;">
+                                                <span class="input-group-text bg-secondary border-0 text-white font-monospace py-0 px-1" style="font-size: 10px;">₱</span>
                                                 <input type="number" 
                                                        name="discount_amount[]" 
                                                        step="0.01" 
                                                        min="0" 
                                                        value="0" 
-                                                       class="form-control bg-light text-danger text-end fw-bold border-0 font-monospace discount-amount-input py-1 px-2" 
-                                                       style="font-size: 13px; border-radius: 0 4px 4px 0;"
+                                                       class="form-control bg-light text-danger text-end fw-bold border-0 font-monospace discount-amount-input py-1 px-1" 
+                                                       style="font-size: 12px; border-radius: 0 4px 4px 0;"
                                                        onfocus="if(this.value=='0') this.value='';" 
                                                        onblur="if(this.value=='') this.value='0';"
                                                        oninput="recalculateRunningTotals()">
@@ -367,7 +450,7 @@
                                     </tr>
                                     {% else %}
                                     <tr>
-                                        <td colspan="3" class="text-center text-muted py-2" style="font-size: 11px;">No active discount policies configured. Set them up in the Discounts tab.</td>
+                                        <td colspan="4" class="text-center text-muted py-2" style="font-size: 11px;">No active discount policies configured. Set them up in the Discounts tab.</td>
                                     </tr>
                                     {% endfor %}
                                 </tbody>
@@ -375,17 +458,24 @@
                         </div>
                     </div>
 
-                    <!-- MULTI-CHANNEL TENDER & AGGREGATOR SETTLEMENT HUB -->
+                    <!-- MULTI-CHANNEL TENDER & AGGREGATOR SETTLEMENT HUB (PRE-FILLED FROM POS) -->
                     <div class="p-3 bg-dark border-top border-secondary">
                         <div class="d-flex justify-content-between align-items-center mb-2 px-1">
                             <span class="fw-bold text-success" style="font-size: 12.5px; letter-spacing: 0.5px;">MULTI-CHANNEL TENDER & AGGREGATOR SETTLEMENT</span>
-                            <small class="text-muted" style="font-size: 10px;">High-contrast reconciliation of in-store cash, digital wallets, & delivery portals</small>
+                            <small class="text-muted" style="font-size: 10px;">Pre-populated from today's Live Counter register orders</small>
                         </div>
 
                         <!-- SECTION 1: IN-STORE PHYSICAL CASH TILL BALANCING -->
                         <div class="p-3 mb-3 tender-hub-card">
                             <div class="d-flex justify-content-between align-items-center mb-2 pb-1 border-bottom border-secondary">
-                                <span class="tender-channel-header text-info">1. In-Store Cash Till Balancing</span>
+                                <div>
+                                    <span class="tender-channel-header text-info">1. In-Store Cash Till Balancing</span>
+                                    {% if pos_tenders.cash > 0 %}
+                                        <span class="badge bg-dark border border-info text-info font-monospace ms-2" style="font-size: 9.5px;">
+                                            Live POS Cash: ₱{{ "%.2f"|format(pos_tenders.cash) }}
+                                        </span>
+                                    {% endif %}
+                                </div>
                                 <a href="javascript:void(0)" onclick="copyNetSalesToCashSales()" class="text-info text-decoration-none fw-bold" style="font-size: 11px;">Match Net Sales &rarr;</a>
                             </div>
 
@@ -398,10 +488,10 @@
                                     </div>
                                 </div>
                                 <div class="col-md-4">
-                                    <label>In-Store Cash Sales (Z-Tape):</label>
+                                    <label>In-Store Cash Sales (Z-Tape / POS):</label>
                                     <div class="input-group">
                                         <span class="input-group-text bg-secondary border-0 text-white font-monospace py-0 px-2">₱</span>
-                                        <input type="number" step="0.01" min="0" name="cash_sales" id="cashSalesInput" value="0.00" class="form-control font-monospace fw-bold text-success" oninput="recalculateRunningTotals()" onfocus="if(this.value=='0.00' || this.value=='0') this.value='';" onblur="if(this.value=='') this.value='0.00';">
+                                        <input type="number" step="0.01" min="0" name="cash_sales" id="cashSalesInput" value="{{ '%.2f'|format(pos_tenders.cash) }}" class="form-control font-monospace fw-bold text-success" oninput="recalculateRunningTotals()" onfocus="if(this.value=='0.00' || this.value=='0') this.value='';" onblur="if(this.value=='') this.value='0.00';">
                                     </div>
                                 </div>
                                 <div class="col-md-4">
@@ -453,21 +543,21 @@
                                     <label>GCash Merchant Settlement:</label>
                                     <div class="input-group">
                                         <span class="input-group-text bg-secondary border-0 text-white font-monospace py-0 px-2">₱</span>
-                                        <input type="number" step="0.01" min="0" name="gcash_sales" id="gcashSalesInput" value="0.00" class="form-control font-monospace fw-bold" oninput="recalculateRunningTotals()" onfocus="if(this.value=='0.00' || this.value=='0') this.value='';" onblur="if(this.value=='') this.value='0.00';">
+                                        <input type="number" step="0.01" min="0" name="gcash_sales" id="gcashSalesInput" value="{{ '%.2f'|format(pos_tenders.gcash) }}" class="form-control font-monospace fw-bold" oninput="recalculateRunningTotals()" onfocus="if(this.value=='0.00' || this.value=='0') this.value='';" onblur="if(this.value=='') this.value='0.00';">
                                     </div>
                                 </div>
                                 <div class="col-md-4">
                                     <label>Maya / QRPH Settlement:</label>
                                     <div class="input-group">
                                         <span class="input-group-text bg-secondary border-0 text-white font-monospace py-0 px-2">₱</span>
-                                        <input type="number" step="0.01" min="0" name="maya_sales" id="mayaSalesInput" value="0.00" class="form-control font-monospace fw-bold" oninput="recalculateRunningTotals()" onfocus="if(this.value=='0.00' || this.value=='0') this.value='';" onblur="if(this.value=='') this.value='0.00';">
+                                        <input type="number" step="0.01" min="0" name="maya_sales" id="mayaSalesInput" value="{{ '%.2f'|format(pos_tenders.maya) }}" class="form-control font-monospace fw-bold" oninput="recalculateRunningTotals()" onfocus="if(this.value=='0.00' || this.value=='0') this.value='';" onblur="if(this.value=='') this.value='0.00';">
                                     </div>
                                 </div>
                                 <div class="col-md-4">
                                     <label>Debit / Credit Card / Bank:</label>
                                     <div class="input-group">
                                         <span class="input-group-text bg-secondary border-0 text-white font-monospace py-0 px-2">₱</span>
-                                        <input type="number" step="0.01" min="0" name="card_sales" id="cardSalesInput" value="0.00" class="form-control font-monospace fw-bold" oninput="recalculateRunningTotals()" onfocus="if(this.value=='0.00' || this.value=='0') this.value='';" onblur="if(this.value=='') this.value='0.00';">
+                                        <input type="number" step="0.01" min="0" name="card_sales" id="cardSalesInput" value="{{ '%.2f'|format(pos_tenders.card) }}" class="form-control font-monospace fw-bold" oninput="recalculateRunningTotals()" onfocus="if(this.value=='0.00' || this.value=='0') this.value='';" onblur="if(this.value=='') this.value='0.00';">
                                     </div>
                                 </div>
                             </div>
@@ -559,6 +649,7 @@
         </div>
     </div>
 
+    <!-- RIGHT: HISTORICAL SALES AUDIT LEDGER -->
     <div class="col-md-6">
         <div class="card border-secondary bg-dark text-white shadow-sm">
             <div class="card-header bg-secondary text-white fw-bold">Historical Sales Audit Ledger</div>
@@ -601,7 +692,6 @@
                         <div id="ledgerCollapse{{ loop.index }}" class="accordion-collapse collapse {% if loop.first %}show{% endif %}" data-bs-parent="#ledgerMasterAccordion">
                             <div class="accordion-body p-0" style="background-color: #1b1b1c;">
                                 
-                                <!-- CASH DRAWER & MULTI-TENDER STRIP IN ACCORDION -->
                                 {% if day.drawer %}
                                 <div class="p-2 border-bottom border-secondary px-3" style="background: #141419; font-size: 11.5px;">
                                     <div class="d-flex justify-content-between align-items-center mb-1 flex-wrap">
@@ -625,7 +715,6 @@
                                         </div>
                                     </div>
 
-                                    <!-- Digital & Delivery Tenders Sub-Strip -->
                                     <div class="d-flex gap-3 flex-wrap text-light opacity-75 pt-1 border-top border-dark font-monospace" style="font-size: 10.5px;">
                                         {% if day.drawer.gcash > 0 %}<span>GCash: ₱{{ "%.2f"|format(day.drawer.gcash) }}</span>{% endif %}
                                         {% if day.drawer.maya > 0 %}<span>Maya: ₱{{ "%.2f"|format(day.drawer.maya) }}</span>{% endif %}
@@ -695,15 +784,15 @@
     <div class="modal-dialog modal-dialog-centered">
         <div class="modal-content bg-dark text-white border border-secondary shadow-lg">
             <div class="modal-header border-secondary">
-                <h5 class="modal-title fw-bold text-warning">Verify Inventory & Multi-Tender Synchronization</h5>
+                <h5 class="modal-title fw-bold text-warning">Verify Shift Closeout & Tender Synchronization</h5>
                 <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
             <div class="modal-body p-3" style="background-color: #1e1e1e; font-size: 14px;">
-                <p class="mb-2">You are about to submit closing sales, Z-reading discounts, cash till counts, and delivery aggregator fees into the general ledger.</p>
+                <p class="mb-2">You are about to save the End-of-Day reconciliation audit into the general ledger.</p>
                 <ul class="text-light opacity-75 ps-3 mb-2" style="font-size: 13px;">
-                    <li>Raw ingredient inventories will deduct automatically based on recipe specifications.</li>
-                    <li>Discounts will register against the financial ledger without skewing recipe yields.</li>
-                    <li>Delivery platform commissions will automatically book to Operating Expenses.</li>
+                    <li>Live Counter POS sales remain safely preserved with zero duplicate inventory deductions.</li>
+                    <li>Any manual items entered will deduct raw materials based on recipe specifications.</li>
+                    <li>Third-party delivery commissions (Grab/Foodpanda) and paid-outs will automatically book to Operating Expenses.</li>
                 </ul>
                 <div class="p-2 rounded border border-secondary bg-dark text-center font-monospace mt-3">
                     <div class="row g-2 text-center">
@@ -724,7 +813,7 @@
             </div>
             <div class="modal-footer border-secondary justify-content-between">
                 <button type="button" class="btn btn-secondary fw-bold" data-bs-dismiss="modal">Cancel</button>
-                <button type="button" class="btn btn-success fw-bold px-4" onclick="document.getElementById('eodSalesMasterForm').submit();">Confirm & Sync Ledger</button>
+                <button type="button" class="btn btn-success fw-bold px-4" onclick="document.getElementById('eodSalesMasterForm').submit();">Confirm & Close Shift</button>
             </div>
         </div>
     </div>
@@ -751,6 +840,24 @@
 </div>
 
 <script>
+// LIVE POS AUDIT DATA PASSED FROM BACKEND
+const livePosData = {
+    gross: {{ live_pos_summary.gross|default(0.0) }},
+    discounts: {{ live_pos_summary.discounts|default(0.0) }},
+    net: {{ live_pos_summary.net|default(0.0) }},
+    posCash: {{ pos_tenders.cash|default(0.0) }},
+    posGcash: {{ pos_tenders.gcash|default(0.0) }},
+    posMaya: {{ pos_tenders.maya|default(0.0) }},
+    posCard: {{ pos_tenders.card|default(0.0) }},
+    totalItems: {{ live_pos_summary.total_items|default(0) }}
+};
+
+function changeTargetAccountingDate(newDate) {
+    if (newDate) {
+        window.location.href = `?target_date=${newDate}`;
+    }
+}
+
 function getLocalTodayString() {
     const d = new Date();
     const year = d.getFullYear();
@@ -760,7 +867,7 @@ function getLocalTodayString() {
 }
 
 function resetClosingFormMatrixFields() {
-    const inputs = document.querySelectorAll('#eodSalesMasterForm input[type="number"]');
+    const inputs = document.querySelectorAll('.ingredient-qty-input, .modifier-qty-input, .discount-amount-input');
     inputs.forEach(input => {
         input.value = '0';
     });
@@ -772,12 +879,12 @@ function resetClosingFormMatrixFields() {
     if (auditInput) auditInput.style.border = "1px solid #3d3d3d";
     
     document.getElementById('startingFloatInput').value = '0.00';
-    document.getElementById('cashSalesInput').value = '0.00';
+    document.getElementById('cashSalesInput').value = livePosData.posCash.toFixed(2);
     document.getElementById('actualCashInput').value = '0.00';
     document.getElementById('cashPaidOutsInput').value = '0.00';
-    document.getElementById('gcashSalesInput').value = '0.00';
-    document.getElementById('mayaSalesInput').value = '0.00';
-    document.getElementById('cardSalesInput').value = '0.00';
+    document.getElementById('gcashSalesInput').value = livePosData.posGcash.toFixed(2);
+    document.getElementById('mayaSalesInput').value = livePosData.posMaya.toFixed(2);
+    document.getElementById('cardSalesInput').value = livePosData.posCard.toFixed(2);
     document.getElementById('grabGrossInput').value = '0.00';
     document.getElementById('grabCommInput').value = '0.00';
     document.getElementById('pandaGrossInput').value = '0.00';
@@ -806,59 +913,62 @@ function toggleParentVariants(index) {
 }
 
 function copyNetSalesToCashSales() {
-    let grossTotal = 0.0;
+    let manualGross = 0.0;
     document.querySelectorAll('.product-row').forEach(row => {
         const p = parseFloat(row.getAttribute('data-price')) || 0.0;
         const q = parseFloat(row.querySelector('.ingredient-qty-input')?.value || 0) || 0.0;
-        grossTotal += (p * q);
+        manualGross += (p * q);
     });
     document.querySelectorAll('.modifier-data-row').forEach(row => {
         const p = parseFloat(row.getAttribute('data-price')) || 0.0;
         const q = parseFloat(row.querySelector('.modifier-qty-input')?.value || 0) || 0.0;
-        grossTotal += (p * q);
+        manualGross += (p * q);
     });
-    let discountTotal = 0.0;
+    let manualDiscounts = 0.0;
     document.querySelectorAll('.discount-amount-input').forEach(input => {
-        discountTotal += (parseFloat(input.value) || 0.0);
+        manualDiscounts += (parseFloat(input.value) || 0.0);
     });
-    const netSales = Math.max(0.0, grossTotal - discountTotal);
-    document.getElementById('cashSalesInput').value = netSales.toFixed(2);
+
+    const totalNet = Math.max(0.0, (livePosData.gross + manualGross) - (livePosData.discounts + manualDiscounts));
+    document.getElementById('cashSalesInput').value = totalNet.toFixed(2);
     recalculateRunningTotals();
 }
 
 function recalculateRunningTotals() {
-    let grossTotal = 0.0;
+    let manualGross = 0.0;
     
-    // Sum Products
+    // Sum Manual Products
     const prodRows = document.querySelectorAll('.product-row');
     prodRows.forEach(row => {
         const price = parseFloat(row.getAttribute('data-price')) || 0.0;
         const qtyInput = row.querySelector('.ingredient-qty-input');
         const qty = parseFloat(qtyInput ? qtyInput.value : 0) || 0.0;
-        grossTotal += (price * qty);
+        manualGross += (price * qty);
     });
 
-    // Sum Modifiers
+    // Sum Manual Modifiers
     const modRows = document.querySelectorAll('.modifier-data-row');
     modRows.forEach(row => {
         const price = parseFloat(row.getAttribute('data-price')) || 0.0;
         const qtyInput = row.querySelector('.modifier-qty-input');
         const qty = parseFloat(qtyInput ? qtyInput.value : 0) || 0.0;
-        grossTotal += (price * qty);
+        manualGross += (price * qty);
     });
 
-    // Sum Discounts
-    let discountTotal = 0.0;
+    // Sum Manual Discounts
+    let manualDiscounts = 0.0;
     const discInputs = document.querySelectorAll('.discount-amount-input');
     discInputs.forEach(input => {
         const amt = parseFloat(input.value) || 0.0;
-        discountTotal += amt;
+        manualDiscounts += amt;
     });
 
-    const netSales = grossTotal - discountTotal;
+    const totalGross = livePosData.gross + manualGross;
+    const totalDiscounts = livePosData.discounts + manualDiscounts;
+    const netSales = totalGross - totalDiscounts;
 
-    document.getElementById('liveGrossOrdersLabel').innerText = '₱' + grossTotal.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2});
-    document.getElementById('liveDiscountsLabel').innerText = '-₱' + discountTotal.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2});
+    document.getElementById('liveGrossOrdersLabel').innerText = '₱' + totalGross.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2});
+    document.getElementById('liveDiscountsLabel').innerText = '-₱' + totalDiscounts.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2});
     document.getElementById('liveNetSalesLabel').innerText = '₱' + netSales.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2});
     
     // 1. In-Store Cash Drawer Calculations
@@ -953,27 +1063,16 @@ function triggerSecurityModalCheck() {
     const todayStr = getLocalTodayString();
     const isBackdated = (datePicker.value !== todayStr);
     
-    let hasNonZero = false;
     let hasNegativeValue = false;
-    
     qtyInputs.forEach(input => {
         const val = parseFloat(input.value) || 0;
-        if (val !== 0) hasNonZero = true;
         if (val < 0) hasNegativeValue = true;
     });
-
     modInputs.forEach(input => {
         const val = parseFloat(input.value) || 0;
-        if (val !== 0) hasNonZero = true;
         if (val < 0) hasNegativeValue = true;
     });
 
-    if (!hasNonZero) {
-        alert("Please enter sales quantities for at least one item before synchronizing.");
-        return false;
-    }
-    
-    // Check cash shortage requirement
     const startingFloat = parseFloat(document.getElementById('startingFloatInput')?.value || 0) || 0.0;
     const cashSales = parseFloat(document.getElementById('cashSalesInput')?.value || 0) || 0.0;
     const cashPaidOuts = parseFloat(document.getElementById('cashPaidOutsInput')?.value || 0) || 0.0;
@@ -1013,15 +1112,8 @@ function triggerSecurityModalCheck() {
     confirmModal.show();
 }
 
-// ==========================================
-// LIVE CLIENT-SIDE FILTER & SORT ENGINE
-// ==========================================
+// LIVE FILTER AND SORT ENGINE
 document.addEventListener("DOMContentLoaded", function() {
-    const picker = document.getElementById('eodClosingDatePicker');
-    if (picker && !picker.value) {
-        picker.value = getLocalTodayString();
-    }
-
     const auditInput = document.getElementById('eodAuditNoteInput');
     if (auditInput) {
         auditInput.addEventListener('input', function() {
