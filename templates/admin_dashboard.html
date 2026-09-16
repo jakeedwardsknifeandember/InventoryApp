@@ -7,18 +7,19 @@
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
     <style>
         :root {
-            --bg-dark: #0a0a0f;
+            --bg-dark: #09090d;
             --panel-dark: #161622;
             --panel-border: #2d2d3e;
             --accent: #3b82f6;
-            --text-primary: #ffffff;
-            --text-secondary: #cbd5e1;
-            --text-muted: #94a3b8;
+            --text-pure: #ffffff;
+            --text-heading: #f1f5f9;
+            --text-label: #e2e8f0;
+            --text-muted-custom: #94a3b8;
         }
 
         body {
             background-color: var(--bg-dark);
-            color: var(--text-primary);
+            color: var(--text-pure);
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
             min-height: 100vh;
             margin: 0;
@@ -32,35 +33,30 @@
             padding: 22px;
         }
 
-        /* High-Contrast Form Labels & Placeholders */
-        .form-label, label {
-            color: #e2e8f0 !important;
-            font-size: 11px !important;
+        .form-label-custom {
+            color: var(--text-label) !important;
+            font-size: 11.5px !important;
             font-weight: 700 !important;
-            letter-spacing: 0.5px;
+            letter-spacing: 0.6px;
             text-transform: uppercase;
             margin-bottom: 6px;
-            display: inline-block;
+            display: block;
         }
 
-        .form-control, .form-select {
-            background-color: #12121a !important;
-            border: 1px solid #3f3f54 !important;
-            color: #ffffff !important;
-            font-size: 13.5px;
-        }
-        .form-control:focus, .form-select:focus {
-            border-color: var(--accent) !important;
-            box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.25) !important;
-            color: #ffffff !important;
+        .subtext-contrast {
+            color: var(--text-muted-custom) !important;
         }
 
-        .form-control::placeholder {
-            color: #94a3b8 !important;
-            opacity: 1 !important;
+        .hud-label {
+            color: #cbd5e1 !important;
+            font-size: 11px !important;
+            font-weight: 700 !important;
+            text-transform: uppercase;
+            letter-spacing: 0.6px;
+            display: block;
+            margin-bottom: 4px;
         }
 
-        /* Table Styling */
         .admin-table th {
             background: #111118 !important;
             color: #cbd5e1 !important;
@@ -69,50 +65,81 @@
             text-transform: uppercase;
             letter-spacing: 0.5px;
             padding: 12px 14px;
-            border-bottom: 2px solid var(--panel-border);
+            border-bottom: 1px solid var(--panel-border);
         }
 
         .admin-table td {
             padding: 12px 14px;
             background: var(--panel-dark);
-            border-bottom: 1px solid #232332;
+            border-bottom: 1px solid #242434;
             font-size: 13.5px;
-            color: var(--text-primary);
+            color: var(--text-pure);
             vertical-align: middle;
         }
 
-        /* High-Contrast Status Badges */
-        .status-badge-active {
-            background: rgba(16, 185, 129, 0.2) !important;
-            color: #34d399 !important;
-            border: 1px solid #10b981;
-            font-weight: 700;
+        .form-control, .form-select {
+            background-color: #101016 !important;
+            border: 1px solid #38384e !important;
+            color: #ffffff !important;
+            font-size: 13.5px !important;
         }
-        .status-badge-trial {
-            background: rgba(59, 130, 246, 0.2) !important;
-            color: #93c5fd !important;
-            border: 1px solid #3b82f6;
-            font-weight: 700;
+        .form-control::placeholder {
+            color: var(--text-muted-custom) !important;
+            opacity: 1;
         }
-        .status-badge-suspended {
-            background: rgba(239, 68, 68, 0.2) !important;
-            color: #f87171 !important;
-            border: 1px solid #ef4444;
-            font-weight: 700;
+        .form-control:focus, .form-select:focus {
+            border-color: var(--accent) !important;
+            background-color: #14141e !important;
+            box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.25) !important;
+            color: #ffffff !important;
         }
 
-        /* Modal Overrides */
-        .modal-content {
+        /* Password Input Wrapper & Toggle */
+        .password-input-wrapper {
+            position: relative;
+            width: 100%;
+        }
+        .password-input-wrapper .form-control {
+            padding-right: 42px !important;
+        }
+        .password-toggle-btn {
+            position: absolute;
+            right: 10px;
+            top: 50%;
+            transform: translateY(-50%);
+            background: transparent;
+            border: none;
+            color: #94a3b8;
+            cursor: pointer;
+            padding: 4px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: color 0.15s ease;
+        }
+        .password-toggle-btn:hover {
+            color: #ffffff;
+        }
+
+        .status-badge-active { background: rgba(16, 185, 129, 0.2); color: #34d399; border: 1px solid rgba(16, 185, 129, 0.4); }
+        .status-badge-trial { background: rgba(59, 130, 246, 0.2); color: #60a5fa; border: 1px solid rgba(59, 130, 246, 0.4); }
+        .status-badge-suspended { background: rgba(239, 68, 68, 0.2); color: #f87171; border: 1px solid rgba(239, 68, 68, 0.4); }
+
+        .modal-content-custom {
             background-color: #181824 !important;
-            border: 1px solid #3f3f54 !important;
+            border: 1px solid #38384e !important;
+            color: #ffffff !important;
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.8) !important;
         }
-        .modal-header {
-            background-color: #12121a !important;
-            border-bottom: 1px solid #2d2d3e !important;
+        .modal-header-custom {
+            background-color: #13131c !important;
+            border-bottom: 1px solid #38384e !important;
+            padding: 14px 18px !important;
         }
-        .modal-footer {
-            background-color: #12121a !important;
-            border-top: 1px solid #2d2d3e !important;
+        .modal-footer-custom {
+            background-color: #13131c !important;
+            border-top: 1px solid #38384e !important;
+            padding: 12px 18px !important;
         }
     </style>
 </head>
@@ -121,13 +148,13 @@
 <div class="container-fluid" style="max-width: 1360px;">
 
     <!-- TOP CONTROL BAR -->
-    <div class="d-flex justify-content-between align-items-center mb-4 pb-2 border-bottom border-secondary">
+    <div class="d-flex justify-content-between align-items-center mb-4 pb-3 border-bottom border-secondary">
         <div>
             <h3 class="fw-bold text-white m-0">Knife & Ember Multi-Tenant Orchestrator</h3>
-            <small style="color: #cbd5e1; font-weight: 500;">Master Client Deployment, Isolated Database Governance & Remote Access Controller</small>
+            <span class="subtext-contrast small">Master Client Deployment, Isolated Database Governance & Remote Access Controller</span>
         </div>
         <div class="d-flex gap-2">
-            <a href="/login" class="btn btn-sm btn-outline-secondary font-monospace" style="color: #cbd5e1;" target="_blank">Open Store Login</a>
+            <a href="/login" class="btn btn-sm btn-outline-secondary font-monospace" target="_blank">Open Store Login</a>
             <a href="/admin/logout" class="btn btn-sm btn-outline-danger fw-bold">Sign Out Root</a>
         </div>
     </div>
@@ -148,43 +175,51 @@
     <div class="row g-3 mb-4">
         <div class="col-12 col-md-4">
             <div class="admin-card p-3" style="border-left: 4px solid #3b82f6;">
-                <small class="d-block fw-bold text-uppercase" style="font-size: 11px; color: #cbd5e1;">Total Client Deployments</small>
+                <span class="hud-label">Total Client Deployments</span>
                 <h3 class="m-0 font-monospace text-white fw-bold mt-1">{{ total_tenants }}</h3>
             </div>
         </div>
         <div class="col-12 col-md-4">
             <div class="admin-card p-3" style="border-left: 4px solid #10b981;">
-                <small class="d-block fw-bold text-uppercase" style="font-size: 11px; color: #cbd5e1;">Active Licensed Clients</small>
+                <span class="hud-label">Active Licensed Clients</span>
                 <h3 class="m-0 font-monospace text-success fw-bold mt-1">{{ active_tenants }}</h3>
             </div>
         </div>
         <div class="col-12 col-md-4">
             <div class="admin-card p-3" style="border-left: 4px solid #f59e0b;">
-                <small class="d-block fw-bold text-uppercase" style="font-size: 11px; color: #cbd5e1;">Total Storage Footprint</small>
+                <span class="hud-label">Total Storage Footprint</span>
                 <h3 class="m-0 font-monospace text-warning fw-bold mt-1">{{ total_storage_mb }} MB</h3>
             </div>
         </div>
     </div>
 
     <div class="row g-4 mb-4">
-        <!-- PROVISION CLIENT FORM -->
+        <!-- PROVISION CLIENT FORM WITH SHOW/HIDE TOGGLE -->
         <div class="col-12 col-lg-4">
             <div class="admin-card h-100">
                 <h5 class="fw-bold text-white mb-3 pb-2 border-bottom border-secondary">+ Provision New Client Account</h5>
                 <form method="POST" action="/admin/create_client">
                     <div class="mb-3">
-                        <label class="form-label">CLIENT USERNAME (TENANT SLUG):</label>
+                        <label class="form-label-custom">Client Username (Tenant Slug):</label>
                         <input type="text" name="username" class="form-control font-monospace" placeholder="e.g. urbanbrew" required autocomplete="off">
-                        <small style="color: #cbd5e1; font-size: 11.5px; display: block; margin-top: 4px;">
-                            Will generate: <code style="color: #60a5fa; background: #11111a; padding: 2px 6px; border-radius: 4px;">data/client_{username}.db</code>
-                        </small>
+                        <small class="font-monospace mt-1 d-block" style="color: #38bdf8; font-size: 11px;">Will generate: data/client_{username}.db</small>
                     </div>
+
                     <div class="mb-3">
-                        <label class="form-label">INITIAL OWNER PASSWORD:</label>
-                        <input type="password" name="password" class="form-control" placeholder="Enter secure password" required autocomplete="off">
+                        <label class="form-label-custom">Initial Owner Password:</label>
+                        <div class="password-input-wrapper">
+                            <input type="password" id="initialClientPassword" name="password" class="form-control font-monospace" placeholder="Enter secure password" required autocomplete="off">
+                            <button type="button" class="password-toggle-btn" id="toggleInitialPassBtn" onclick="toggleInputPassword('initialClientPassword', 'toggleInitialPassBtn')" title="Show / Hide Password">
+                                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                    <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
+                                    <circle cx="12" cy="12" r="3"></circle>
+                                </svg>
+                            </button>
+                        </div>
                     </div>
+
                     <div class="mb-3">
-                        <label class="form-label">SUBSCRIPTION TIER STATUS:</label>
+                        <label class="form-label-custom">Subscription Tier Status:</label>
                         <select name="status" class="form-select">
                             <option value="Active" selected>Active (Full Operational Access)</option>
                             <option value="Trial">Trial (30-Day Testing)</option>
@@ -198,19 +233,19 @@
             </div>
         </div>
 
-        <!-- REGISTERED TENANTS DIRECTORY -->
+        <!-- REGISTERED TENANTS DIRECTORY WITH PASSWORD REVEAL & COPY -->
         <div class="col-12 col-lg-8">
             <div class="admin-card p-0 overflow-hidden h-100 d-flex flex-column">
-                <div class="p-3 border-bottom border-secondary d-flex justify-content-between align-items-center" style="background: #111118;">
-                    <span class="fw-bold text-white">Registered Client Organizations</span>
-                    <span class="font-monospace small" style="color: #cbd5e1;">{{ users|length }} Tenant Enclaves</span>
+                <div class="p-3 border-bottom border-secondary d-flex justify-content-between align-items-center" style="background: #12121a;">
+                    <span class="fw-bold text-white fs-6">Registered Client Organizations</span>
+                    <span class="subtext-contrast small font-monospace">{{ users|length }} Tenant Enclaves</span>
                 </div>
 
                 <div class="table-responsive flex-grow-1">
                     <table class="table admin-table align-middle m-0">
                         <thead>
                             <tr>
-                                <th>CLIENT SLUG</th>
+                                <th>CLIENT & PASSWORD</th>
                                 <th>INVENTORY / MENU</th>
                                 <th>DB FOOTPRINT</th>
                                 <th>STATUS</th>
@@ -221,12 +256,32 @@
                             {% for user in users %}
                             <tr>
                                 <td>
-                                    <strong class="text-white fs-6">{{ user.username }}</strong>
-                                    <small class="d-block font-monospace" style="color: #94a3b8; font-size: 11px;">Password: ••••••••</small>
+                                    <strong class="text-white fs-6 d-block">{{ user.username }}</strong>
+                                    <!-- Revealing Password Controls -->
+                                    <div class="d-flex align-items-center gap-1 mt-1">
+                                        <span class="subtext-contrast font-monospace" style="font-size: 11px;">Pass:</span>
+                                        <span id="passSpan{{ user.username }}" class="font-monospace text-warning fw-bold" style="font-size: 11.5px; min-width: 70px;" data-real="{{ user.password }}" data-masked="••••••••">••••••••</span>
+                                        
+                                        <!-- Eye Toggle Button -->
+                                        <button type="button" class="btn btn-sm text-secondary p-0 ms-1 border-0" onclick="toggleTablePassword('{{ user.username }}')" title="Show / Hide Password">
+                                            <svg id="eyeIcon{{ user.username }}" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                                <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
+                                                <circle cx="12" cy="12" r="3"></circle>
+                                            </svg>
+                                        </button>
+
+                                        <!-- Copy Password Button -->
+                                        <button type="button" class="btn btn-sm text-secondary p-0 ms-1 border-0" onclick="copyPassword('{{ user.password }}', this)" title="Copy Password">
+                                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                                <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+                                                <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+                                            </svg>
+                                        </button>
+                                    </div>
                                 </td>
                                 <td>
-                                    <span class="badge bg-dark border border-secondary text-info px-2 py-1">{{ user.product_count }} Products</span>
-                                    <span class="badge bg-dark border border-secondary text-light px-2 py-1">{{ user.ingredient_count }} Ingredients</span>
+                                    <span class="badge bg-dark border border-secondary text-info font-monospace">{{ user.product_count }} Products</span>
+                                    <span class="badge bg-dark border border-secondary text-light font-monospace">{{ user.ingredient_count }} Ingredients</span>
                                 </td>
                                 <td>
                                     <span class="font-monospace text-white fw-bold">{{ user.size_kb }} KB</span>
@@ -243,7 +298,7 @@
                                     <a href="/portal/{{ user.username }}/pos" target="_blank" class="btn btn-sm btn-outline-success py-0 px-2 fw-bold me-1" style="font-size: 11.5px;" title="Open Live Counter POS">
                                         POS
                                     </a>
-                                    <a href="/admin/download_db/{{ user.username }}" class="btn btn-sm btn-outline-secondary py-0 px-2 fw-bold me-1" style="font-size: 11.5px; color: #cbd5e1;" title="Download SQLite snapshot for offline audit">
+                                    <a href="/admin/download_db/{{ user.username }}" class="btn btn-sm btn-outline-secondary py-0 px-2 fw-bold me-1" style="font-size: 11.5px;" title="Download SQLite snapshot for offline audit">
                                         Download DB
                                     </a>
                                     <button type="button" class="btn btn-sm btn-outline-warning py-0 px-2 fw-bold me-1" style="font-size: 11.5px;" data-bs-toggle="modal" data-bs-target="#editClientModal{{ user.username }}">
@@ -252,6 +307,7 @@
 
                                     {% if user.username != 'bakery' %}
                                     <form method="POST" action="/admin/delete_client" class="d-inline" onsubmit="return confirm('WARNING: Permanently purge {{ user.username }} and delete its database file?');">
+                                        <input type="hidden" name="action" value="delete_client">
                                         <input type="hidden" name="username" value="{{ user.username }}">
                                         <button type="submit" class="btn btn-sm btn-outline-danger py-0 px-2 fw-bold" style="font-size: 11.5px;">
                                             Purge
@@ -261,19 +317,19 @@
                                 </td>
                             </tr>
 
-                            <!-- MODAL: EDIT TENANT PARAMETERS -->
+                            <!-- MODAL: EDIT TENANT PARAMETERS WITH PASSWORD TOGGLE -->
                             <div class="modal fade" id="editClientModal{{ user.username }}" tabindex="-1" aria-hidden="true">
                                 <div class="modal-dialog modal-dialog-centered modal-sm">
-                                    <div class="modal-content shadow-lg">
+                                    <div class="modal-content modal-content-custom">
                                         <form method="POST" action="/admin/update_client">
                                             <input type="hidden" name="username" value="{{ user.username }}">
-                                            <div class="modal-header p-3">
-                                                <h6 class="modal-title fw-bold text-white">Manage: {{ user.username }}</h6>
+                                            <div class="modal-header modal-header-custom">
+                                                <h6 class="modal-title fw-bold text-white m-0">Manage: {{ user.username }}</h6>
                                                 <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
                                             </div>
                                             <div class="modal-body p-3">
                                                 <div class="mb-3">
-                                                    <label class="form-label" style="color: #e2e8f0; font-weight: 700; font-size: 11px;">SUBSCRIPTION STATUS:</label>
+                                                    <label class="form-label-custom">Subscription Status:</label>
                                                     <select name="new_status" class="form-select form-select-sm">
                                                         <option value="Active" {% if user.status == 'Active' %}selected{% endif %}>Active</option>
                                                         <option value="Trial" {% if user.status == 'Trial' %}selected{% endif %}>Trial</option>
@@ -281,11 +337,19 @@
                                                     </select>
                                                 </div>
                                                 <div>
-                                                    <label class="form-label" style="color: #e2e8f0; font-weight: 700; font-size: 11px;">RESET OWNER PASSWORD:</label>
-                                                    <input type="password" name="new_password" class="form-control form-control-sm" placeholder="Leave blank to keep current">
+                                                    <label class="form-label-custom">Reset Owner Password:</label>
+                                                    <div class="password-input-wrapper">
+                                                        <input type="password" id="modalPassInput{{ user.username }}" name="new_password" class="form-control form-control-sm font-monospace" placeholder="Leave blank to keep current">
+                                                        <button type="button" class="password-toggle-btn" id="modalToggleBtn{{ user.username }}" onclick="toggleInputPassword('modalPassInput{{ user.username }}', 'modalToggleBtn{{ user.username }}')" title="Show / Hide Password">
+                                                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                                                <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
+                                                                <circle cx="12" cy="12" r="3"></circle>
+                                                            </svg>
+                                                        </button>
+                                                    </div>
                                                 </div>
                                             </div>
-                                            <div class="modal-footer p-2 justify-content-between">
+                                            <div class="modal-footer modal-footer-custom justify-content-between">
                                                 <button type="button" class="btn btn-sm btn-secondary" data-bs-dismiss="modal">Cancel</button>
                                                 <button type="submit" class="btn btn-sm btn-primary fw-bold px-3">Save Changes</button>
                                             </div>
@@ -295,7 +359,7 @@
                             </div>
                             {% else %}
                             <tr>
-                                <td colspan="5" class="text-center py-4 text-muted">No client tenants found in system registry.</td>
+                                <td colspan="5" class="text-center py-4 subtext-contrast">No client tenants found in system registry.</td>
                             </tr>
                             {% endfor %}
                         </tbody>
@@ -307,5 +371,76 @@
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+<script>
+    // Reveal or Mask Password in Directory Table
+    function toggleTablePassword(username) {
+        const span = document.getElementById('passSpan' + username);
+        const icon = document.getElementById('eyeIcon' + username);
+        if (!span || !icon) return;
+
+        const isMasked = span.textContent === span.getAttribute('data-masked');
+        if (isMasked) {
+            span.textContent = span.getAttribute('data-real');
+            span.classList.remove('text-warning');
+            span.classList.add('text-info');
+            icon.innerHTML = `
+                <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"></path>
+                <line x1="1" y1="1" x2="23" y2="23"></line>
+            `;
+            icon.style.color = '#38bdf8';
+        } else {
+            span.textContent = span.getAttribute('data-masked');
+            span.classList.remove('text-info');
+            span.classList.add('text-warning');
+            icon.innerHTML = `
+                <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
+                <circle cx="12" cy="12" r="3"></circle>
+            `;
+            icon.style.color = '#94a3b8';
+        }
+    }
+
+    // Toggle Form and Modal Password Inputs
+    function toggleInputPassword(inputId, btnId) {
+        const input = document.getElementById(inputId);
+        const btn = document.getElementById(btnId);
+        if (!input || !btn) return;
+
+        const isPassword = input.type === 'password';
+        input.type = isPassword ? 'text' : 'password';
+
+        if (isPassword) {
+            btn.innerHTML = `
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"></path>
+                    <line x1="1" y1="1" x2="23" y2="23"></line>
+                </svg>
+            `;
+            btn.style.color = '#38bdf8';
+        } else {
+            btn.innerHTML = `
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
+                    <circle cx="12" cy="12" r="3"></circle>
+                </svg>
+            `;
+            btn.style.color = '#94a3b8';
+        }
+    }
+
+    // Quick One-Click Password Copy
+    function copyPassword(text, btnEl) {
+        navigator.clipboard.writeText(text);
+        const originalHtml = btnEl.innerHTML;
+        btnEl.innerHTML = `
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#34d399" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                <polyline points="20 6 9 17 4 12"></polyline>
+            </svg>
+        `;
+        setTimeout(() => {
+            btnEl.innerHTML = originalHtml;
+        }, 1200);
+    }
+</script>
 </body>
 </html>
