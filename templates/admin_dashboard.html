@@ -3,83 +3,309 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Admin Dashboard - Knife and Ember</title>
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <title>Knife & Ember - Master Platform Console</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
     <style>
-        body { background-color: #121212; color: #ffffff; padding: 2rem; }
-        .card { background-color: #1e1e1e; border: 1px solid #333; color: #fff; }
-        .table-dark { background-color: #1e1e1e; }
-        .btn-primary { background-color: #d9534f; border: none; }
-        .btn-primary:hover { background-color: #c9302c; }
+        :root {
+            --bg-dark: #0a0a0f;
+            --panel-dark: #161622;
+            --panel-border: #2d2d3e;
+            --accent: #3b82f6;
+            --text-primary: #ffffff;
+            --text-secondary: #cbd5e1;
+            --text-muted: #94a3b8;
+        }
+
+        body {
+            background-color: var(--bg-dark);
+            color: var(--text-primary);
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            min-height: 100vh;
+            margin: 0;
+            padding: 24px;
+        }
+
+        .admin-card {
+            background-color: var(--panel-dark);
+            border: 1px solid var(--panel-border);
+            border-radius: 10px;
+            padding: 22px;
+        }
+
+        /* High-Contrast Form Labels & Placeholders */
+        .form-label, label {
+            color: #e2e8f0 !important;
+            font-size: 11px !important;
+            font-weight: 700 !important;
+            letter-spacing: 0.5px;
+            text-transform: uppercase;
+            margin-bottom: 6px;
+            display: inline-block;
+        }
+
+        .form-control, .form-select {
+            background-color: #12121a !important;
+            border: 1px solid #3f3f54 !important;
+            color: #ffffff !important;
+            font-size: 13.5px;
+        }
+        .form-control:focus, .form-select:focus {
+            border-color: var(--accent) !important;
+            box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.25) !important;
+            color: #ffffff !important;
+        }
+
+        .form-control::placeholder {
+            color: #94a3b8 !important;
+            opacity: 1 !important;
+        }
+
+        /* Table Styling */
+        .admin-table th {
+            background: #111118 !important;
+            color: #cbd5e1 !important;
+            font-size: 11px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            padding: 12px 14px;
+            border-bottom: 2px solid var(--panel-border);
+        }
+
+        .admin-table td {
+            padding: 12px 14px;
+            background: var(--panel-dark);
+            border-bottom: 1px solid #232332;
+            font-size: 13.5px;
+            color: var(--text-primary);
+            vertical-align: middle;
+        }
+
+        /* High-Contrast Status Badges */
+        .status-badge-active {
+            background: rgba(16, 185, 129, 0.2) !important;
+            color: #34d399 !important;
+            border: 1px solid #10b981;
+            font-weight: 700;
+        }
+        .status-badge-trial {
+            background: rgba(59, 130, 246, 0.2) !important;
+            color: #93c5fd !important;
+            border: 1px solid #3b82f6;
+            font-weight: 700;
+        }
+        .status-badge-suspended {
+            background: rgba(239, 68, 68, 0.2) !important;
+            color: #f87171 !important;
+            border: 1px solid #ef4444;
+            font-weight: 700;
+        }
+
+        /* Modal Overrides */
+        .modal-content {
+            background-color: #181824 !important;
+            border: 1px solid #3f3f54 !important;
+        }
+        .modal-header {
+            background-color: #12121a !important;
+            border-bottom: 1px solid #2d2d3e !important;
+        }
+        .modal-footer {
+            background-color: #12121a !important;
+            border-top: 1px solid #2d2d3e !important;
+        }
     </style>
 </head>
 <body>
-    <div class="container">
-        <div class="d-flex justify-content-between align-items-center mb-4">
-            <h2>Knife and Ember Client Management</h2>
-            <a href="/admin/logout" class="btn btn-outline-light btn-sm">Log Out</a>
+
+<div class="container-fluid" style="max-width: 1360px;">
+
+    <!-- TOP CONTROL BAR -->
+    <div class="d-flex justify-content-between align-items-center mb-4 pb-2 border-bottom border-secondary">
+        <div>
+            <h3 class="fw-bold text-white m-0">Knife & Ember Multi-Tenant Orchestrator</h3>
+            <small style="color: #cbd5e1; font-weight: 500;">Master Client Deployment, Isolated Database Governance & Remote Access Controller</small>
+        </div>
+        <div class="d-flex gap-2">
+            <a href="/login" class="btn btn-sm btn-outline-secondary font-monospace" style="color: #cbd5e1;" target="_blank">Open Store Login</a>
+            <a href="/admin/logout" class="btn btn-sm btn-outline-danger fw-bold">Sign Out Root</a>
+        </div>
+    </div>
+
+    <!-- FLASH NOTICES -->
+    {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+            {% for category, message in messages %}
+                <div class="alert alert-{{ category }} alert-dismissible fade show border-0 fw-bold mb-4" role="alert">
+                    {{ message }}
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="alert"></button>
+                </div>
+            {% endfor %}
+        {% endif %}
+    {% endwith %}
+
+    <!-- METRICS HUD -->
+    <div class="row g-3 mb-4">
+        <div class="col-12 col-md-4">
+            <div class="admin-card p-3" style="border-left: 4px solid #3b82f6;">
+                <small class="d-block fw-bold text-uppercase" style="font-size: 11px; color: #cbd5e1;">Total Client Deployments</small>
+                <h3 class="m-0 font-monospace text-white fw-bold mt-1">{{ total_tenants }}</h3>
+            </div>
+        </div>
+        <div class="col-12 col-md-4">
+            <div class="admin-card p-3" style="border-left: 4px solid #10b981;">
+                <small class="d-block fw-bold text-uppercase" style="font-size: 11px; color: #cbd5e1;">Active Licensed Clients</small>
+                <h3 class="m-0 font-monospace text-success fw-bold mt-1">{{ active_tenants }}</h3>
+            </div>
+        </div>
+        <div class="col-12 col-md-4">
+            <div class="admin-card p-3" style="border-left: 4px solid #f59e0b;">
+                <small class="d-block fw-bold text-uppercase" style="font-size: 11px; color: #cbd5e1;">Total Storage Footprint</small>
+                <h3 class="m-0 font-monospace text-warning fw-bold mt-1">{{ total_storage_mb }} MB</h3>
+            </div>
+        </div>
+    </div>
+
+    <div class="row g-4 mb-4">
+        <!-- PROVISION CLIENT FORM -->
+        <div class="col-12 col-lg-4">
+            <div class="admin-card h-100">
+                <h5 class="fw-bold text-white mb-3 pb-2 border-bottom border-secondary">+ Provision New Client Account</h5>
+                <form method="POST" action="/admin/create_client">
+                    <div class="mb-3">
+                        <label class="form-label">CLIENT USERNAME (TENANT SLUG):</label>
+                        <input type="text" name="username" class="form-control font-monospace" placeholder="e.g. urbanbrew" required autocomplete="off">
+                        <small style="color: #cbd5e1; font-size: 11.5px; display: block; margin-top: 4px;">
+                            Will generate: <code style="color: #60a5fa; background: #11111a; padding: 2px 6px; border-radius: 4px;">data/client_{username}.db</code>
+                        </small>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">INITIAL OWNER PASSWORD:</label>
+                        <input type="password" name="password" class="form-control" placeholder="Enter secure password" required autocomplete="off">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">SUBSCRIPTION TIER STATUS:</label>
+                        <select name="status" class="form-select">
+                            <option value="Active" selected>Active (Full Operational Access)</option>
+                            <option value="Trial">Trial (30-Day Testing)</option>
+                            <option value="Suspended">Suspended (Locked)</option>
+                        </select>
+                    </div>
+                    <button type="submit" class="btn btn-primary fw-bold w-100 py-2 mt-2">
+                        Initialize & Seed Database
+                    </button>
+                </form>
+            </div>
         </div>
 
-        <div class="row g-4">
-            <!-- Add New Client Form -->
-            <div class="col-md-4">
-                <div class="card p-3 shadow">
-                    <h5 class="mb-3">Provision New Client Account</h5>
-                    <form method="POST" action="/admin/create_client">
-                        <div class="mb-3">
-                            <label class="form-label small">Client Username</label>
-                            <input type="text" name="username" class="form-control form-control-sm bg-dark text-light border-secondary" placeholder="e.g. urbanbrew" required>
-                        </div>
-                        <div class="mb-3">
-                            <label class="form-label small">Initial Password</label>
-                            <input type="password" name="password" class="form-control form-control-sm bg-dark text-light border-secondary" required>
-                        </div>
-                        <div class="mb-3">
-                            <label class="form-label small">Status</label>
-                            <select name="status" class="form-select form-select-sm bg-dark text-light border-secondary">
-                                <option value="Active">Active</option>
-                                <option value="Trial">Trial</option>
-                                <option value="Suspended">Suspended</option>
-                            </select>
-                        </div>
-                        <button type="submit" class="btn btn-primary btn-sm w-100">Create / Update Account</button>
-                    </form>
+        <!-- REGISTERED TENANTS DIRECTORY -->
+        <div class="col-12 col-lg-8">
+            <div class="admin-card p-0 overflow-hidden h-100 d-flex flex-column">
+                <div class="p-3 border-bottom border-secondary d-flex justify-content-between align-items-center" style="background: #111118;">
+                    <span class="fw-bold text-white">Registered Client Organizations</span>
+                    <span class="font-monospace small" style="color: #cbd5e1;">{{ users|length }} Tenant Enclaves</span>
                 </div>
-            </div>
 
-            <!-- Existing Clients Table -->
-            <div class="col-md-8">
-                <div class="card p-3 shadow">
-                    <h5 class="mb-3">Registered Client Organizations</h5>
-                    <div class="table-responsive">
-                        <table class="table table-dark table-striped align-middle small">
-                            <thead>
-                                <tr>
-                                    <th>Username</th>
-                                    <th>Password</th>
-                                    <th>Database Path</th>
-                                    <th>Status</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {% for user in users %}
-                                <tr>
-                                    <td><strong>{{ user.username }}</strong></td>
-                                    <td><code>{{ user.password }}</code></td>
-                                    <td class="text-muted">{{ user.database }}</td>
-                                    <td>
-                                        <span class="badge {% if user.status == 'Active' %}bg-success{% elif user.status == 'Trial' %}bg-warning text-dark{% else %}bg-danger{% endif %}">
-                                            {{ user.status }}
-                                        </span>
-                                    </td>
-                                </tr>
-                                {% endfor %}
-                            </tbody>
-                        </table>
-                    </div>
+                <div class="table-responsive flex-grow-1">
+                    <table class="table admin-table align-middle m-0">
+                        <thead>
+                            <tr>
+                                <th>CLIENT SLUG</th>
+                                <th>INVENTORY / MENU</th>
+                                <th>DB FOOTPRINT</th>
+                                <th>STATUS</th>
+                                <th class="text-end pe-3">CONSULTANT ACTIONS</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for user in users %}
+                            <tr>
+                                <td>
+                                    <strong class="text-white fs-6">{{ user.username }}</strong>
+                                    <small class="d-block font-monospace" style="color: #94a3b8; font-size: 11px;">Password: ••••••••</small>
+                                </td>
+                                <td>
+                                    <span class="badge bg-dark border border-secondary text-info px-2 py-1">{{ user.product_count }} Products</span>
+                                    <span class="badge bg-dark border border-secondary text-light px-2 py-1">{{ user.ingredient_count }} Ingredients</span>
+                                </td>
+                                <td>
+                                    <span class="font-monospace text-white fw-bold">{{ user.size_kb }} KB</span>
+                                </td>
+                                <td>
+                                    <span class="badge px-2 py-1 font-monospace {% if user.status == 'Active' %}status-badge-active{% elif user.status == 'Trial' %}status-badge-trial{% else %}status-badge-suspended{% endif %}">
+                                        {{ user.status }}
+                                    </span>
+                                </td>
+                                <td class="text-end pe-3 text-nowrap">
+                                    <a href="/admin/impersonate/{{ user.username }}" target="_blank" class="btn btn-sm btn-outline-info py-0 px-2 fw-bold me-1" style="font-size: 11.5px;" title="Jump directly into client back-office as Owner Admin">
+                                        Open Office
+                                    </a>
+                                    <a href="/portal/{{ user.username }}/pos" target="_blank" class="btn btn-sm btn-outline-success py-0 px-2 fw-bold me-1" style="font-size: 11.5px;" title="Open Live Counter POS">
+                                        POS
+                                    </a>
+                                    <a href="/admin/download_db/{{ user.username }}" class="btn btn-sm btn-outline-secondary py-0 px-2 fw-bold me-1" style="font-size: 11.5px; color: #cbd5e1;" title="Download SQLite snapshot for offline audit">
+                                        Download DB
+                                    </a>
+                                    <button type="button" class="btn btn-sm btn-outline-warning py-0 px-2 fw-bold me-1" style="font-size: 11.5px;" data-bs-toggle="modal" data-bs-target="#editClientModal{{ user.username }}">
+                                        Edit
+                                    </button>
+
+                                    {% if user.username != 'bakery' %}
+                                    <form method="POST" action="/admin/delete_client" class="d-inline" onsubmit="return confirm('WARNING: Permanently purge {{ user.username }} and delete its database file?');">
+                                        <input type="hidden" name="username" value="{{ user.username }}">
+                                        <button type="submit" class="btn btn-sm btn-outline-danger py-0 px-2 fw-bold" style="font-size: 11.5px;">
+                                            Purge
+                                        </button>
+                                    </form>
+                                    {% endif %}
+                                </td>
+                            </tr>
+
+                            <!-- MODAL: EDIT TENANT PARAMETERS -->
+                            <div class="modal fade" id="editClientModal{{ user.username }}" tabindex="-1" aria-hidden="true">
+                                <div class="modal-dialog modal-dialog-centered modal-sm">
+                                    <div class="modal-content shadow-lg">
+                                        <form method="POST" action="/admin/update_client">
+                                            <input type="hidden" name="username" value="{{ user.username }}">
+                                            <div class="modal-header p-3">
+                                                <h6 class="modal-title fw-bold text-white">Manage: {{ user.username }}</h6>
+                                                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                                            </div>
+                                            <div class="modal-body p-3">
+                                                <div class="mb-3">
+                                                    <label class="form-label" style="color: #e2e8f0; font-weight: 700; font-size: 11px;">SUBSCRIPTION STATUS:</label>
+                                                    <select name="new_status" class="form-select form-select-sm">
+                                                        <option value="Active" {% if user.status == 'Active' %}selected{% endif %}>Active</option>
+                                                        <option value="Trial" {% if user.status == 'Trial' %}selected{% endif %}>Trial</option>
+                                                        <option value="Suspended" {% if user.status == 'Suspended' %}selected{% endif %}>Suspended</option>
+                                                    </select>
+                                                </div>
+                                                <div>
+                                                    <label class="form-label" style="color: #e2e8f0; font-weight: 700; font-size: 11px;">RESET OWNER PASSWORD:</label>
+                                                    <input type="password" name="new_password" class="form-control form-control-sm" placeholder="Leave blank to keep current">
+                                                </div>
+                                            </div>
+                                            <div class="modal-footer p-2 justify-content-between">
+                                                <button type="button" class="btn btn-sm btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                                                <button type="submit" class="btn btn-sm btn-primary fw-bold px-3">Save Changes</button>
+                                            </div>
+                                        </form>
+                                    </div>
+                                </div>
+                            </div>
+                            {% else %}
+                            <tr>
+                                <td colspan="5" class="text-center py-4 text-muted">No client tenants found in system registry.</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
                 </div>
             </div>
         </div>
     </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
 </body>
 </html>
