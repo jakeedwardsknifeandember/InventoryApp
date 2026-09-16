@@ -18,21 +18,10 @@
             --pos-muted: #94a3b8;
         }
 
-        /* Modern Dark Scrollbars */
-        ::-webkit-scrollbar {
-            width: 8px;
-            height: 8px;
-        }
-        ::-webkit-scrollbar-track {
-            background: #111117;
-        }
-        ::-webkit-scrollbar-thumb {
-            background: #2b2b3d;
-            border-radius: 4px;
-        }
-        ::-webkit-scrollbar-thumb:hover {
-            background: #3b3b52;
-        }
+        ::-webkit-scrollbar { width: 8px; height: 8px; }
+        ::-webkit-scrollbar-track { background: #111117; }
+        ::-webkit-scrollbar-thumb { background: #2b2b3d; border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: #3b3b52; }
 
         body {
             background-color: var(--pos-bg);
@@ -44,13 +33,9 @@
             user-select: none;
         }
 
-        .pos-container {
-            display: flex;
-            height: 100vh;
-            width: 100vw;
-        }
+        .pos-container { display: flex; height: 100vh; width: 100vw; }
 
-        /* Product Catalog Column */
+        /* Catalog Column */
         .catalog-pane {
             flex: 1;
             display: flex;
@@ -108,7 +93,6 @@
             align-content: start;
         }
 
-        /* Product Card Layout */
         .product-card {
             background: var(--pos-card-bg);
             border: 1px solid var(--pos-border);
@@ -118,27 +102,18 @@
             flex-direction: column;
             justify-content: space-between;
             cursor: pointer;
-            transition: transform 0.08s ease, border-color 0.15s ease, background-color 0.15s ease;
+            transition: transform 0.08s ease, border-color 0.15s ease;
             height: 142px;
             box-shadow: 0 2px 5px rgba(0, 0, 0, 0.25);
             position: relative;
         }
-        .product-card:hover {
-            background: var(--pos-card-hover);
-            border-color: #3b82f6;
-        }
-        .product-card:active {
-            transform: scale(0.98);
-            border-color: var(--pos-accent);
-        }
-
+        .product-card:hover { background: var(--pos-card-hover); border-color: #3b82f6; }
+        .product-card:active { transform: scale(0.98); border-color: var(--pos-accent); }
         .product-card.card-depleted {
             border-color: rgba(239, 68, 68, 0.45);
             background: linear-gradient(180deg, #1d1519 0%, #181824 100%);
         }
-        .product-card.card-low {
-            border-color: rgba(245, 158, 11, 0.4);
-        }
+        .product-card.card-low { border-color: rgba(245, 158, 11, 0.4); }
 
         .product-card .card-top {
             display: flex;
@@ -171,14 +146,8 @@
             white-space: nowrap;
             text-transform: uppercase;
         }
-        .stock-pill.stock-low {
-            background-color: #f59e0b;
-            color: #000000;
-        }
-        .stock-pill.stock-depleted {
-            background-color: #ef4444;
-            color: #ffffff;
-        }
+        .stock-pill.stock-low { background-color: #f59e0b; color: #000000; }
+        .stock-pill.stock-depleted { background-color: #ef4444; color: #ffffff; }
 
         .product-card .card-middle {
             display: flex;
@@ -208,7 +177,7 @@
 
         .product-card .card-bottom {
             display: flex;
-            justify-content: flex-end;
+            justify-content: space-between;
             align-items: center;
             width: 100%;
             border-top: 1px solid rgba(255, 255, 255, 0.07);
@@ -224,7 +193,17 @@
             white-space: nowrap;
         }
 
-        /* Cart & Ticket Sidebar */
+        .product-card .mods-indicator {
+            font-size: 10px;
+            font-weight: 700;
+            color: #60a5fa;
+            background: #172554;
+            border: 1px solid #1e3a8a;
+            border-radius: 4px;
+            padding: 2px 5px;
+        }
+
+        /* Cart Column */
         .cart-pane {
             width: 420px;
             background: var(--pos-sidebar-bg);
@@ -235,7 +214,7 @@
         }
 
         .cart-header {
-            padding: 16px 20px;
+            padding: 14px 18px;
             background: #14141c;
             border-bottom: 1px solid var(--pos-border);
             display: flex;
@@ -252,10 +231,25 @@
 
         .cart-header-cashier {
             color: #cbd5e1;
-            font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-            font-size: 11.5px;
+            font-size: 12px;
             font-weight: 500;
+            display: flex;
+            align-items: center;
+            margin-top: 2px;
         }
+
+        .switch-cashier-btn {
+            background: #1e1e28;
+            color: #60a5fa;
+            border: 1px solid #38384a;
+            font-size: 10px;
+            font-weight: 800;
+            padding: 2px 7px;
+            border-radius: 4px;
+            margin-left: 6px;
+            cursor: pointer;
+        }
+        .switch-cashier-btn:hover { background: #3b82f6; color: #ffffff; }
 
         .cart-items-wrapper {
             flex: 1;
@@ -279,29 +273,68 @@
             margin-bottom: 8px;
             display: flex;
             justify-content: space-between;
-            align-items: center;
+            align-items: flex-start;
+            transition: border-color 0.15s ease;
         }
-        .cart-row .item-info {
-            flex: 1;
-            padding-right: 10px;
-        }
+        .cart-row:hover { border-color: #3b82f6; }
+        .cart-row .item-info { flex: 1; padding-right: 10px; cursor: pointer; }
         .cart-row .item-title {
             font-weight: 700;
             font-size: 13.5px;
             color: #ffffff;
-            margin-bottom: 2px;
-        }
-        .cart-row .item-unit-price {
-            font-size: 12px;
-            color: #94a3b8;
-            font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-        }
-
-        .qty-controls {
+            margin-bottom: 3px;
             display: flex;
             align-items: center;
             gap: 6px;
         }
+
+        .cart-modifiers-box {
+            display: flex;
+            flex-direction: column;
+            gap: 2px;
+            margin-top: 4px;
+            margin-bottom: 4px;
+        }
+
+        .cart-mod-badge {
+            font-size: 10.5px;
+            font-family: monospace;
+            background: #111118;
+            border: 1px solid #2d2d3c;
+            color: #38bdf8;
+            border-radius: 4px;
+            padding: 1px 6px;
+            display: inline-block;
+            width: fit-content;
+        }
+
+        .cart-prep-badge {
+            font-size: 10.5px;
+            background: #1e1e12;
+            border: 1px solid #3d3d24;
+            color: #facc15;
+            border-radius: 4px;
+            padding: 1px 6px;
+            display: inline-block;
+            width: fit-content;
+        }
+
+        .cart-instruction-badge {
+            font-size: 10.5px;
+            font-style: italic;
+            color: #94a3b8;
+            display: block;
+            margin-top: 2px;
+        }
+
+        .cart-row .item-unit-price {
+            font-size: 11.5px;
+            color: #94a3b8;
+            font-family: monospace;
+            margin-top: 3px;
+        }
+
+        .qty-controls { display: flex; align-items: center; gap: 6px; margin-top: 4px; }
         .qty-btn {
             background: #252533;
             color: #ffffff;
@@ -317,7 +350,7 @@
         }
         .qty-btn:active { background: #3b82f6; }
         .qty-display {
-            font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+            font-family: monospace;
             font-weight: 800;
             min-width: 24px;
             text-align: center;
@@ -325,7 +358,6 @@
             color: #ffffff;
         }
 
-        /* Ticket Calculation Footer */
         .cart-footer {
             background: #14141c;
             border-top: 1px solid var(--pos-border);
@@ -362,15 +394,8 @@
             white-space: nowrap;
             transition: all 0.15s ease;
         }
-        .disc-pill:hover {
-            background: #2b2b3d;
-            border-color: #4b4b62;
-        }
-        .disc-pill.active {
-            background: #f59e0b;
-            color: #000000;
-            border-color: #f59e0b;
-        }
+        .disc-pill:hover { background: #2b2b3d; border-color: #4b4b62; }
+        .disc-pill.active { background: #f59e0b; color: #000000; border-color: #f59e0b; }
 
         .calc-line {
             display: flex;
@@ -381,7 +406,7 @@
             font-weight: 500;
         }
         .calc-line .calc-val {
-            font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+            font-family: monospace;
             color: #ffffff;
             font-weight: 700;
         }
@@ -410,11 +435,86 @@
             transition: background 0.15s ease;
         }
         .pay-btn:hover { background: var(--pos-accent-hover); }
-        .pay-btn:disabled {
+        .pay-btn:disabled { background: #222230; color: #94a3b8; border: 1px solid #333346; cursor: not-allowed; }
+
+        /* Dynamic Customization Modal Styles */
+        .mod-section-title {
+            font-size: 11px;
+            font-weight: 800;
+            color: #cbd5e1;
+            text-transform: uppercase;
+            letter-spacing: 0.6px;
+            margin-top: 14px;
+            margin-bottom: 8px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .mod-pill-grid {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+        }
+
+        .mod-option-pill {
+            background: #1c1c28;
+            border: 1px solid #333348;
+            color: #e2e8f0;
+            padding: 8px 14px;
+            border-radius: 6px;
+            font-size: 12.5px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.15s ease;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+        .mod-option-pill:hover { border-color: #3b82f6; background: #252536; }
+        .mod-option-pill.active {
+            background: #172554;
+            border-color: #3b82f6;
+            color: #ffffff;
+            font-weight: 700;
+        }
+        .mod-option-pill.single-choice.active {
+            background: #272111;
+            border-color: #f59e0b;
+            color: #fde047;
+        }
+        .mod-option-pill.depleted {
+            border-color: #dc2626 !important;
+            opacity: 0.65;
+        }
+
+        /* PIN Keypad */
+        .pin-keypad-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 8px;
+            margin-top: 12px;
+        }
+        .pin-key {
             background: #222230;
+            border: 1px solid #38384a;
+            color: #ffffff;
+            font-family: monospace;
+            font-size: 20px;
+            font-weight: 800;
+            padding: 14px;
+            border-radius: 8px;
+            text-align: center;
+            cursor: pointer;
+        }
+        .pin-key:active { background: #3b82f6; transform: scale(0.95); }
+        .pin-key.key-action {
+            font-size: 13px;
+            font-weight: 700;
             color: #94a3b8;
-            border: 1px solid #333346;
-            cursor: not-allowed;
+            display: flex;
+            align-items: center;
+            justify-content: center;
         }
 
         /* Tender Keypad Modal */
@@ -435,22 +535,15 @@
             text-align: center;
             cursor: pointer;
         }
-        .tender-method-btn.active {
-            background: #3b82f6;
-            border-color: #3b82f6;
-        }
+        .tender-method-btn.active { background: #3b82f6; border-color: #3b82f6; }
 
-        .quick-cash-row {
-            display: flex;
-            gap: 8px;
-            margin-top: 12px;
-        }
+        .quick-cash-row { display: flex; gap: 8px; margin-top: 12px; }
         .quick-cash-btn {
             flex: 1;
             background: #252533;
             border: 1px solid var(--pos-border);
             color: #10b981;
-            font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+            font-family: monospace;
             font-weight: 700;
             padding: 8px 4px;
             border-radius: 6px;
@@ -458,18 +551,11 @@
             cursor: pointer;
         }
 
-        /* 80mm Thermal Receipt Styling */
-        #printableReceipt {
-            display: none;
-        }
-
+        /* 80mm ESC/POS Thermal Receipt */
+        #printableReceipt { display: none; }
         @media print {
-            body * {
-                visibility: hidden;
-            }
-            #printableReceipt, #printableReceipt * {
-                visibility: visible;
-            }
+            body * { visibility: hidden; }
+            #printableReceipt, #printableReceipt * { visibility: visible; }
             #printableReceipt {
                 display: block !important;
                 position: absolute;
@@ -495,7 +581,7 @@
 
 <div class="pos-container">
 
-    <!-- LEFT: PRODUCT SELECTION CATALOG -->
+    <!-- LEFT: PRODUCT CATALOG -->
     <div class="catalog-pane">
         <div class="catalog-header">
             <div class="d-flex align-items-center gap-3">
@@ -526,9 +612,9 @@
                  data-portions="{{ p.portions_left if p.portions_left is not none else 'null' }}"
                  data-category="{{ p.Category }}"
                  data-deficits='{{ p.deficit_breakdown|tojson|safe }}'
-                 onclick="handleCardClick(this)">
+                 data-modifier-groups='{{ p.modifier_groups|tojson|safe }}'
+                 onclick="handleProductCardClick(this)">
                 
-                <!-- TOP ROW: Category Left & Stock Pill Right -->
                 <div class="card-top">
                     <span class="p-category">{{ p.Category or 'General' }}</span>
                     {% if p.portions_left is not none %}
@@ -540,7 +626,6 @@
                     {% endif %}
                 </div>
 
-                <!-- MIDDLE: Name & Missing Ingredients Callout -->
                 <div class="card-middle">
                     <div class="p-name">{{ p.Product_Name }}</div>
                     {% if is_depleted %}
@@ -559,8 +644,12 @@
                     {% endif %}
                 </div>
 
-                <!-- BOTTOM ROW: Price Lower-Right -->
                 <div class="card-bottom">
+                    {% if p.modifier_groups|length > 0 %}
+                        <span class="mods-indicator">{{ p.modifier_groups|length }} Custom Set(s)</span>
+                    {% else %}
+                        <span></span>
+                    {% endif %}
                     <span class="p-price">PHP {{ "%.2f"|format(p.Selling_Price) }}</span>
                 </div>
             </div>
@@ -568,12 +657,15 @@
         </div>
     </div>
 
-    <!-- RIGHT: CART ORDER TICKET -->
+    <!-- RIGHT: ACTIVE TICKET & CASHIER BADGE -->
     <div class="cart-pane">
         <div class="cart-header">
             <div>
                 <span class="cart-header-title">Active Order Ticket</span>
-                <span class="cart-header-cashier">Cashier: {{ store_info.cashier }}</span>
+                <div class="cart-header-cashier">
+                    <span>Cashier: <strong id="activeCashierLabel" class="text-white">{{ store_info.cashier }}</strong></span>
+                    <button type="button" class="switch-cashier-btn" onclick="openStaffSwitchModal()">[Switch]</button>
+                </div>
             </div>
             <button class="btn btn-sm btn-outline-danger py-0 px-2 fw-bold" style="font-size: 11px;" onclick="clearCart()">Clear</button>
         </div>
@@ -618,7 +710,48 @@
 
 </div>
 
-<!-- STREAMLINED, SECURE INGREDIENT DEFICIT MODAL -->
+<!-- PRODUCT-SPECIFIC CUSTOMIZATION MODAL -->
+<div class="modal fade" id="dynamicModifierModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered modal-lg">
+        <div class="modal-content bg-dark text-white border border-secondary shadow-lg" style="background: #161622 !important;">
+            <div class="modal-header border-secondary p-3" style="background: #12121a;">
+                <div>
+                    <h5 class="modal-title fw-bold text-white m-0" id="dynModalTitle">Customize Item</h5>
+                    <small class="text-secondary" id="dynModalCategory">Category</small>
+                </div>
+                <div class="d-flex align-items-center gap-3">
+                    <span class="badge bg-dark border border-secondary text-success font-monospace fs-6 px-3 py-1.5" id="dynModalRunningPrice">PHP 0.00</span>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                </div>
+            </div>
+
+            <div class="modal-body p-4" style="max-height: 65vh; overflow-y: auto;">
+                <div id="dynamicModifierGroupsContainer"></div>
+
+                <!-- Free Text Special Instructions -->
+                <div class="mod-section-title mt-4">
+                    <span>Kitchen & Counter Notes</span>
+                    <small class="text-muted font-monospace" style="font-size: 10px;">Free Text Instruction</small>
+                </div>
+                <input type="text" id="dynSpecialInstructionInput" class="form-control bg-dark text-white border-secondary" placeholder="Type counter notes (e.g. split in 2 cups, serve after 5 mins)..." autocomplete="off">
+            </div>
+
+            <div class="modal-footer border-secondary p-3 justify-content-between" style="background: #12121a;">
+                <button type="button" class="btn btn-secondary px-3" data-bs-dismiss="modal">Cancel</button>
+                <div class="d-flex gap-2">
+                    <button type="button" class="btn btn-outline-info fw-bold" onclick="commitDynamicCustomization(true)">
+                        Quick Add (Default)
+                    </button>
+                    <button type="button" class="btn btn-success fw-bold px-4" id="commitCustomizationBtn" onclick="commitDynamicCustomization(false)">
+                        Add to Order • PHP 0.00
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- INGREDIENT DEFICIT ALERT MODAL -->
 <div class="modal fade" id="stockOverrideModal" tabindex="-1" aria-hidden="true">
     <div class="modal-dialog modal-dialog-centered">
         <div class="modal-content bg-dark text-white border border-warning shadow-lg">
@@ -628,30 +761,55 @@
             </div>
             <div class="modal-body p-4" style="background: #151520;">
                 <div class="d-flex justify-content-between align-items-center mb-3">
-                    <div>
-                        <h4 id="overrideItemName" class="fw-bold text-white mb-0"></h4>
-                    </div>
+                    <h4 id="overrideItemName" class="fw-bold text-white mb-0"></h4>
                     <span class="font-monospace fw-bold text-success" id="overrideItemPrice" style="font-size: 18px;"></span>
                 </div>
-
                 <p style="color: #cbd5e1; font-size: 13.5px; line-height: 1.5;" class="mb-3">
-                    The following ingredient(s) have zero recorded stock in the system. Check physical availability with the kitchen or bar before continuing:
+                    The following ingredient(s) have zero recorded stock in the system. Check physical availability with the kitchen before continuing:
                 </p>
-
-                <!-- Clean Deficit List Cards -->
-                <div id="overrideIngredientsList" class="d-flex flex-column gap-2 mb-3">
-                    <!-- Populated dynamically via JS -->
-                </div>
-
+                <div id="overrideIngredientsList" class="d-flex flex-column gap-2 mb-3"></div>
                 <div class="alert alert-dark border-secondary p-2.5 mb-0" style="background: #101018; font-size: 12px; color: #94a3b8; border-radius: 6px;">
-                    <strong style="color: #cbd5e1;">Operational Policy:</strong> Proceeding will complete the sale and log tender normally. Stock will buffer into negative until replenishment is entered.
+                    <strong style="color: #cbd5e1;">Operational Policy:</strong> Proceeding will complete the sale normally. Stock will buffer into negative until replenishment is entered.
                 </div>
             </div>
             <div class="modal-footer border-secondary p-3 justify-content-between" style="background: #14141c;">
                 <button type="button" class="btn btn-secondary px-4 fw-bold" data-bs-dismiss="modal">Cancel</button>
-                <button type="button" class="btn btn-warning fw-bold text-dark px-4" onclick="confirmStockOverride()">
-                    Proceed with Sale
-                </button>
+                <button type="button" class="btn btn-warning fw-bold text-dark px-4" onclick="confirmStockOverride()">Proceed with Customization</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 4-DIGIT PIN STAFF SWITCH MODAL -->
+<div class="modal fade" id="staffSwitchModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered modal-sm">
+        <div class="modal-content bg-dark text-white border border-secondary shadow-lg">
+            <div class="modal-header border-secondary p-3" style="background: #14141c;">
+                <h6 class="modal-title fw-bold text-white">Switch Terminal Cashier</h6>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body p-3 text-center" style="background: #181822;">
+                <small class="text-muted d-block mb-2">Enter your 4-digit security PIN to unlock:</small>
+                <input type="password" id="pinDisplayInput" maxlength="4" class="form-control bg-dark text-warning border-secondary text-center font-monospace fw-bold fs-3 mb-2" readonly placeholder="••••">
+                <div id="pinErrorLabel" class="text-danger small fw-bold mb-2" style="display: none;"></div>
+
+                <div class="pin-keypad-grid">
+                    <div class="pin-key" onclick="pressPinKey('1')">1</div>
+                    <div class="pin-key" onclick="pressPinKey('2')">2</div>
+                    <div class="pin-key" onclick="pressPinKey('3')">3</div>
+                    <div class="pin-key" onclick="pressPinKey('4')">4</div>
+                    <div class="pin-key" onclick="pressPinKey('5')">5</div>
+                    <div class="pin-key" onclick="pressPinKey('6')">6</div>
+                    <div class="pin-key" onclick="pressPinKey('7')">7</div>
+                    <div class="pin-key" onclick="pressPinKey('8')">8</div>
+                    <div class="pin-key" onclick="pressPinKey('9')">9</div>
+                    <div class="pin-key key-action" onclick="clearPin()">CLEAR</div>
+                    <div class="pin-key" onclick="pressPinKey('0')">0</div>
+                    <div class="pin-key key-action" onclick="backspacePin()">⌫</div>
+                </div>
+            </div>
+            <div class="modal-footer border-secondary p-2" style="background: #14141c;">
+                <button type="button" class="btn btn-sm btn-secondary w-100" data-bs-dismiss="modal">Cancel</button>
             </div>
         </div>
     </div>
@@ -680,7 +838,6 @@
                     <div class="tender-method-btn" onclick="selectTenderMethod('Foodpanda', this)">Foodpanda</div>
                 </div>
 
-                <!-- Cash Tender Controls -->
                 <div id="cashInputSection" class="mt-3">
                     <label class="form-label text-muted small fw-bold mb-1">CASH AMOUNT RECEIVED:</label>
                     <input type="number" step="1" id="cashReceivedInput" class="form-control form-control-lg bg-dark text-white font-monospace border-secondary text-end fw-bold" placeholder="0.00" oninput="calculateChange()">
@@ -699,7 +856,6 @@
                     </div>
                 </div>
 
-                <!-- Digital Reference Section -->
                 <div id="referenceInputSection" class="mt-3" style="display: none;">
                     <label class="form-label text-muted small fw-bold mb-1">TRANSACTION REF / APPROVAL CODE (OPTIONAL):</label>
                     <input type="text" id="digitalReferenceInput" class="form-control bg-dark text-white border-secondary font-monospace" placeholder="e.g., GCash Ref #, Trace #">
@@ -729,13 +885,11 @@
         <span id="rDate">2026-09-16</span>
     </div>
     <div class="thermal-row">
-        <span>CASHIER: {{ store_info.cashier }}</span>
+        <span>CASHIER: <span id="rCashier">{{ store_info.cashier }}</span></span>
         <span id="rTime">12:00:00</span>
     </div>
     <div class="thermal-divider"></div>
-
     <div id="receiptItemsBlock"></div>
-
     <div class="thermal-divider"></div>
     <div class="thermal-row">
         <span>GROSS SUBTOTAL:</span>
@@ -750,7 +904,6 @@
         <span id="rTotal">PHP 0.00</span>
     </div>
     <div class="thermal-divider"></div>
-
     <div class="thermal-row">
         <span>TENDER (<span id="rTenderType">CASH</span>):</span>
         <span id="rTendered">0.00</span>
@@ -763,7 +916,6 @@
         <span>REF #:</span>
         <span id="rRefNo">N/A</span>
     </div>
-
     <div class="thermal-divider"></div>
     <div class="thermal-center" style="font-size: 11px;">
         THANK YOU FOR DINING WITH US!<br>
@@ -778,17 +930,35 @@
     let currentDiscountRate = 0.0;
     let selectedTender = 'Cash';
     let pendingProductOverride = null;
+    let currentPinBuffer = '';
 
-    function handleCardClick(cardElement) {
+    // Active Customization State
+    let activeCustomization = {
+        cartIndex: null, // null = adding new item, number = editing existing cart item
+        productId: '',
+        name: '',
+        basePrice: 0.0,
+        category: '',
+        modifierGroups: [],
+        selectedModifiers: {}, // { modId: { id, name, price, qty, group_id } }
+        singlePicks: {},      // { groupId: modId }
+        specialInstruction: ''
+    };
+
+    // PRODUCT CARD CLICK HANDLER: 1-TAP QUICK ADD OR DYNAMIC MODIFIERS
+    function handleProductCardClick(cardElement) {
         const productId = cardElement.getAttribute('data-id');
         const name = cardElement.getAttribute('data-name');
         const price = parseFloat(cardElement.getAttribute('data-price') || 0.0);
+        const category = cardElement.getAttribute('data-category') || 'General';
         const portionsStr = cardElement.getAttribute('data-portions');
         const portionsLeft = portionsStr === 'null' ? null : parseInt(portionsStr);
         const deficitData = JSON.parse(cardElement.getAttribute('data-deficits') || '[]');
+        const modifierGroups = JSON.parse(cardElement.getAttribute('data-modifier-groups') || '[]');
 
+        // Check stock depletion first
         if (portionsLeft !== null && portionsLeft <= 0) {
-            pendingProductOverride = { productId, name, price };
+            pendingProductOverride = { productId, name, price, category, modifierGroups };
             document.getElementById('overrideItemName').textContent = name;
             document.getElementById('overrideItemPrice').textContent = "PHP " + price.toFixed(2);
 
@@ -796,11 +966,7 @@
             listContainer.innerHTML = '';
 
             if (deficitData.length === 0) {
-                listContainer.innerHTML = `
-                    <div class="p-3 rounded text-center text-warning" style="background: #1e1e2c; border: 1px solid #2e2e42;">
-                        Recipe component depleted in system stock.
-                    </div>
-                `;
+                listContainer.innerHTML = `<div class="p-3 rounded text-center text-warning" style="background: #1e1e2c; border: 1px solid #2e2e42;">Recipe component depleted in system stock.</div>`;
             } else {
                 deficitData.forEach(ing => {
                     const itemDiv = document.createElement('div');
@@ -830,40 +996,276 @@
             return;
         }
 
-        addToCart(productId, name, price);
+        // Fast-Casual Counter Rule: If product has NO modifiers attached, add in 1 TAP!
+        if (!modifierGroups || modifierGroups.length === 0) {
+            addConfiguredItemToCart({
+                product_id: productId,
+                name: name,
+                price: price,
+                category: category,
+                qty: 1,
+                modifiers: [],
+                prep_notes: [],
+                special_instruction: ''
+            });
+            return;
+        }
+
+        // Product HAS modifier sets attached: Open modal showing ONLY its assigned sets
+        openDynamicModifierModal(productId, name, price, category, modifierGroups, null);
     }
 
     function confirmStockOverride() {
         if (pendingProductOverride) {
-            addToCart(pendingProductOverride.productId, pendingProductOverride.name, pendingProductOverride.price);
+            const { productId, name, price, category, modifierGroups } = pendingProductOverride;
             pendingProductOverride = null;
+            const modalEl = document.getElementById('stockOverrideModal');
+            const modalInstance = bootstrap.Modal.getInstance(modalEl);
+            if (modalInstance) modalInstance.hide();
+
+            if (!modifierGroups || modifierGroups.length === 0) {
+                addConfiguredItemToCart({
+                    product_id: productId,
+                    name: name,
+                    price: price,
+                    category: category,
+                    qty: 1,
+                    modifiers: [],
+                    prep_notes: [],
+                    special_instruction: ''
+                });
+            } else {
+                openDynamicModifierModal(productId, name, price, category, modifierGroups, null);
+            }
         }
-        const modalEl = document.getElementById('stockOverrideModal');
-        const modalInstance = bootstrap.Modal.getInstance(modalEl);
-        if (modalInstance) modalInstance.hide();
     }
 
-    function addToCart(productId, name, price) {
-        const existing = cart.find(item => item.product_id === productId);
-        if (existing) {
-            existing.qty += 1;
-        } else {
-            cart.push({
-                product_id: productId,
-                name: name,
-                price: parseFloat(price),
-                qty: 1,
-                modifiers: []
+    // DYNAMIC MODIFIERS MODAL BUILDER
+    function openDynamicModifierModal(productId, name, basePrice, category, modifierGroups, existingCartIndex) {
+        activeCustomization.cartIndex = existingCartIndex;
+        activeCustomization.productId = productId;
+        activeCustomization.name = name;
+        activeCustomization.basePrice = basePrice;
+        activeCustomization.category = category;
+        activeCustomization.modifierGroups = modifierGroups;
+        activeCustomization.selectedModifiers = {};
+        activeCustomization.singlePicks = {};
+        activeCustomization.specialInstruction = '';
+
+        document.getElementById('dynModalTitle').textContent = name;
+        document.getElementById('dynModalCategory').textContent = category;
+        document.getElementById('dynSpecialInstructionInput').value = '';
+
+        const container = document.getElementById('dynamicModifierGroupsContainer');
+        container.innerHTML = '';
+
+        // If editing existing item, populate existing picks
+        let preloadedMods = [];
+        if (existingCartIndex !== null && cart[existingCartIndex]) {
+            preloadedMods = cart[existingCartIndex].modifiers || [];
+            document.getElementById('dynSpecialInstructionInput').value = cart[existingCartIndex].special_instruction || '';
+        }
+
+        modifierGroups.forEach(grp => {
+            const isSingle = (grp.selection_type === 'single');
+            const grpDiv = document.createElement('div');
+            grpDiv.className = 'mb-3';
+
+            const headerHtml = `
+                <div class="mod-section-title">
+                    <span>${grp.group_name}</span>
+                    <span class="badge ${isSingle ? 'bg-warning text-dark' : 'bg-primary text-white'}" style="font-size: 9.5px;">
+                        ${isSingle ? 'Select 1 Option' : 'Select Any'}
+                    </span>
+                </div>
+            `;
+
+            let pillsHtml = '<div class="mod-pill-grid">';
+            grp.options.forEach((opt, optIdx) => {
+                const isDepleted = (opt.portions_left !== null && opt.portions_left <= 0);
+                
+                // Determine if active
+                let isActive = false;
+                if (existingCartIndex !== null) {
+                    isActive = preloadedMods.some(m => m.id === opt.id);
+                } else if (isSingle && optIdx === 0 && opt.price === 0) {
+                    // Default first free option for single choice (e.g. Normal Ice)
+                    isActive = true;
+                }
+
+                if (isActive) {
+                    if (isSingle) {
+                        activeCustomization.singlePicks[grp.group_id] = opt.id;
+                    }
+                    activeCustomization.selectedModifiers[opt.id] = {
+                        id: opt.id,
+                        name: opt.name,
+                        price: opt.price,
+                        qty: 1,
+                        group_id: grp.group_id
+                    };
+                }
+
+                const priceBadge = opt.price > 0 ? 
+                    `<span class="badge bg-dark border border-secondary text-info font-monospace">+₱${opt.price.toFixed(2)}</span>` : 
+                    `<span class="badge bg-dark text-muted font-monospace">₱0</span>`;
+
+                const depletedBadge = isDepleted ? `<span class="badge bg-danger text-white">Out</span>` : '';
+
+                pillsHtml += `
+                    <div class="mod-option-pill ${isSingle ? 'single-choice' : ''} ${isActive ? 'active' : ''} ${isDepleted ? 'depleted' : ''}" 
+                         data-group-id="${grp.group_id}"
+                         data-group-type="${grp.selection_type}"
+                         data-id="${opt.id}"
+                         data-name="${opt.name}"
+                         data-price="${opt.price}"
+                         data-depleted="${isDepleted}"
+                         onclick="handleDynamicModifierClick(this)">
+                        <span>${opt.name}</span>
+                        ${priceBadge}
+                        ${depletedBadge}
+                    </div>
+                `;
             });
+            pillsHtml += '</div>';
+
+            grpDiv.innerHTML = headerHtml + pillsHtml;
+            container.appendChild(grpDiv);
+        });
+
+        updateDynamicModalPrice();
+        new bootstrap.Modal(document.getElementById('dynamicModifierModal')).show();
+    }
+
+    function handleDynamicModifierClick(pillElement) {
+        const grpId = pillElement.getAttribute('data-group-id');
+        const grpType = pillElement.getAttribute('data-group-type');
+        const optId = pillElement.getAttribute('data-id');
+        const optName = pillElement.getAttribute('data-name');
+        const optPrice = parseFloat(pillElement.getAttribute('data-price') || 0.0);
+        const isDepleted = pillElement.getAttribute('data-depleted') === 'true';
+
+        if (isDepleted && !pillElement.classList.contains('active')) {
+            if (!confirm(`Notice: Ingredients for '${optName}' are recorded as depleted. Continue anyway?`)) {
+                return;
+            }
+        }
+
+        if (grpType === 'single') {
+            // Radio behavior: Uncheck other options in this group
+            const parentGrid = pillElement.closest('.mod-pill-grid');
+            parentGrid.querySelectorAll('.mod-option-pill').forEach(p => {
+                p.classList.remove('active');
+                const pId = p.getAttribute('data-id');
+                delete activeCustomization.selectedModifiers[pId];
+            });
+
+            pillElement.classList.add('active');
+            activeCustomization.singlePicks[grpId] = optId;
+            activeCustomization.selectedModifiers[optId] = {
+                id: optId,
+                name: optName,
+                price: optPrice,
+                qty: 1,
+                group_id: grpId
+            };
+        } else {
+            // Checkbox behavior: Toggle
+            if (activeCustomization.selectedModifiers[optId]) {
+                delete activeCustomization.selectedModifiers[optId];
+                pillElement.classList.remove('active');
+            } else {
+                activeCustomization.selectedModifiers[optId] = {
+                    id: optId,
+                    name: optName,
+                    price: optPrice,
+                    qty: 1,
+                    group_id: grpId
+                };
+                pillElement.classList.add('active');
+            }
+        }
+
+        updateDynamicModalPrice();
+    }
+
+    function updateDynamicModalPrice() {
+        let total = activeCustomization.basePrice;
+        for (let mid in activeCustomization.selectedModifiers) {
+            total += (activeCustomization.selectedModifiers[mid].price * (activeCustomization.selectedModifiers[mid].qty || 1));
+        }
+        document.getElementById('dynModalRunningPrice').textContent = "PHP " + total.toFixed(2);
+        document.getElementById('commitCustomizationBtn').textContent = "Add to Order • PHP " + total.toFixed(2);
+    }
+
+    function commitDynamicCustomization(bypassModifiers) {
+        const specialText = document.getElementById('dynSpecialInstructionInput').value.trim();
+        let chosenMods = [];
+        let chosenPrepNotes = [];
+
+        if (!bypassModifiers) {
+            for (let mid in activeCustomization.selectedModifiers) {
+                const m = activeCustomization.selectedModifiers[mid];
+                if (m.price > 0) {
+                    chosenMods.push({ id: m.id, name: m.name, price: m.price, qty: 1 });
+                } else {
+                    chosenPrepNotes.push(m.name);
+                }
+            }
+        }
+
+        const configuredItem = {
+            product_id: activeCustomization.productId,
+            name: activeCustomization.name,
+            price: activeCustomization.basePrice,
+            category: activeCustomization.category,
+            qty: activeCustomization.cartIndex !== null ? cart[activeCustomization.cartIndex].qty : 1,
+            modifiers: chosenMods,
+            prep_notes: chosenPrepNotes,
+            special_instruction: bypassModifiers ? '' : specialText
+        };
+
+        if (activeCustomization.cartIndex !== null) {
+            cart[activeCustomization.cartIndex] = configuredItem;
+        } else {
+            addConfiguredItemToCart(configuredItem);
+        }
+
+        const modalEl = document.getElementById('dynamicModifierModal');
+        const modalInstance = bootstrap.Modal.getInstance(modalEl);
+        if (modalInstance) modalInstance.hide();
+
+        renderCart();
+    }
+
+    function addConfiguredItemToCart(newItem) {
+        const existingIndex = cart.findIndex(it => 
+            it.product_id === newItem.product_id &&
+            JSON.stringify(it.modifiers) === JSON.stringify(newItem.modifiers) &&
+            JSON.stringify(it.prep_notes) === JSON.stringify(newItem.prep_notes) &&
+            it.special_instruction === newItem.special_instruction
+        );
+
+        if (existingIndex !== -1) {
+            cart[existingIndex].qty += newItem.qty;
+        } else {
+            cart.push(newItem);
         }
         renderCart();
     }
 
+    function editCartItem(index) {
+        if (cart[index]) {
+            const item = cart[index];
+            const card = document.querySelector(`.product-card[data-id="${item.product_id}"]`);
+            const modifierGroups = card ? JSON.parse(card.getAttribute('data-modifier-groups') || '[]') : [];
+            openDynamicModifierModal(item.product_id, item.name, item.price, item.category || 'General', modifierGroups, index);
+        }
+    }
+
     function updateQty(index, delta) {
         cart[index].qty += delta;
-        if (cart[index].qty <= 0) {
-            cart.splice(index, 1);
-        }
+        if (cart[index].qty <= 0) cart.splice(index, 1);
         renderCart();
     }
 
@@ -890,20 +1292,21 @@
     }
 
     function calculateTotals() {
-        const subtotal = cart.reduce((sum, item) => sum + (item.qty * item.price), 0);
+        let subtotal = 0.0;
+        cart.forEach(item => {
+            const modsSum = (item.modifiers || []).reduce((sum, m) => sum + (m.price * (m.qty || 1)), 0);
+            const unitEffective = item.price + modsSum;
+            subtotal += (unitEffective * item.qty);
+        });
+
         const discountAmount = subtotal * currentDiscountRate;
         const total = Math.max(0, subtotal - discountAmount);
 
-        return {
-            subtotal: subtotal,
-            discount: discountAmount,
-            total: total
-        };
+        return { subtotal, discount: discountAmount, total };
     }
 
     function renderCart() {
         const container = document.getElementById('cartItemsContainer');
-        const emptyLabel = document.getElementById('emptyCartLabel');
         const payBtn = document.getElementById('openPayModalBtn');
 
         if (cart.length === 0) {
@@ -920,21 +1323,48 @@
         container.innerHTML = '';
 
         cart.forEach((item, index) => {
-            const lineTotal = item.qty * item.price;
+            const modsSum = (item.modifiers || []).reduce((sum, m) => sum + (m.price * (m.qty || 1)), 0);
+            const unitEffective = item.price + modsSum;
+            const lineTotal = unitEffective * item.qty;
+
             const row = document.createElement('div');
             row.className = 'cart-row';
+
+            let modifiersHtml = '';
+            if ((item.modifiers && item.modifiers.length > 0) || (item.prep_notes && item.prep_notes.length > 0) || item.special_instruction) {
+                modifiersHtml = '<div class="cart-modifiers-box">';
+                (item.modifiers || []).forEach(m => {
+                    modifiersHtml += `<span class="cart-mod-badge">↳ + ${m.name} (+₱${m.price.toFixed(2)})</span>`;
+                });
+                (item.prep_notes || []).forEach(note => {
+                    modifiersHtml += `<span class="cart-prep-badge">↳ ${note}</span>`;
+                });
+                if (item.special_instruction) {
+                    modifiersHtml += `<span class="cart-instruction-badge">"${item.special_instruction}"</span>`;
+                }
+                modifiersHtml += '</div>';
+            }
+
             row.innerHTML = `
-                <div class="item-info">
-                    <div class="item-title">${item.name}</div>
-                    <div class="item-unit-price">PHP ${item.price.toFixed(2)} / unit</div>
+                <div class="item-info" onclick="editCartItem(${index})" title="Click to customize modifiers">
+                    <div class="item-title">
+                        <span>${item.name}</span>
+                        <span class="badge bg-dark border border-secondary text-info" style="font-size: 9px; padding: 2px 5px;">Edit</span>
+                    </div>
+                    ${modifiersHtml}
+                    <div class="item-unit-price">
+                        ${modsSum > 0 ? `₱${item.price.toFixed(2)} + ₱${modsSum.toFixed(2)} = ` : ''}₱${unitEffective.toFixed(2)} each
+                    </div>
                 </div>
-                <div class="qty-controls">
-                    <button type="button" class="qty-btn" onclick="updateQty(${index}, -1)">-</button>
-                    <span class="qty-display">${item.qty}</span>
-                    <button type="button" class="qty-btn" onclick="updateQty(${index}, 1)">+</button>
-                </div>
-                <div class="text-end font-monospace fw-bold ms-3 text-white" style="min-width: 70px;">
-                    PHP ${lineTotal.toFixed(2)}
+                <div class="d-flex flex-column align-items-end">
+                    <div class="text-end font-monospace fw-bold text-white mb-1">
+                        PHP ${lineTotal.toFixed(2)}
+                    </div>
+                    <div class="qty-controls">
+                        <button type="button" class="qty-btn" onclick="updateQty(${index}, -1)">-</button>
+                        <span class="qty-display">${item.qty}</span>
+                        <button type="button" class="qty-btn" onclick="updateQty(${index}, 1)">+</button>
+                    </div>
                 </div>
             `;
             container.appendChild(row);
@@ -961,14 +1391,69 @@
 
         document.querySelectorAll('.product-card').forEach(card => {
             const pCat = card.getAttribute('data-category');
-            if (cat === 'All' || pCat === cat) {
-                card.style.display = 'flex';
-            } else {
-                card.style.display = 'none';
-            }
+            card.style.display = (cat === 'All' || pCat === cat) ? 'flex' : 'none';
         });
     }
 
+    // CASHIER PIN FAST SWITCH LOGIC
+    function openStaffSwitchModal() {
+        currentPinBuffer = '';
+        document.getElementById('pinDisplayInput').value = '';
+        document.getElementById('pinErrorLabel').style.display = 'none';
+        new bootstrap.Modal(document.getElementById('staffSwitchModal')).show();
+    }
+
+    function pressPinKey(digit) {
+        if (currentPinBuffer.length < 4) {
+            currentPinBuffer += digit;
+            document.getElementById('pinDisplayInput').value = '•'.repeat(currentPinBuffer.length);
+        }
+        if (currentPinBuffer.length === 4) {
+            submitStaffPin();
+        }
+    }
+
+    function clearPin() {
+        currentPinBuffer = '';
+        document.getElementById('pinDisplayInput').value = '';
+        document.getElementById('pinErrorLabel').style.display = 'none';
+    }
+
+    function backspacePin() {
+        if (currentPinBuffer.length > 0) {
+            currentPinBuffer = currentPinBuffer.slice(0, -1);
+            document.getElementById('pinDisplayInput').value = '•'.repeat(currentPinBuffer.length);
+        }
+    }
+
+    async function submitStaffPin() {
+        try {
+            const response = await fetch('/portal/{{ username }}/pos/switch-staff', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ pin: currentPinBuffer })
+            });
+
+            const res = await response.json();
+
+            if (res.status === 'success') {
+                document.getElementById('activeCashierLabel').textContent = res.cashier_name;
+                document.getElementById('rCashier').textContent = res.cashier_name;
+                bootstrap.Modal.getInstance(document.getElementById('staffSwitchModal')).hide();
+                clearPin();
+            } else {
+                const errLabel = document.getElementById('pinErrorLabel');
+                errLabel.textContent = res.message || "Invalid 4-digit PIN";
+                errLabel.style.display = 'block';
+                clearPin();
+            }
+        } catch (err) {
+            alert("Network error validating PIN: " + err.message);
+            clearPin();
+        }
+    }
+
+    // PAYMENT & SETTLEMENT ENGINE
     function openPaymentModal() {
         const totals = calculateTotals();
         document.getElementById('modalPayableTotal').innerText = "PHP " + totals.total.toFixed(2);
@@ -1074,17 +1559,53 @@
         document.getElementById('rTenderType').innerText = r.tender_type.toUpperCase();
         document.getElementById('rTendered').innerText = r.amount_tendered.toFixed(2);
         document.getElementById('rChange').innerText = r.change_due.toFixed(2);
+        document.getElementById('rCashier').innerText = r.cashier;
 
         const itemsBlock = document.getElementById('receiptItemsBlock');
         itemsBlock.innerHTML = '';
         r.items.forEach(it => {
-            const line = document.createElement('div');
-            line.className = 'thermal-row';
-            line.innerHTML = `
-                <span>${it.qty}x ${it.name}</span>
-                <span>${(it.qty * it.price).toFixed(2)}</span>
+            const modsSum = (it.modifiers || []).reduce((sum, m) => sum + (m.price * (m.qty || 1)), 0);
+            const lineTotal = (it.price + modsSum) * it.qty;
+
+            const itemDiv = document.createElement('div');
+            itemDiv.style.marginBottom = "4px";
+
+            let itemContent = `
+                <div class="thermal-row">
+                    <span>${it.qty}x ${it.name}</span>
+                    <span>${lineTotal.toFixed(2)}</span>
+                </div>
             `;
-            itemsBlock.appendChild(line);
+
+            if (it.modifiers && it.modifiers.length > 0) {
+                it.modifiers.forEach(m => {
+                    itemContent += `
+                        <div class="thermal-row" style="padding-left: 8px; font-size: 11px;">
+                            <span>+ ${m.name}</span>
+                            <span>(+${(m.price * it.qty).toFixed(2)})</span>
+                        </div>
+                    `;
+                });
+            }
+
+            if (it.prep_notes && it.prep_notes.length > 0) {
+                itemContent += `
+                    <div style="padding-left: 8px; font-size: 10.5px; font-style: italic;">
+                        * ${it.prep_notes.join(' | ')}
+                    </div>
+                `;
+            }
+
+            if (it.special_instruction) {
+                itemContent += `
+                    <div style="padding-left: 8px; font-size: 10.5px; font-style: italic;">
+                        * Note: ${it.special_instruction}
+                    </div>
+                `;
+            }
+
+            itemDiv.innerHTML = itemContent;
+            itemsBlock.appendChild(itemDiv);
         });
 
         const discRow = document.getElementById('rDiscountRow');

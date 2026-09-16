@@ -1,4 +1,4 @@
-# routes/products.py - Complete Product Catalog, Costing & Lifecycle Controller
+# routes/products.py - Complete Product Catalog, Costing, Lifecycle & Relational Modifier Controller
 from flask import Blueprint, request, redirect, session, render_template, flash, jsonify
 from modules.database import InventoryDB
 import pandas as pd
@@ -6,6 +6,64 @@ import sqlite3
 import re
 
 products_bp = Blueprint('products', __name__)
+
+def ensure_product_modifier_tables(db_path):
+    """Ensures Modifier_Groups, Modifiers (with Group_ID migration), and Product_Modifiers relational tables exist."""
+    try:
+        conn = sqlite3.connect(db_path, timeout=20.0)
+        cursor = conn.cursor()
+
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS Modifier_Groups (
+                Group_ID TEXT PRIMARY KEY,
+                Group_Name TEXT NOT NULL,
+                Selection_Type TEXT DEFAULT 'multiple',
+                Active TEXT DEFAULT 'Yes'
+            )
+        """)
+
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS Modifiers (
+                Modifier_ID TEXT PRIMARY KEY,
+                Group_ID TEXT DEFAULT '',
+                Modifier_Name TEXT,
+                Category TEXT DEFAULT 'General',
+                Price REAL DEFAULT 0.0,
+                Active TEXT DEFAULT 'Yes'
+            )
+        """)
+
+        # Auto-migration: Check if existing Modifiers table is missing Group_ID column
+        cursor.execute("PRAGMA table_info(Modifiers)")
+        cols = [col[1] for col in cursor.fetchall()]
+        if 'Group_ID' not in cols:
+            cursor.execute("ALTER TABLE Modifiers ADD COLUMN Group_ID TEXT DEFAULT ''")
+
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS Product_Modifiers (
+                Product_ID TEXT,
+                Group_ID TEXT,
+                PRIMARY KEY (Product_ID, Group_ID)
+            )
+        """)
+
+        # Auto-assign legacy orphaned modifiers into a default "Add-ons & Upgrades" group
+        cursor.execute("SELECT COUNT(*) FROM Modifiers WHERE Group_ID IS NULL OR TRIM(Group_ID) = ''")
+        orphaned_count = cursor.fetchone()[0]
+        if orphaned_count > 0:
+            cursor.execute("SELECT Group_ID FROM Modifier_Groups WHERE Group_Name = 'Add-ons & Upgrades'")
+            row = cursor.fetchone()
+            if row:
+                grp_id = row[0]
+            else:
+                grp_id = 'MODGRP001'
+                cursor.execute("INSERT OR IGNORE INTO Modifier_Groups (Group_ID, Group_Name, Selection_Type, Active) VALUES (?, 'Add-ons & Upgrades', 'multiple', 'Yes')", (grp_id,))
+            cursor.execute("UPDATE Modifiers SET Group_ID = ? WHERE Group_ID IS NULL OR TRIM(Group_ID) = ''", (grp_id,))
+
+        conn.commit()
+        conn.close()
+    except Exception as e:
+        print(f"Product modifier tables migration error: {e}")
 
 def heal_product_variants(db_path):
     """Automatically repairs any NULL, blank, or 'None' strings in Parent_Item and Variant_Name."""
@@ -176,6 +234,7 @@ def web_products_tab(username):
     
     client_db_path = f"data/client_{username}.db"
     db = InventoryDB(client_db_path)
+    ensure_product_modifier_tables(client_db_path)
     heal_product_variants(client_db_path)
     sync_product_categories(client_db_path)
     
@@ -205,8 +264,9 @@ def web_products_tab(username):
                 if not conflict.empty:
                     return redirect(f"/portal/{username}/products?error=Variant '{variant_name}' already exists under the '{parent_item}' product line.&status={current_status}")
                     
+            new_prod_id = db.generate_product_id()
             success, msg = db.add_product({
-                'Product_ID': db.generate_product_id(),
+                'Product_ID': new_prod_id,
                 'Product_Name': product_name,
                 'Parent_Item': parent_item,
                 'Variant_Name': variant_name,
@@ -214,6 +274,17 @@ def web_products_tab(username):
                 'Selling_Price': float(request.form.get('selling_price', 0) or 0.0),
                 'Active': request.form.get('status', 'Yes')
             }, username=operator)
+
+            # Save toggled modifier sets
+            if success:
+                selected_mod_groups = request.form.getlist('modifier_groups[]')
+                if selected_mod_groups:
+                    conn = sqlite3.connect(client_db_path, timeout=20.0)
+                    cursor = conn.cursor()
+                    for gid in selected_mod_groups:
+                        cursor.execute("INSERT OR IGNORE INTO Product_Modifiers (Product_ID, Group_ID) VALUES (?, ?)", (new_prod_id, gid))
+                    conn.commit()
+                    conn.close()
             
             db.update_all_product_costs()
             heal_product_variants(client_db_path)
@@ -251,6 +322,16 @@ def web_products_tab(username):
                 'Selling_Price': float(request.form.get('selling_price', 0) or 0.0),
                 'Active': request.form.get('status', 'Yes')
             }, username=operator)
+
+            # Update toggled modifier sets
+            selected_mod_groups = request.form.getlist('modifier_groups[]')
+            conn = sqlite3.connect(client_db_path, timeout=20.0)
+            cursor = conn.cursor()
+            cursor.execute("DELETE FROM Product_Modifiers WHERE Product_ID = ?", (product_id,))
+            for gid in selected_mod_groups:
+                cursor.execute("INSERT OR IGNORE INTO Product_Modifiers (Product_ID, Group_ID) VALUES (?, ?)", (product_id, gid))
+            conn.commit()
+            conn.close()
             
             db.update_all_product_costs()
             heal_product_variants(client_db_path)
@@ -262,6 +343,13 @@ def web_products_tab(username):
         elif action == 'delete_product':
             product_id = request.form.get('product_id')
             success, msg = db.delete_product(product_id, username=operator)
+            
+            conn = sqlite3.connect(client_db_path, timeout=20.0)
+            cursor = conn.cursor()
+            cursor.execute("DELETE FROM Product_Modifiers WHERE Product_ID = ?", (product_id,))
+            conn.commit()
+            conn.close()
+
             db.update_all_product_costs()
             alert_type = 'success' if success else 'danger'
             return redirect(f"/portal/{username}/products?status={current_status}&msg={msg}&alert_type={alert_type}")
@@ -280,6 +368,36 @@ def web_products_tab(username):
             return redirect(f"/portal/{username}/products?status=Yes&msg={msg}&alert_type={alert_type}")
 
         return redirect(f"/portal/{username}/products?status={current_status}")
+
+    # ===== FETCH MODIFIER GROUPS & PRODUCT MAPPINGS =====
+    all_modifier_groups = []
+    product_modifiers_map = {}
+
+    conn = sqlite3.connect(client_db_path, timeout=20.0)
+    cursor = conn.cursor()
+    cursor.execute("""
+        SELECT mg.Group_ID, mg.Group_Name, mg.Selection_Type, COUNT(m.Modifier_ID)
+        FROM Modifier_Groups mg
+        LEFT JOIN Modifiers m ON mg.Group_ID = m.Group_ID AND (m.Active = 'Yes' OR m.Active = 'YES')
+        WHERE (mg.Active = 'Yes' OR mg.Active = 'YES')
+        GROUP BY mg.Group_ID, mg.Group_Name, mg.Selection_Type
+        ORDER BY mg.Group_Name ASC
+    """)
+    for gid, gname, stype, opt_cnt in cursor.fetchall():
+        all_modifier_groups.append({
+            'Group_ID': gid,
+            'Group_Name': gname,
+            'Selection_Type': stype or 'multiple',
+            'Option_Count': opt_cnt
+        })
+
+    cursor.execute("SELECT Product_ID, Group_ID FROM Product_Modifiers")
+    for pid, gid in cursor.fetchall():
+        pid_s = str(pid).strip()
+        if pid_s not in product_modifiers_map:
+            product_modifiers_map[pid_s] = []
+        product_modifiers_map[pid_s].append(str(gid).strip())
+    conn.close()
 
     # ===== GET DATA & APPLY FILTERS =====
     df = db.read_tab('Products')
@@ -388,6 +506,8 @@ def web_products_tab(username):
         unique_parents=unique_parents,
         all_products_raw=all_products_raw,
         categories=categories,
+        all_modifier_groups=all_modifier_groups,
+        product_modifiers_map=product_modifiers_map,
         total_count=total_count,
         error_msg=request.args.get('error', ''),
         msg=request.args.get('msg', ''),

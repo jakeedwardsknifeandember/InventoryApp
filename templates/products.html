@@ -183,6 +183,20 @@
         color: #ffffff !important;
         box-shadow: 0 0 0 0.25rem rgba(59, 130, 246, 0.25);
     }
+
+    /* LOYVERSE-STYLE MODIFIER TOGGLE CONTAINER */
+    .modifier-toggle-box {
+        background-color: #121216;
+        border: 1px solid #282834;
+        border-radius: 6px;
+        padding: 10px 12px;
+        max-height: 160px;
+        overflow-y: auto;
+    }
+    .form-check-input:checked {
+        background-color: #10b981;
+        border-color: #10b981;
+    }
 </style>
 
 <div class="d-flex justify-content-between align-items-center mb-3">
@@ -559,7 +573,7 @@
     </div>
 </div>
 
-<!-- ADD PRODUCT / VARIANT MODAL -->
+<!-- ADD PRODUCT / VARIANT MODAL WITH FULL INLINE CATEGORY CREATOR & LOYVERSE MODIFIERS ATTACHMENT -->
 <div class="modal fade" id="addProductModal" tabindex="-1">
     <div class="modal-dialog modal-lg modal-dialog-centered">
         <div class="modal-content bg-dark text-white border-secondary shadow-lg" style="background-color: #1e1e24 !important; border-radius: 10px;">
@@ -585,6 +599,7 @@
 
                             <div id="addProductNameErrorMsg" class="mb-3" style="display: none; color: #ff4d4d; font-size: 12px; font-weight: bold;">[ERROR] This variant already exists under this parent group.</div>
                             
+                            <!-- INLINE CATEGORY CREATOR -->
                             <label class="form-label mt-2">CATEGORY:</label>
                             <div class="input-group mb-2">
                                 <select name="category" id="addCategorySelect" class="form-select text-white border-secondary category-dropdown" required>
@@ -612,8 +627,32 @@
                             </select>
                         </div>
 
-                        <!-- SIMULATOR WIDGET -->
+                        <!-- RIGHT COLUMN: APPLICABLE MODIFIERS CARD & TARGET PRICING CALCULATOR -->
                         <div class="col-md-6 ps-3">
+                            <!-- LOYVERSE-STYLE APPLICABLE MODIFIERS CARD -->
+                            <div class="p-3 rounded mb-3" style="background-color: #151518; border: 1px solid #2d2d34;">
+                                <div class="d-flex justify-content-between align-items-center mb-1">
+                                    <label class="form-label m-0" style="color: #60a5fa !important;">APPLICABLE MODIFIERS:</label>
+                                    <span class="badge bg-dark border border-secondary text-info" style="font-size: 9.5px;">Live POS</span>
+                                </div>
+                                <p style="font-size: 11px; color: #94a3b8;" class="mb-2">Toggle modifier sets that apply specifically to this product in Counter POS.</p>
+
+                                <div class="modifier-toggle-box">
+                                    {% for grp in all_modifier_groups %}
+                                    <div class="form-check form-switch mb-2">
+                                        <input class="form-check-input" type="checkbox" name="modifier_groups[]" value="{{ grp.Group_ID }}" id="addGrp_{{ grp.Group_ID }}">
+                                        <label class="form-check-label text-white small fw-bold" for="addGrp_{{ grp.Group_ID }}">
+                                            {{ grp.Group_Name }}
+                                            <span class="badge bg-dark border border-secondary text-secondary" style="font-size: 9.5px;">{{ grp.Option_Count }} option(s)</span>
+                                        </label>
+                                    </div>
+                                    {% else %}
+                                    <small class="text-muted" style="font-style: italic;">No modifier sets created yet. Create sets under the Modifiers tab.</small>
+                                    {% endfor %}
+                                </div>
+                            </div>
+
+                            <!-- SIMULATOR WIDGET -->
                             <div class="p-3 rounded" style="background-color: #151518; border: 1px solid #2d2d34;">
                                 <h6 style="color: #60a5fa; font-weight: bold;" class="mb-2">Target Pricing Calculator</h6>
                                 <p style="font-size: 11.5px; color: #cbd5e1;" class="mb-3">Test selling prices based on estimated BOM cost and target food cost percentage before saving.</p>
@@ -642,7 +681,7 @@
     </div>
 </div>
 
-<!-- EDIT PRODUCT MODALS -->
+<!-- EDIT PRODUCT MODALS (WITH FULL INLINE CATEGORY CREATOR & LOYVERSE MODIFIERS ATTACHMENT) -->
 {% for parent, variants in grouped_products.items() %}
     {% for p in variants %}
     <div class="modal fade" id="editModal{{ p.Product_ID }}" tabindex="-1">
@@ -666,6 +705,7 @@
                                 
                                 <div id="editProductNameErrorMsg{{ p.Product_ID }}" class="mb-3" style="display: none; color: #ff4d4d; font-size: 12px; font-weight: bold;">[ERROR] This variant configuration is already used on another active product.</div>
                                 
+                                <!-- INLINE CATEGORY CREATOR -->
                                 <label class="form-label mt-2">CATEGORY:</label>
                                 <div class="input-group mb-2">
                                     <select name="category" id="editCategorySelect{{ p.Product_ID }}" class="form-select text-white border-secondary category-dropdown" required>
@@ -695,8 +735,34 @@
                                 </select>
                             </div>
 
-                            <!-- SIMULATOR WIDGET -->
+                            <!-- RIGHT COLUMN: APPLICABLE MODIFIERS CARD & TARGET PRICING CALCULATOR -->
                             <div class="col-md-6 ps-3">
+                                <!-- LOYVERSE-STYLE APPLICABLE MODIFIERS CARD -->
+                                <div class="p-3 rounded mb-3" style="background-color: #151518; border: 1px solid #2d2d34;">
+                                    <div class="d-flex justify-content-between align-items-center mb-1">
+                                        <label class="form-label m-0" style="color: #60a5fa !important;">APPLICABLE MODIFIERS:</label>
+                                        <span class="badge bg-dark border border-secondary text-info" style="font-size: 9.5px;">Live POS</span>
+                                    </div>
+                                    <p style="font-size: 11px; color: #94a3b8;" class="mb-2">Toggle which modifier sets apply specifically to this variant in Counter POS.</p>
+
+                                    <div class="modifier-toggle-box">
+                                        {% for grp in all_modifier_groups %}
+                                        <div class="form-check form-switch mb-2">
+                                            <input class="form-check-input" type="checkbox" name="modifier_groups[]" value="{{ grp.Group_ID }}" 
+                                                   id="editGrp_{{ p.Product_ID }}_{{ grp.Group_ID }}"
+                                                   {% if grp.Group_ID in product_modifiers_map.get(p.Product_ID, []) %}checked{% endif %}>
+                                            <label class="form-check-label text-white small fw-bold" for="editGrp_{{ p.Product_ID }}_{{ grp.Group_ID }}">
+                                                {{ grp.Group_Name }}
+                                                <span class="badge bg-dark border border-secondary text-secondary" style="font-size: 9.5px;">{{ grp.Option_Count }} option(s)</span>
+                                            </label>
+                                        </div>
+                                        {% else %}
+                                        <small class="text-muted" style="font-style: italic;">No modifier sets created yet. Create sets under the Modifiers tab.</small>
+                                        {% endfor %}
+                                    </div>
+                                </div>
+
+                                <!-- SIMULATOR WIDGET -->
                                 <div class="p-3 rounded" style="background-color: #151518; border: 1px solid #2d2d34;">
                                     <h6 style="color: #60a5fa; font-weight: bold;" class="mb-2">Target Pricing Calculator</h6>
                                     <p style="font-size: 11.5px; color: #cbd5e1;" class="mb-2">Calculates recommended selling price using this product's live Recipe BOM cost.</p>

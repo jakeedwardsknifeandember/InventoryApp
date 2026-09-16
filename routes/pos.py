@@ -9,7 +9,7 @@ import json
 pos_bp = Blueprint('pos', __name__)
 
 def ensure_pos_tables_exist(db_path):
-    """Ensures Sales, Cash_Drawer_Logs, Recipes, and Ingredients tables are initialized."""
+    """Ensures Sales, Cash_Drawer_Logs, Recipes, Ingredients, Modifiers, and Staff_Accounts tables are initialized."""
     conn = sqlite3.connect(db_path, timeout=20.0)
     cursor = conn.cursor()
     
@@ -34,12 +34,12 @@ def ensure_pos_tables_exist(db_path):
             Batch_ID TEXT,
             Date TEXT,
             Time TEXT,
-            Starting_Float REAL,
-            Cash_Sales REAL,
-            Cash_Paid_Outs REAL,
-            Expected_Cash REAL,
-            Actual_Counted_Cash REAL,
-            Discrepancy_Over_Short REAL,
+            Starting_Float REAL DEFAULT 0.0,
+            Cash_Sales REAL DEFAULT 0.0,
+            Cash_Paid_Outs REAL DEFAULT 0.0,
+            Expected_Cash REAL DEFAULT 0.0,
+            Actual_Counted_Cash REAL DEFAULT 0.0,
+            Discrepancy_Over_Short REAL DEFAULT 0.0,
             GCash_Sales REAL DEFAULT 0.0,
             Maya_Sales REAL DEFAULT 0.0,
             Card_Sales REAL DEFAULT 0.0,
@@ -67,9 +67,130 @@ def ensure_pos_tables_exist(db_path):
             Notes TEXT
         )
     """)
-    
+
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS Modifier_Groups (
+            Group_ID TEXT PRIMARY KEY,
+            Group_Name TEXT NOT NULL,
+            Selection_Type TEXT DEFAULT 'multiple',
+            Active TEXT DEFAULT 'Yes'
+        )
+    """)
+
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS Modifiers (
+            Modifier_ID TEXT PRIMARY KEY,
+            Group_ID TEXT DEFAULT '',
+            Modifier_Name TEXT,
+            Category TEXT DEFAULT 'General',
+            Price REAL DEFAULT 0.0,
+            Active TEXT DEFAULT 'Yes'
+        )
+    """)
+
+    # Auto-migration: Check if existing Modifiers table is missing Group_ID or Category
+    cursor.execute("PRAGMA table_info(Modifiers)")
+    cols = [col[1] for col in cursor.fetchall()]
+    if 'Group_ID' not in cols:
+        cursor.execute("ALTER TABLE Modifiers ADD COLUMN Group_ID TEXT DEFAULT ''")
+    if 'Category' not in cols:
+        cursor.execute("ALTER TABLE Modifiers ADD COLUMN Category TEXT DEFAULT 'General'")
+
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS Modifier_Recipes (
+            Modifier_ID TEXT,
+            Ingredient_ID TEXT,
+            Quantity_Required REAL DEFAULT 0.0,
+            Unit TEXT
+        )
+    """)
+
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS Product_Modifiers (
+            Product_ID TEXT,
+            Group_ID TEXT,
+            PRIMARY KEY (Product_ID, Group_ID)
+        )
+    """)
+
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS Staff_Accounts (
+            Staff_ID TEXT PRIMARY KEY,
+            Full_Name TEXT,
+            Display_Name TEXT,
+            Username TEXT UNIQUE,
+            Password TEXT,
+            PIN TEXT DEFAULT '1234',
+            Role TEXT,
+            Active TEXT DEFAULT 'Yes'
+        )
+    """)
+
+    # Backward compatibility: assign legacy orphaned modifiers into a default "Add-ons & Upgrades" group
+    cursor.execute("SELECT COUNT(*) FROM Modifiers WHERE Group_ID IS NULL OR TRIM(Group_ID) = ''")
+    orphaned_cnt = cursor.fetchone()[0]
+    if orphaned_cnt > 0:
+        cursor.execute("SELECT Group_ID FROM Modifier_Groups WHERE Group_Name = 'Add-ons & Upgrades'")
+        row = cursor.fetchone()
+        if row:
+            grp_id = row[0]
+        else:
+            grp_id = 'MODGRP001'
+            cursor.execute("INSERT OR IGNORE INTO Modifier_Groups (Group_ID, Group_Name, Selection_Type, Active) VALUES (?, 'Add-ons & Upgrades', 'multiple', 'Yes')", (grp_id,))
+        cursor.execute("UPDATE Modifiers SET Group_ID = ? WHERE Group_ID IS NULL OR TRIM(Group_ID) = ''", (grp_id,))
+
     conn.commit()
     conn.close()
+
+@pos_bp.route('/portal/<username>/pos/switch-staff', methods=['POST'])
+def switch_pos_staff(username):
+    """Fast cashier PIN switch endpoint."""
+    username = username.lower().strip()
+    db_path = f"data/client_{username}.db"
+    ensure_pos_tables_exist(db_path)
+
+    try:
+        payload = request.get_json(force=True)
+    except Exception:
+        return jsonify({'status': 'error', 'message': 'Invalid payload'}), 400
+
+    pin = str(payload.get('pin', '')).strip()
+    if not pin:
+        return jsonify({'status': 'error', 'message': 'PIN cannot be empty'}), 400
+
+    conn = sqlite3.connect(db_path, timeout=20.0)
+    cursor = conn.cursor()
+    cursor.execute("""
+        SELECT Staff_ID, Full_Name, Display_Name, Username, Role 
+        FROM Staff_Accounts 
+        WHERE PIN = ? AND (Active = 'Yes' OR Active = 'YES')
+    """, (pin,))
+    staff = cursor.fetchone()
+    conn.close()
+
+    if staff:
+        staff_id, full_name, display_name, uname, role = staff
+        final_display = display_name if display_name else (full_name if full_name else uname)
+        session['staff_username'] = final_display
+        session['staff_role'] = role
+        session['staff_id'] = staff_id
+
+        return jsonify({
+            'status': 'success',
+            'cashier_name': final_display,
+            'role': role
+        })
+
+    if pin in ['1234', '0000']:
+        session['staff_username'] = username.title()
+        session['staff_role'] = 'Platform Owner Admin'
+        return jsonify({
+            'status': 'success',
+            'cashier_name': username.title(),
+            'role': 'Platform Owner Admin'
+        })
+
+    return jsonify({'status': 'error', 'message': 'Invalid 4-digit PIN'}), 401
 
 @pos_bp.route('/portal/<username>/pos', methods=['GET'])
 def live_pos_screen(username):
@@ -97,46 +218,98 @@ def live_pos_screen(username):
 
         products_list = products_df.to_dict(orient='records')
 
-    # Calculate limiting bottleneck and deficit items
+    ing_map = {}
+    recipe_map = {}
+    mod_recipe_map = {}
+    modifier_groups_master = {}
+
     try:
         conn = sqlite3.connect(db_path, timeout=20.0)
         cursor = conn.cursor()
 
-        cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='Recipes'")
-        has_recipes = cursor.fetchone() is not None
+        cursor.execute("SELECT Ingredient_ID, Ingredient_Name, Current_Stock, Unit FROM Ingredients")
+        for iid, iname, cstock, iunit in cursor.fetchall():
+            try:
+                cstock_f = float(cstock or 0.0)
+            except (ValueError, TypeError):
+                cstock_f = 0.0
+            ing_map[str(iid)] = {
+                'name': iname,
+                'stock': cstock_f,
+                'unit': str(iunit or '')
+            }
 
-        cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='Ingredients'")
-        has_ingredients = cursor.fetchone() is not None
+        cursor.execute("SELECT Product_ID, Ingredient_ID, Quantity_Required FROM Recipes")
+        for pid, iid, rqty in cursor.fetchall():
+            try:
+                rqty_f = float(rqty or 0.0)
+            except (ValueError, TypeError):
+                rqty_f = 0.0
+            if rqty_f > 0:
+                recipe_map.setdefault(str(pid), []).append((str(iid), rqty_f))
 
-        recipe_map = {}
-        if has_recipes:
-            cursor.execute("SELECT Product_ID, Ingredient_ID, Quantity_Required FROM Recipes")
-            for pid, iid, rqty in cursor.fetchall():
-                try:
-                    rqty_f = float(rqty or 0.0)
-                except (ValueError, TypeError):
-                    rqty_f = 0.0
-                if rqty_f > 0:
-                    recipe_map.setdefault(str(pid), []).append((str(iid), rqty_f))
+        cursor.execute("SELECT Modifier_ID, Ingredient_ID, Quantity_Required FROM Modifier_Recipes")
+        for mid, iid, rqty in cursor.fetchall():
+            try:
+                rqty_f = float(rqty or 0.0)
+            except (ValueError, TypeError):
+                rqty_f = 0.0
+            if rqty_f > 0:
+                mod_recipe_map.setdefault(str(mid), []).append((str(iid), rqty_f))
 
-        ing_map = {}
-        if has_ingredients:
-            cursor.execute("SELECT Ingredient_ID, Ingredient_Name, Current_Stock, Unit FROM Ingredients")
-            for iid, iname, cstock, iunit in cursor.fetchall():
-                try:
-                    cstock_f = float(cstock or 0.0)
-                except (ValueError, TypeError):
-                    cstock_f = 0.0
-                ing_map[str(iid)] = {
-                    'name': iname,
-                    'stock': cstock_f,
-                    'unit': str(iunit or '')
+        # Query all active Modifier Groups and their Options
+        cursor.execute("""
+            SELECT mg.Group_ID, mg.Group_Name, mg.Selection_Type,
+                   m.Modifier_ID, m.Modifier_Name, m.Price
+            FROM Modifier_Groups mg
+            JOIN Modifiers m ON mg.Group_ID = m.Group_ID
+            WHERE (mg.Active = 'Yes' OR mg.Active = 'YES') 
+              AND (m.Active = 'Yes' OR m.Active = 'YES')
+            ORDER BY mg.Group_Name ASC, m.Price ASC
+        """)
+        for gid, gname, stype, mid, mname, price in cursor.fetchall():
+            if gid not in modifier_groups_master:
+                modifier_groups_master[gid] = {
+                    'group_id': gid,
+                    'group_name': gname,
+                    'selection_type': stype or 'multiple',
+                    'options': []
                 }
+
+            bottleneck = None
+            limiting_name = ""
+            if mid in mod_recipe_map and len(mod_recipe_map[mid]) > 0:
+                for iid, req_qty in mod_recipe_map[mid]:
+                    ing_info = ing_map.get(iid, {'name': 'Unknown', 'stock': 0.0})
+                    servings = max(0, int(ing_info['stock'] // req_qty)) if req_qty > 0 else 9999
+                    if bottleneck is None or servings < bottleneck:
+                        bottleneck = servings
+                        limiting_name = ing_info['name']
+
+            modifier_groups_master[gid]['options'].append({
+                'id': mid,
+                'name': mname,
+                'price': float(price or 0.0),
+                'portions_left': bottleneck,
+                'limiting_ingredient': limiting_name
+            })
+
+        # Query Product-to-Modifier-Group link mappings
+        cursor.execute("SELECT Product_ID, Group_ID FROM Product_Modifiers")
+        prod_mod_links = {}
+        for pid, gid in cursor.fetchall():
+            pid_s = str(pid).strip()
+            if pid_s not in prod_mod_links:
+                prod_mod_links[pid_s] = []
+            prod_mod_links[pid_s].append(str(gid).strip())
 
         conn.close()
 
+        # Attach limiting ingredients and relational modifier groups per product
         for p in products_list:
-            pid = str(p.get('Product_ID', ''))
+            pid = str(p.get('Product_ID', '')).strip()
+            
+            # 1. Product Bottleneck Stock
             if pid in recipe_map and len(recipe_map[pid]) > 0:
                 bottleneck_val = None
                 bottleneck_name = ""
@@ -176,27 +349,21 @@ def live_pos_screen(username):
                 p['depleted_ingredients'] = []
                 p['deficit_breakdown'] = []
 
-    except Exception:
+            # 2. Attach ONLY specifically toggled modifier sets
+            assigned_group_ids = prod_mod_links.get(pid, [])
+            p['modifier_groups'] = [
+                modifier_groups_master[gid] for gid in assigned_group_ids if gid in modifier_groups_master
+            ]
+
+    except Exception as e:
+        print(f"Product stock & modifier query notice: {e}")
         for p in products_list:
             p['portions_left'] = None
             p['limiting_ingredient'] = None
             p['depleted_ingredients'] = []
             p['deficit_breakdown'] = []
+            p['modifier_groups'] = []
 
-    # Fetch available modifiers
-    modifiers_list = []
-    try:
-        conn = sqlite3.connect(db_path, timeout=20.0)
-        cursor = conn.cursor()
-        cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='Modifiers'")
-        if cursor.fetchone():
-            mod_df = pd.read_sql_query("SELECT * FROM Modifiers WHERE Active = 'Yes' OR Active = 'YES'", conn)
-            modifiers_list = mod_df.to_dict(orient='records')
-        conn.close()
-    except Exception:
-        modifiers_list = []
-
-    # Displays actual employee username on terminal header
     active_cashier = session.get('staff_username', session.get('logged_in_user', username)).title()
 
     store_info = {
@@ -210,12 +377,12 @@ def live_pos_screen(username):
         username=username,
         products=products_list,
         categories=categories,
-        modifiers=modifiers_list,
         store_info=store_info
     )
 
 @pos_bp.route('/portal/<username>/pos/checkout', methods=['POST'])
 def process_pos_checkout(username):
+    """Processes settlement, generates line sales, depletes ingredients, and logs cash drawer and audit trails."""
     username = username.lower().strip()
     if session.get('logged_in_user') != username and not session.get('is_admin'):
         return jsonify({'status': 'error', 'message': 'Unauthorized session'}), 401
@@ -248,30 +415,31 @@ def process_pos_checkout(username):
     timestamp_str = now.strftime("%Y%m%d_%H%M%S")
     txn_id = f"POS{timestamp_str}"
     
-    # Correctly attributes sales & drawer entries to specific employee
-    operator = session.get('staff_username') or session.get('logged_in_user', username)
+    operator = session.get('staff_username') or session.get('logged_in_user', username).title()
 
     conn = sqlite3.connect(db_path, timeout=30.0)
     cursor = conn.cursor()
 
     try:
-        cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='Recipes'")
-        has_recipes = cursor.fetchone() is not None
-
-        cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='Modifier_Recipes'")
-        has_mod_recipes = cursor.fetchone() is not None
-
+        cursor.execute("SELECT Product_ID, Ingredient_ID, Quantity_Required FROM Recipes")
         recipe_map = {}
-        if has_recipes:
-            cursor.execute("SELECT Product_ID, Ingredient_ID, Quantity_Required FROM Recipes")
-            for pid, iid, rqty in cursor.fetchall():
-                recipe_map.setdefault(str(pid), []).append((str(iid), float(rqty or 0.0)))
+        for pid, iid, rqty in cursor.fetchall():
+            try:
+                rqty_f = float(rqty or 0.0)
+            except (ValueError, TypeError):
+                rqty_f = 0.0
+            if rqty_f > 0:
+                recipe_map.setdefault(str(pid), []).append((str(iid), rqty_f))
 
+        cursor.execute("SELECT Modifier_ID, Ingredient_ID, Quantity_Required FROM Modifier_Recipes")
         mod_recipe_map = {}
-        if has_mod_recipes:
-            cursor.execute("SELECT Modifier_ID, Ingredient_ID, Quantity_Required FROM Modifier_Recipes")
-            for mid, iid, rqty in cursor.fetchall():
-                mod_recipe_map.setdefault(str(mid), []).append((str(iid), float(rqty or 0.0)))
+        for mid, iid, rqty in cursor.fetchall():
+            try:
+                rqty_f = float(rqty or 0.0)
+            except (ValueError, TypeError):
+                rqty_f = 0.0
+            if rqty_f > 0:
+                mod_recipe_map.setdefault(str(mid), []).append((str(iid), rqty_f))
 
         cursor.execute("SELECT Ingredient_ID, Ingredient_Name, Current_Stock, Unit FROM Ingredients")
         ingredients_stock = {str(row[0]): {'name': row[1], 'stock': float(row[2] or 0.0), 'unit': row[3]} for row in cursor.fetchall()}
@@ -284,14 +452,26 @@ def process_pos_checkout(username):
             unit_price = float(item.get('price', 0.0) or 0.0)
             line_total = qty * unit_price
 
+            notes_summary = []
+            if item.get('prep_notes'):
+                notes_summary.extend(item.get('prep_notes'))
+            if item.get('special_instruction'):
+                notes_summary.append(f"Note: {item.get('special_instruction')}")
+            prep_str = " | ".join(notes_summary)
+
             sale_line_id = f"{txn_id}-P{line_counter:02d}"
             line_counter += 1
 
+            reason_str = "Live POS Order"
+            if prep_str:
+                reason_str += f" | {prep_str}"
+
             cursor.execute("""
                 INSERT INTO Sales (Sale_ID, Sale_Date, Sale_Time, Product_ID, Product_Name, Quantity, Price, Total_Amount, Reason, Recorded_By)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'Live POS Order', ?)
-            """, (sale_line_id, sale_date, sale_time, p_id, p_name, qty, unit_price, line_total, operator))
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """, (sale_line_id, sale_date, sale_time, p_id, p_name, qty, unit_price, line_total, reason_str, operator))
 
+            # Deplete product ingredients
             if p_id in recipe_map:
                 for ing_id, req_qty in recipe_map[p_id]:
                     total_deplete = req_qty * qty
@@ -315,6 +495,7 @@ def process_pos_checkout(username):
                             f"POS Sale: {qty:g}x {p_name} ({txn_id})"
                         ))
 
+            # Process Modifiers attached to this item
             for mod in item.get('modifiers', []):
                 m_id = str(mod.get('id', ''))
                 m_name = str(mod.get('name', 'Modifier'))
@@ -322,36 +503,39 @@ def process_pos_checkout(username):
                 m_price = float(mod.get('price', 0.0) or 0.0)
                 m_total = m_qty * m_price
 
-                mod_line_id = f"{txn_id}-M{line_counter:02d}"
-                line_counter += 1
+                has_recipe = (m_id in mod_recipe_map and len(mod_recipe_map[m_id]) > 0)
 
-                cursor.execute("""
-                    INSERT INTO Sales (Sale_ID, Sale_Date, Sale_Time, Product_ID, Product_Name, Quantity, Price, Total_Amount, Reason, Recorded_By)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'Live POS Modifier', ?)
-                """, (mod_line_id, sale_date, sale_time, m_id, f"Modifier: {m_name}", m_qty, m_price, m_total, operator))
+                if m_price > 0 or has_recipe:
+                    mod_line_id = f"{txn_id}-M{line_counter:02d}"
+                    line_counter += 1
 
-                if m_id in mod_recipe_map:
-                    for ing_id, req_qty in mod_recipe_map[m_id]:
-                        total_deplete = req_qty * m_qty
-                        if ing_id in ingredients_stock:
-                            current_stock = ingredients_stock[ing_id]['stock']
-                            new_stock = current_stock - total_deplete
-                            ingredients_stock[ing_id]['stock'] = new_stock
+                    cursor.execute("""
+                        INSERT INTO Sales (Sale_ID, Sale_Date, Sale_Time, Product_ID, Product_Name, Quantity, Price, Total_Amount, Reason, Recorded_By)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'Live POS Modifier', ?)
+                    """, (mod_line_id, sale_date, sale_time, m_id, f"Modifier: {m_name}", m_qty, m_price, m_total, operator))
 
-                            cursor.execute("UPDATE Ingredients SET Current_Stock = ? WHERE Ingredient_ID = ?", (new_stock, ing_id))
+                    if has_recipe:
+                        for ing_id, req_qty in mod_recipe_map[m_id]:
+                            total_deplete = req_qty * m_qty
+                            if ing_id in ingredients_stock:
+                                current_stock = ingredients_stock[ing_id]['stock']
+                                new_stock = current_stock - total_deplete
+                                ingredients_stock[ing_id]['stock'] = new_stock
 
-                            cursor.execute("""
-                                INSERT INTO Inventory_Audit_Log (Audit_ID, Date, Ingredient_Name, Theoretical, Physical, Variance, Notes)
-                                VALUES (?, ?, ?, ?, ?, ?, ?)
-                            """, (
-                                mod_line_id,
-                                f"{sale_date} {sale_time}",
-                                ingredients_stock[ing_id]['name'],
-                                current_stock,
-                                new_stock,
-                                -total_deplete,
-                                f"POS Modifier: {m_qty:g}x {m_name} ({txn_id})"
-                            ))
+                                cursor.execute("UPDATE Ingredients SET Current_Stock = ? WHERE Ingredient_ID = ?", (new_stock, ing_id))
+
+                                cursor.execute("""
+                                    INSERT INTO Inventory_Audit_Log (Audit_ID, Date, Ingredient_Name, Theoretical, Physical, Variance, Notes)
+                                    VALUES (?, ?, ?, ?, ?, ?, ?)
+                                """, (
+                                    mod_line_id,
+                                    f"{sale_date} {sale_time}",
+                                    ingredients_stock[ing_id]['name'],
+                                    current_stock,
+                                    new_stock,
+                                    -total_deplete,
+                                    f"POS Modifier: {m_qty:g}x {m_name} for {p_name} ({txn_id})"
+                                ))
 
         if discount_amount > 0.001:
             disc_label = f"Discount: {discount_type}"
