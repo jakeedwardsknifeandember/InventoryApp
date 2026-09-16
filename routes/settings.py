@@ -63,13 +63,11 @@ def build_entity_resolver(id_name_pairs):
             alpha_map[alphanumeric_text_key(n)] = iid
 
     def resolve(val_id, val_name):
-        # 1. Direct ID match
         if val_id and pd.notna(val_id):
             v_id_str = str(val_id).strip()
             if v_id_str in valid_ids:
                 return v_id_str
 
-        # 2. Resilient Name match
         for cand in [val_id, val_name]:
             if not cand or pd.isna(cand):
                 continue
@@ -124,17 +122,30 @@ def get_store_settings(client_db_path):
     return settings_dict
 
 def ensure_staff_table_exists(client_db_path):
+    """Ensures Staff_Accounts table exists and migrates Full_Name, Display_Name, and PIN columns if missing."""
     conn = sqlite3.connect(client_db_path)
     cursor = conn.cursor()
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS Staff_Accounts (
             Staff_ID TEXT PRIMARY KEY,
+            Full_Name TEXT,
+            Display_Name TEXT,
             Username TEXT UNIQUE,
             Password TEXT,
+            PIN TEXT,
             Role TEXT,
             Active TEXT DEFAULT 'Yes'
         )
     """)
+    cursor.execute("PRAGMA table_info(Staff_Accounts)")
+    existing_cols = [col[1] for col in cursor.fetchall()]
+    if 'Full_Name' not in existing_cols:
+        cursor.execute("ALTER TABLE Staff_Accounts ADD COLUMN Full_Name TEXT DEFAULT ''")
+    if 'Display_Name' not in existing_cols:
+        cursor.execute("ALTER TABLE Staff_Accounts ADD COLUMN Display_Name TEXT DEFAULT ''")
+    if 'PIN' not in existing_cols:
+        cursor.execute("ALTER TABLE Staff_Accounts ADD COLUMN PIN TEXT DEFAULT '1234'")
+
     conn.commit()
     conn.close()
 
@@ -235,13 +246,27 @@ def web_settings_tab(username):
                 alert_type = "danger"
             conn.close()
 
-        # 2. ADD STAFF SUB-ACCOUNT
+        # 2. ADD STAFF SUB-ACCOUNT WITH IDENTITY & 4-DIGIT PIN
         elif action == 'add_staff':
+            full_name = request.form.get('full_name', '').strip()
+            display_name = request.form.get('display_name', '').strip()
             staff_user = request.form.get('staff_username', '').lower().strip()
-            staff_pass = request.form.get('staff_password', '')
+            staff_pass = request.form.get('staff_password', '').strip()
+            staff_pin = request.form.get('staff_pin', '').strip()
             staff_role = request.form.get('staff_role', 'Barista / Kitchen Crew')
-            
-            if staff_user and staff_pass:
+
+            if not staff_user or not staff_pass:
+                feedback_msg = "Error: Username and Password are required."
+                alert_type = "danger"
+            elif staff_pin and (not staff_pin.isdigit() or len(staff_pin) != 4):
+                feedback_msg = "Error: Quick Terminal PIN must be exactly 4 numeric digits."
+                alert_type = "danger"
+            else:
+                if not staff_pin:
+                    staff_pin = "1234"
+                if not display_name:
+                    display_name = full_name.split()[0] if full_name else staff_user.capitalize()
+
                 conn = sqlite3.connect(client_db_path)
                 cursor = conn.cursor()
                 try:
@@ -249,30 +274,41 @@ def web_settings_tab(username):
                     next_id = f"STF{cursor.fetchone()[0] + 1:03d}"
                     
                     cursor.execute(
-                        "INSERT INTO Staff_Accounts (Staff_ID, Username, Password, Role, Active) VALUES (?, ?, ?, ?, 'Yes')",
-                        (next_id, staff_user, staff_pass, staff_role)
+                        """INSERT INTO Staff_Accounts (Staff_ID, Full_Name, Display_Name, Username, Password, PIN, Role, Active)
+                           VALUES (?, ?, ?, ?, ?, ?, ?, 'Yes')""",
+                        (next_id, full_name, display_name, staff_user, staff_pass, staff_pin, staff_role)
                     )
                     conn.commit()
-                    feedback_msg = f"Success: Created sub-account for crew member '{staff_user.capitalize()}' as {staff_role}."
+                    feedback_msg = f"Success: Provisioned crew key for '{display_name}' ({staff_role}) with PIN: {staff_pin}."
                     alert_type = "success"
                 except sqlite3.IntegrityError:
                     feedback_msg = f"Error: A team sub-account named '{staff_user}' is already registered."
                     alert_type = "danger"
                 conn.close()
 
-        # 3. RESET STAFF PASSWORD
+        # 3. RESET STAFF PASSWORD & QUICK PIN
         elif action == 'reset_staff_password':
             staff_id = request.form.get('staff_id')
             new_pass = request.form.get('new_password', '').strip()
+            new_pin = request.form.get('new_pin', '').strip()
             
-            if staff_id and new_pass:
-                conn = sqlite3.connect(client_db_path)
-                cursor = conn.cursor()
-                cursor.execute("UPDATE Staff_Accounts SET Password = ? WHERE Staff_ID = ?", (new_pass, staff_id))
-                conn.commit()
-                conn.close()
-                feedback_msg = "Security Override: Staff access token passkey reassigned successfully."
-                alert_type = "success"
+            if staff_id and (new_pass or new_pin):
+                if new_pin and (not new_pin.isdigit() or len(new_pin) != 4):
+                    feedback_msg = "Error: New Quick PIN must be exactly 4 numeric digits."
+                    alert_type = "danger"
+                else:
+                    conn = sqlite3.connect(client_db_path)
+                    cursor = conn.cursor()
+                    if new_pass and new_pin:
+                        cursor.execute("UPDATE Staff_Accounts SET Password = ?, PIN = ? WHERE Staff_ID = ?", (new_pass, new_pin, staff_id))
+                    elif new_pass:
+                        cursor.execute("UPDATE Staff_Accounts SET Password = ? WHERE Staff_ID = ?", (new_pass, staff_id))
+                    elif new_pin:
+                        cursor.execute("UPDATE Staff_Accounts SET PIN = ? WHERE Staff_ID = ?", (new_pin, staff_id))
+                    conn.commit()
+                    conn.close()
+                    feedback_msg = "Security Override: Staff access token passkey and PIN updated successfully."
+                    alert_type = "success"
 
         # 4. DELETE STAFF ACCOUNT
         elif action == 'delete_staff':
@@ -312,6 +348,7 @@ def web_settings_tab(username):
                 try:
                     uploaded_file.save(client_db_path)
                     conn = sqlite3.connect(client_db_path)
+                    ensure_staff_table_exists(client_db_path)
                     heal_database_integrity(conn)
                     conn.close()
                     client_db.update_all_product_costs()
@@ -628,7 +665,6 @@ def web_settings_tab(username):
                             
                             csv_id = str(row_dict.get(id_col, '')).strip()
 
-                            # STRICT COMMERCIAL PACKAGING CONSISTENCY ENGINE
                             if is_ingredients:
                                 try:
                                     p_cost = float(pd.to_numeric(row_dict.get('Purchase_Cost', 0.0), errors='coerce') or 0.0)
@@ -656,10 +692,8 @@ def web_settings_tab(username):
                                     row_dict['Cost_Per_Unit'] = c_unit
                                     row_dict['Purchase_Cost'] = round(c_unit * p_size, 2)
                             
-                            # RESOLVE TARGET ID USING TOKEN-SORTED & EXACT MATCHING
                             target_id = resolve_existing(csv_id, name_val)
 
-                            # 1. MATCH FOUND (SAFE IN-PLACE UPDATE WITHOUT DUPLICATION)
                             if target_id:
                                 if is_ingredients:
                                     is_prepped = (id_to_type.get(target_id) == 'PREPPED')
@@ -672,7 +706,6 @@ def web_settings_tab(username):
                                     update_values = tuple([row_dict[k] for k in update_cols] + [target_id])
                                     cursor.execute(f"UPDATE {target_table_name} SET {set_clause} WHERE {id_col} = ?", update_values)
 
-                            # 2. GENUINELY BRAND NEW ITEM (WITH ID COLLISION SHIELD)
                             else:
                                 if csv_id and csv_id in occupied_ids:
                                     target_id = f"{prefix}{next_seq_num:03d}"
@@ -814,11 +847,11 @@ def web_settings_tab(username):
                     wiped_categories = []
                     
                     if request.form.get('wipe_transactions'):
-                        tables_to_wipe.extend(['Sales', 'Inventory_Log', 'Inventory_Audit_Log', 'Expenses'])
+                        tables_to_wipe.extend(['Sales', 'Inventory_Log', 'Inventory_Audit_Log', 'Expenses', 'Cash_Drawer_Logs'])
                         wiped_categories.append("Operational Activity Logs")
                         
                     if request.form.get('wipe_recipes'):
-                        tables_to_wipe.extend(['Recipes', 'Prep_Recipes'])
+                        tables_to_wipe.extend(['Recipes', 'Prep_Recipes', 'Modifier_Recipes'])
                         wiped_categories.append("Linked Product Recipes & Kitchen Prep Sub-Recipes")
                         
                     if request.form.get('wipe_ingredients'):
@@ -826,7 +859,7 @@ def web_settings_tab(username):
                         wiped_categories.append("Raw Material Ingredients List")
                         
                     if request.form.get('wipe_products'):
-                        tables_to_wipe.extend(['Products'])
+                        tables_to_wipe.extend(['Products', 'Modifiers'])
                         wiped_categories.append("Retail Finished Menu Product Catalogs")
                     
                     if not tables_to_wipe:

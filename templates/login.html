@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Knife & Ember Command Center</title>
+    <title>Knife & Ember Command Center - Login</title>
     <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <style>
         * {
@@ -32,7 +32,6 @@
             align-items: center;
         }
 
-        /* Branding Header Section */
         .brand-header {
             text-align: center;
             margin-bottom: 24px;
@@ -42,8 +41,8 @@
         }
 
         .brand-logo-wrapper {
-            margin-bottom: 18px;
-            width: 160px;
+            margin-bottom: 16px;
+            width: 150px;
             display: flex;
             align-items: center;
             justify-content: center;
@@ -52,7 +51,7 @@
         .brand-logo {
             width: 100%;
             height: auto;
-            max-height: 160px;
+            max-height: 150px;
             object-fit: contain;
             filter: drop-shadow(0 0 16px rgba(255, 255, 255, 0.15)) drop-shadow(0 0 30px rgba(185, 28, 28, 0.45));
             transition: transform 0.3s ease;
@@ -80,17 +79,16 @@
             text-transform: uppercase;
         }
 
-        /* Form Card */
         .login-card {
             width: 100%;
             background: #111113;
-            border: 1px solid rgba(255, 255, 255, 0.07);
+            border: 1px solid rgba(255, 255, 255, 0.08);
             border-radius: 12px;
             padding: 24px;
             box-shadow: 0 20px 40px rgba(0, 0, 0, 0.6);
         }
 
-        /* Role Selector Tabs */
+        /* Dual Role Selector Tabs */
         .role-tabs {
             display: grid;
             grid-template-columns: 1fr 1fr;
@@ -99,7 +97,7 @@
             padding: 4px;
             border-radius: 8px;
             border: 1px solid rgba(255, 255, 255, 0.05);
-            margin-bottom: 24px;
+            margin-bottom: 22px;
         }
 
         .tab-btn {
@@ -107,9 +105,9 @@
             border: none;
             color: #a1a1aa;
             padding: 10px 12px;
-            font-size: 0.7rem;
+            font-size: 0.72rem;
             font-weight: 700;
-            letter-spacing: 0.8px;
+            letter-spacing: 0.6px;
             border-radius: 6px;
             cursor: pointer;
             transition: all 0.2s ease;
@@ -122,7 +120,6 @@
             box-shadow: 0 2px 8px rgba(143, 21, 25, 0.4);
         }
 
-        /* Alert Box */
         .alert-box {
             background: rgba(185, 28, 28, 0.18);
             border: 1px solid #991b1b;
@@ -134,9 +131,8 @@
             text-align: center;
         }
 
-        /* Form Fields */
         .form-group {
-            margin-bottom: 18px;
+            margin-bottom: 16px;
         }
 
         .form-label {
@@ -145,7 +141,7 @@
             font-weight: 700;
             letter-spacing: 1px;
             color: #d1d5db;
-            margin-bottom: 8px;
+            margin-bottom: 7px;
             text-transform: uppercase;
         }
 
@@ -171,15 +167,14 @@
             box-shadow: 0 0 0 2px rgba(143, 21, 25, 0.25);
         }
 
-        /* Action Button */
         .submit-btn {
             width: 100%;
             background: #8f1519;
             border: none;
             border-radius: 6px;
-            padding: 12px;
+            padding: 13px;
             color: #ffffff;
-            font-size: 0.75rem;
+            font-size: 0.78rem;
             font-weight: 700;
             letter-spacing: 1px;
             text-transform: uppercase;
@@ -200,7 +195,7 @@
 <body>
 
     <div class="login-container">
-        <!-- Header & Logo Section -->
+        <!-- Header & Branding -->
         <div class="brand-header">
             <div class="brand-logo-wrapper">
                 <img src="{{ url_for('static', filename='logo.png') }}" alt="Knife & Ember Logo" class="brand-logo" onerror="this.src='/static/logo.png'">
@@ -209,10 +204,8 @@
             <span class="brand-subtitle">F&B Management Platform</span>
         </div>
 
-        <!-- Login Card -->
         <div class="login-card">
             
-            <!-- Error Alert Box Rendering -->
             {% if error %}
                 <div class="alert-box">{{ error }}</div>
             {% endif %}
@@ -227,39 +220,42 @@
 
             <!-- Role Selector Tabs -->
             <div class="role-tabs">
-                <button type="button" class="tab-btn {% if active_tab != 'kitchen' %}active{% endif %}" id="tab-owner" onclick="switchRole('owner')">Business Owner</button>
-                <button type="button" class="tab-btn {% if active_tab == 'kitchen' %}active{% endif %}" id="tab-kitchen" onclick="switchRole('kitchen')">Kitchen Terminal</button>
+                <button type="button" class="tab-btn {% if active_tab != 'kitchen' and active_tab != 'staff' %}active{% endif %}" id="tab-owner" onclick="switchRole('owner')">
+                    Business Owner
+                </button>
+                <button type="button" class="tab-btn {% if active_tab == 'kitchen' or active_tab == 'staff' %}active{% endif %}" id="tab-staff" onclick="switchRole('staff')">
+                    Staff / Counter POS
+                </button>
             </div>
 
-            <!-- Main Login Form -->
+            <!-- Login Form -->
             <form method="POST" action="/login">
                 
                 {% if csrf_token %}
                     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
                 {% endif %}
 
-                <!-- Hidden Input Aligned to Backend -->
                 <input type="hidden" name="login_type" id="role-input" value="{{ active_tab if active_tab else 'owner' }}">
 
                 <div class="form-group">
-                    <label class="form-label" for="username">Store Name / Username</label>
-                    <input type="text" id="username" name="username" class="form-input" placeholder="Enter store username (e.g. bakery)" value="{{ username if username else '' }}" required autocomplete="username">
+                    <label class="form-label" for="username">Store Name / Tenant</label>
+                    <input type="text" id="username" name="username" class="form-input" placeholder="e.g. bakery" value="{{ username if username else '' }}" required autocomplete="username">
                 </div>
 
-                <!-- Staff Sub-Account Username (Visible only in Kitchen Terminal mode) -->
-                <div class="form-group" id="staff-group" style="display: {% if active_tab == 'kitchen' %}block{% else %}none{% endif %};">
+                <!-- Staff Sub-Account Username (Visible only in Staff / Counter POS mode) -->
+                <div class="form-group" id="staff-group" style="display: {% if active_tab == 'kitchen' or active_tab == 'staff' %}block{% else %}none{% endif %};">
                     <label class="form-label" for="staff_username">Staff Username</label>
-                    <input type="text" id="staff_username" name="staff_username" class="form-input" placeholder="Enter staff username (e.g. barista_john)" value="{{ staff_username if staff_username else '' }}" autocomplete="username">
+                    <input type="text" id="staff_username" name="staff_username" class="form-input" placeholder="e.g. maria1 or barista_john" value="{{ staff_username if staff_username else '' }}" autocomplete="username">
                 </div>
 
                 <div class="form-group">
-                    <label class="form-label" for="password">Password</label>
+                    <label class="form-label" for="password">Password Token</label>
                     <input type="password" id="password" name="password" class="form-input" placeholder="Enter password" required autocomplete="current-password">
                 </div>
 
                 <button type="submit" id="submit-btn" class="submit-btn">
-                    {% if active_tab == 'kitchen' %}
-                        Sign In to Kitchen Terminal
+                    {% if active_tab == 'kitchen' or active_tab == 'staff' %}
+                        Sign In to Live POS Terminal
                     {% else %}
                         Sign In as Business Owner
                     {% endif %}
@@ -273,7 +269,7 @@
             const roleInput = document.getElementById('role-input');
             const submitBtn = document.getElementById('submit-btn');
             const tabOwner = document.getElementById('tab-owner');
-            const tabKitchen = document.getElementById('tab-kitchen');
+            const tabStaff = document.getElementById('tab-staff');
             const staffGroup = document.getElementById('staff-group');
             const staffInput = document.getElementById('staff_username');
 
@@ -281,16 +277,16 @@
 
             if (role === 'owner') {
                 tabOwner.classList.add('active');
-                tabKitchen.classList.remove('active');
+                tabStaff.classList.remove('active');
                 staffGroup.style.display = 'none';
                 staffInput.required = false;
                 submitBtn.textContent = 'Sign In as Business Owner';
             } else {
-                tabKitchen.classList.add('active');
+                tabStaff.classList.add('active');
                 tabOwner.classList.remove('active');
                 staffGroup.style.display = 'block';
                 staffInput.required = true;
-                submitBtn.textContent = 'Sign In to Kitchen Terminal';
+                submitBtn.textContent = 'Sign In to Live POS Terminal';
             }
         }
     </script>

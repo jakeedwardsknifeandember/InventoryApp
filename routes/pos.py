@@ -97,7 +97,7 @@ def live_pos_screen(username):
 
         products_list = products_df.to_dict(orient='records')
 
-    # Calculate limiting bottleneck and deficit items (WITHOUT exposing proprietary recipe ratios)
+    # Calculate limiting bottleneck and deficit items
     try:
         conn = sqlite3.connect(db_path, timeout=20.0)
         cursor = conn.cursor()
@@ -169,7 +169,6 @@ def live_pos_screen(username):
                 p['portions_left'] = bottleneck_val if bottleneck_val is not None else 0
                 p['limiting_ingredient'] = bottleneck_name
                 p['depleted_ingredients'] = depleted_list
-                # Only expose deficit items (NO recipe weights or total warehouse balances)
                 p['deficit_breakdown'] = deficit_breakdown
             else:
                 p['portions_left'] = None
@@ -197,9 +196,12 @@ def live_pos_screen(username):
     except Exception:
         modifiers_list = []
 
+    # Displays actual employee username on terminal header
+    active_cashier = session.get('staff_username', session.get('logged_in_user', username)).title()
+
     store_info = {
         'name': username.upper(),
-        'cashier': session.get('logged_in_user', username),
+        'cashier': active_cashier,
         'date': datetime.now().strftime("%Y-%m-%d")
     }
 
@@ -245,7 +247,9 @@ def process_pos_checkout(username):
     sale_time = now.strftime("%H:%M:%S")
     timestamp_str = now.strftime("%Y%m%d_%H%M%S")
     txn_id = f"POS{timestamp_str}"
-    operator = session.get('logged_in_user', username)
+    
+    # Correctly attributes sales & drawer entries to specific employee
+    operator = session.get('staff_username') or session.get('logged_in_user', username)
 
     conn = sqlite3.connect(db_path, timeout=30.0)
     cursor = conn.cursor()

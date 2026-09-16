@@ -41,7 +41,7 @@
     .badge-staff { background: #eab30822; color: #facc15; border: 1px solid #eab30844; }
 
     .native-modal-backdrop { display:none; position:fixed; top:0; left:0; width:100vw; height:100vh; background:rgba(0,0,0,0.75); z-index:9999; justify-content:center; align-items:center; }
-    .native-modal-container { background:#1e1e2e; border:1px solid #3f3f46; border-radius:8px; width:400px; padding:25px; box-shadow:0 10px 25px rgba(0,0,0,0.5); }
+    .native-modal-container { background:#1e1e2e; border:1px solid #3f3f46; border-radius:8px; width:440px; padding:25px; box-shadow:0 10px 25px rgba(0,0,0,0.5); }
     
     .maintenance-checkbox-row { display: flex; align-items: center; gap: 12px; padding: 10px 12px; background: #161622; border-radius: 4px; border: 1px solid #252535; margin-bottom: 8px; cursor: pointer; transition: background 0.15s; }
     .maintenance-checkbox-row:hover { background: #1c1c2e; }
@@ -133,6 +133,7 @@
     </div>
 </div>
 
+<!-- SECTION: TEAM ACCESS DIRECTORY (RBAC WITH 4-DIGIT PIN & POS BADGE) -->
 <div class="settings-card" style="max-width:100%; margin-bottom:30px;">
     <div style="display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid #313244; padding-bottom:15px; margin-bottom:15px;">
         <h3 class="card-title" style="color:#a6e3a1; margin:0;">Team Access Directory (RBAC)</h3>
@@ -140,21 +141,42 @@
     </div>
 
     <div style="display:flex; gap:30px; flex-wrap:wrap;">
-        <div style="flex:1; min-width:280px; background:#161622; padding:20px; border-radius:6px; border:1px solid #2d2d3d;">
+        <!-- Left: Provisioning Form -->
+        <div style="flex:1; min-width:300px; background:#161622; padding:20px; border-radius:6px; border:1px solid #2d2d3d;">
             <h4 style="margin-top:0; color:#fff; font-size:15px; border-bottom:1px solid #2d2d3d; padding-bottom:8px;">+ Provision New Access Key</h4>
             <form method="post">
                 <input type="hidden" name="action_type" value="add_staff">
                 
-                <label>Sub-Account User Login Name:</label>
-                <input type="text" name="staff_username" required placeholder="e.g., barista_john" autocomplete="off">
-                
-                <label>Temporary Password Token:</label>
-                <input type="password" name="staff_password" required placeholder="Enter unique secure string...">
+                <label>Full Legal Name (HR & Incident Audit):</label>
+                <input type="text" name="full_name" placeholder="e.g., Maria Santos" autocomplete="off" required>
+
+                <div style="display:flex; gap:10px;">
+                    <div style="flex:1;">
+                        <label>POS Badge Name:</label>
+                        <input type="text" name="display_name" placeholder="e.g., Maria S." autocomplete="off">
+                    </div>
+                    <div style="flex:1;">
+                        <label style="color:#facc15;">4-Digit POS PIN:</label>
+                        <input type="password" maxlength="4" pattern="\d{4}" name="staff_pin" placeholder="e.g. 1234" required style="border-color:#f59e0b; font-family:monospace; text-align:center; font-weight:bold;">
+                    </div>
+                </div>
+
+                <div style="display:flex; gap:10px;">
+                    <div style="flex:1;">
+                        <label>Login Username:</label>
+                        <input type="text" name="staff_username" required placeholder="e.g., maria1" autocomplete="off">
+                    </div>
+                    <div style="flex:1;">
+                        <label>Password Token:</label>
+                        <input type="password" name="staff_password" required placeholder="Password...">
+                    </div>
+                </div>
                 
                 <label>Assigned Security Clearance Level:</label>
                 <select name="staff_role" required>
-                    <option value="Store Manager">Manager (Deliveries & Audits Roster)</option>
-                    <option value="Barista / Kitchen Crew" selected>Barista / Crew (Waste & Prep Runs Only)</option>
+                    <option value="Barista / Kitchen Crew" selected>Barista / Kitchen Crew (Counter POS Only)</option>
+                    <option value="Cashier">Cashier (Live POS & Drawer Settlement)</option>
+                    <option value="Store Manager">Store Manager (Operations & Audits)</option>
                     <option value="Platform Owner Admin">Platform Owner (Full Access Override)</option>
                 </select>
                 
@@ -162,14 +184,17 @@
             </form>
         </div>
 
+        <!-- Right: Clearance Registry -->
         <div style="flex:2; min-width:400px; background:#161622; padding:20px; border-radius:6px; border:1px solid #2d2d3d; overflow-x:auto;">
             <h4 style="margin-top:0; color:#fff; font-size:15px; border-bottom:1px solid #2d2d3d; padding-bottom:8px;">Active Operational Clearance Registry</h4>
             <table class="staff-table">
                 <thead>
                     <tr>
                         <th>STAFF ID</th>
-                        <th>USERNAME REFERENCE</th>
-                        <th>CLEARANCE ROLE LEVEL</th>
+                        <th>EMPLOYEE & BADGE</th>
+                        <th>LOGIN USERNAME</th>
+                        <th>CLEARANCE ROLE</th>
+                        <th style="text-align:center;">PIN</th>
                         <th style="text-align:right;">MANAGEMENT CONTROL</th>
                     </tr>
                 </thead>
@@ -177,7 +202,11 @@
                     {% for member in staff_members %}
                     <tr>
                         <td style="font-family:monospace; color:#888;">{{ member.Staff_ID }}</td>
-                        <td style="font-weight:bold; color:#fff;">{{ member.Username|capitalize }}</td>
+                        <td>
+                            <strong style="color:#fff;">{{ member.Full_Name if member.Full_Name else member.Username|capitalize }}</strong>
+                            <small style="display:block; color:#94a3b8; font-size:11px;">Badge: {{ member.Display_Name if member.Display_Name else member.Username }}</small>
+                        </td>
+                        <td style="font-family:monospace; color:#60a5fa;">{{ member.Username }}</td>
                         <td>
                             <span class="role-badge 
                                 {% if 'Owner' in member.Role %}badge-owner
@@ -186,8 +215,14 @@
                                 {{ member.Role }}
                             </span>
                         </td>
+                        <td style="text-align:center; font-family:monospace; color:#facc15; font-weight:bold;">
+                            ••••
+                        </td>
                         <td style="text-align:right; white-space:nowrap;">
-                            <button class="action-btn btn-yellow" style="padding:4px 10px; font-size:11px; margin-right:4px;" onclick="openNativePasswordResetOverlay('{{ member.Staff_ID }}', '{{ member.Username }}')">Reset Pass</button>
+                            <button class="action-btn btn-yellow" style="padding:4px 10px; font-size:11px; margin-right:4px;" 
+                                    onclick="openNativePasswordResetOverlay('{{ member.Staff_ID }}', '{{ member.Display_Name if member.Display_Name else member.Username }}')">
+                                Reset Key / PIN
+                            </button>
                             
                             <form method="post" style="display:inline;" onsubmit="return confirm('Revoke all security keys and terminate application access for this user immediately?');">
                                 <input type="hidden" name="action_type" value="delete_staff">
@@ -198,7 +233,7 @@
                     </tr>
                     {% else %}
                     <tr>
-                        <td colspan="4" style="text-align:center; color:#666; padding:30px 0;">No team sub-accounts provisioned for this location yet. Create an account on the left.</td>
+                        <td colspan="6" style="text-align:center; color:#666; padding:30px 0;">No team sub-accounts provisioned for this location yet. Create an account on the left.</td>
                     </tr>
                     {% endfor %}
                 </tbody>
@@ -334,15 +369,19 @@
     </div>
 </div>
 
+<!-- NATIVE MODAL OVERLAY: REASSIGN PASSWORD & QUICK PIN -->
 <div id="nativePasswordResetBackdrop" class="native-modal-backdrop">
     <div class="native-modal-container">
-        <h3 style="margin-top:0; border-bottom:1px solid #3f3f46; padding-bottom:10px; color:#d97706;" id="resetModalHeaderTitle">Reassign Staff Password</h3>
+        <h3 style="margin-top:0; border-bottom:1px solid #3f3f46; padding-bottom:10px; color:#d97706;" id="resetModalHeaderTitle">Reassign Staff Password & PIN</h3>
         <form method="post">
             <input type="hidden" name="action_type" value="reset_staff_password">
             <input type="hidden" id="resetModalStaffIdHidden" name="staff_id" value="">
             
-            <label style="margin-top:15px;">Enter New Secure Passkey:</label>
-            <input type="password" name="new_password" required placeholder="Type new key for this user..." autocomplete="off">
+            <label style="margin-top:12px;">New Web Password:</label>
+            <input type="password" name="new_password" placeholder="Type new password..." autocomplete="off">
+
+            <label style="color:#facc15;">New 4-Digit POS PIN:</label>
+            <input type="password" maxlength="4" pattern="\d{4}" name="new_pin" placeholder="4 numeric digits (e.g. 1234)" style="border-color:#f59e0b; font-family:monospace; text-align:center; font-weight:bold;">
             
             <div style="display:flex; gap:10px; margin-top:10px;">
                 <button type="submit" class="action-btn btn-green" style="flex:1;">Apply Reset Override</button>
@@ -355,7 +394,7 @@
 <script>
 function openNativePasswordResetOverlay(staffId, staffName) {
     document.getElementById('resetModalStaffIdHidden').value = staffId;
-    document.getElementById('resetModalHeaderTitle').innerText = "Reassign Passkey: " + staffName.toUpperCase();
+    document.getElementById('resetModalHeaderTitle').innerText = "Reassign Credentials: " + staffName.toUpperCase();
     document.getElementById('nativePasswordResetBackdrop').style.display = 'flex';
 }
 function closeNativePasswordResetOverlay() {

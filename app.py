@@ -64,6 +64,8 @@ initialize_user_database()
 @app.route('/')
 def home_redirect():
     if session.get('logged_in_user'):
+        if session.get('staff_role') not in ['Platform Owner Admin', 'Store Manager']:
+            return redirect(f"/portal/{session['logged_in_user']}/pos")
         return redirect(f"/portal/{session['logged_in_user']}")
     return redirect('/login')
 
@@ -73,6 +75,10 @@ def client_portal(username):
     
     if session.get('logged_in_user') != username: 
         return redirect('/login')
+
+    # Security Lock: Staff roles are blocked from the backend and routed to Counter POS
+    if session.get('staff_role') not in ['Platform Owner Admin', 'Store Manager']:
+        return redirect(f"/portal/{username}/pos")
 
     client_db_path = f"data/client_{username}.db"
     client_db = InventoryDB(client_db_path)
@@ -125,7 +131,6 @@ def client_portal(username):
     if not sales_df.empty and 'Total_Amount' in sales_df.columns:
         sales_df['Total_Amount'] = pd.to_numeric(sales_df['Total_Amount'], errors='coerce').fillna(0.0)
         
-        # Resilient date coalescing prioritizing Sale_Date and Date
         date_candidates = ['Sale_Date', 'sale_date', 'Sales_Date', 'Date', 'date', 'created_at', 'timestamp', 'transaction_date', 'DateTime']
         sales_df['Parsed_Date'] = pd.NaT
         for col in date_candidates:
@@ -154,14 +159,10 @@ def client_portal(username):
                 chart_labels = [d.strftime('%b %d') for d in daily_group.index]
                 chart_data = [float(v) for v in daily_group.values]
 
-        # -------------------------------------------------------------
-        # COMPREHENSIVE THEORETICAL COGS (RECIPES + MODIFIER RECIPES)
-        # -------------------------------------------------------------
         if not filtered_sales.empty:
             conn = sqlite3.connect(client_db_path, timeout=20.0)
             cursor = conn.cursor()
 
-            # Product Recipes
             cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='Recipes'")
             prod_recipe_map = defaultdict(list)
             if cursor.fetchone():
@@ -169,7 +170,6 @@ def client_portal(username):
                 for pid, iid, rqty in cursor.fetchall():
                     prod_recipe_map[str(pid)].append((str(iid), float(rqty or 0.0)))
 
-            # Modifier Recipes
             cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='Modifier_Recipes'")
             mod_recipe_map = defaultdict(list)
             if cursor.fetchone():
@@ -177,7 +177,6 @@ def client_portal(username):
                 for mid, iid, rqty in cursor.fetchall():
                     mod_recipe_map[str(mid)].append((str(iid), float(rqty or 0.0)))
 
-            # Ingredient Costs
             cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='Ingredients'")
             ing_cost_map = {}
             if cursor.fetchone():
@@ -185,7 +184,6 @@ def client_portal(username):
                 for iid, cpu in cursor.fetchall():
                     ing_cost_map[str(iid)] = float(cpu or 0.0)
 
-            # Product Cost Price Fallback
             cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='Products'")
             prod_cost_map = {}
             if cursor.fetchone():
@@ -220,7 +218,7 @@ def client_portal(username):
         chart_labels = ['08:00 AM', '12:00 PM', '04:00 PM', '08:00 PM'] if selected_period == 'today' else ['Period Start', 'Period End']
         chart_data = [0.0, 0.0, 0.0, 0.0] if selected_period == 'today' else [0.0, 0.0]
 
-    # 4. Process Expenses Matrix & Generate Doughnut Chart Data Arrays
+    # 4. Process Expenses Matrix
     expenses_df = client_db.read_tab('Expenses')
     total_expenses = 0.0
     expense_categories = []
@@ -246,7 +244,7 @@ def client_portal(username):
             expense_categories = list(cat_group.index)
             expense_values = [float(v) for v in cat_group.values]
 
-    # 5. Strategic Menu Engineering Matrix Engine
+    # 5. Strategic Menu Engineering Matrix
     menu_engineering_list = []
     if not products_df.empty:
         products_df['Selling_Price'] = pd.to_numeric(products_df['Selling_Price'], errors='coerce').fillna(0.0)
@@ -299,7 +297,7 @@ def client_portal(username):
             
     menu_engineering_list = sorted(menu_engineering_list, key=lambda x: x['volume'], reverse=True)[:10]
 
-    # 6. Real-Time Operational Activity Stream & Waste Shrinkage Valuation
+    # 6. Real-Time Operational Activity Stream
     logbook_stream = []
     total_waste_cost = 0.0
     
@@ -338,7 +336,6 @@ def client_portal(username):
             except Exception:
                 qty_acted = 0.0
 
-            # Compute operational waste loss across manual waste, products scrapped, and physical count deficits
             is_waste_event = (
                 audit_id.startswith('WST') or 
                 audit_id.startswith('PRD') or 
@@ -359,7 +356,6 @@ def client_portal(username):
                 except Exception:
                     time_stamp_str = "Today, On Shift"
 
-            # Grouping key collapses all ingredients belonging to the exact same transaction
             if audit_id and audit_id not in ['NONE', 'NAN', '']:
                 group_key = audit_id
             else:
@@ -487,7 +483,6 @@ def client_portal(username):
         total_waste=total_waste_cost
     )
 
-# AUDIT LOG ROUTE: View operational ledger with date filtering
 @app.route('/portal/<username>/audit-log')
 def audit_log(username):
     username = username.lower().strip()
@@ -495,7 +490,6 @@ def audit_log(username):
     if session.get('logged_in_user') != username: 
         return redirect('/login')
 
-    # Access Control: Managers & Platform Admins only
     if session.get('staff_role') not in ['Platform Owner Admin', 'Store Manager']:
         flash('Unauthorized access to Audit Logs.', 'danger')
         return redirect(f"/portal/{username}")

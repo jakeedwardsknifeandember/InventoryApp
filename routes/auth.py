@@ -1,4 +1,4 @@
-# routes/auth.py - Multi-Role Authentication Engine
+# routes/auth.py - Multi-Role Authentication & Smart POS Dispatcher
 from flask import Blueprint, render_template, request, redirect, session, flash
 import sqlite3
 import os
@@ -20,7 +20,7 @@ def login():
             return render_template('login.html', username=username, staff_username=staff_username, active_tab=login_role)
 
         if login_role == 'owner':
-            # 👑 BUSINESS OWNER LOGIN
+            # BUSINESS OWNER / ADMINISTRATOR LOGIN
             conn = sqlite3.connect(USER_DB_PATH)
             cursor = conn.cursor()
             cursor.execute("SELECT username, password FROM users WHERE LOWER(username) = ?", (username,))
@@ -30,15 +30,14 @@ def login():
             if user and user[1] == password:
                 session['logged_in_user'] = username
                 session['staff_role'] = 'Platform Owner Admin'
+                session['staff_username'] = username.title()
                 return redirect(f"/portal/{username}")
             else:
                 flash('Invalid Business Owner credentials supplied.', 'danger')
                 return render_template('login.html', username=username, active_tab='owner')
 
         else:
-            # 🍳 KITCHEN TERMINAL LOGIN
-            
-            # 1. Verify Store Name exists in users.db
+            # COUNTER STAFF / KITCHEN CREW LOGIN
             conn = sqlite3.connect(USER_DB_PATH)
             cursor = conn.cursor()
             cursor.execute("SELECT username, password FROM users WHERE LOWER(username) = ?", (username,))
@@ -51,10 +50,9 @@ def login():
 
             store_name = store_record[0].lower()
             master_pass = store_record[1]
-
             client_db = f"data/client_{store_name}.db"
 
-            # 2. Check if logging in directly to tenant database
+            # Check tenant Staff_Accounts registry
             if os.path.exists(client_db):
                 conn = sqlite3.connect(client_db)
                 cursor = conn.cursor()
@@ -67,34 +65,43 @@ def login():
                         Active TEXT DEFAULT 'Yes'
                     )
                 """)
-                
-                # Search by Staff Username + Password
+
                 if staff_username:
                     cursor.execute(
-                        "SELECT Role FROM Staff_Accounts WHERE LOWER(Username) = ? AND Password = ? AND Active = 'Yes'",
+                        "SELECT Role, Username FROM Staff_Accounts WHERE LOWER(Username) = ? AND Password = ? AND Active = 'Yes'",
                         (staff_username, password)
                     )
                 else:
                     cursor.execute(
-                        "SELECT Role FROM Staff_Accounts WHERE Password = ? AND Active = 'Yes'",
+                        "SELECT Role, Username FROM Staff_Accounts WHERE Password = ? AND Active = 'Yes'",
                         (password,)
                     )
-                    
+
                 row = cursor.fetchone()
                 conn.close()
 
                 if row:
-                    session['logged_in_user'] = store_name
-                    session['staff_role'] = row[0]
-                    return redirect(f"/portal/{store_name}")
+                    staff_role = row[0]
+                    actual_staff_name = row[1] if row[1] else (staff_username or 'Counter Staff')
 
-            # 3. Fallback: Owner using master store password on Kitchen Terminal
+                    session['logged_in_user'] = store_name
+                    session['staff_role'] = staff_role
+                    session['staff_username'] = actual_staff_name.title()
+
+                    # Smart RBAC Routing: Managers/Owners access the Back-of-House Portal, Crew goes strictly to Live POS
+                    if staff_role in ['Platform Owner Admin', 'Store Manager']:
+                        return redirect(f"/portal/{store_name}")
+                    else:
+                        return redirect(f"/portal/{store_name}/pos")
+
+            # Fallback: Owner using master store password on terminal
             if password == master_pass:
                 session['logged_in_user'] = store_name
                 session['staff_role'] = 'Barista / Kitchen Crew'
-                return redirect(f"/portal/{store_name}")
+                session['staff_username'] = 'Floor Staff'
+                return redirect(f"/portal/{store_name}/pos")
 
-            flash('Invalid Kitchen Terminal credentials supplied.', 'danger')
+            flash('Invalid Staff Terminal credentials supplied.', 'danger')
             return render_template('login.html', username=username, staff_username=staff_username, active_tab='kitchen')
 
     return render_template('login.html', active_tab='owner')
