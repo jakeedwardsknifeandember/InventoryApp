@@ -248,6 +248,11 @@
         <a href="/portal/{{ username }}" class="{{ 'active' if request.path == '/portal/' + username else '' }}" title="Dashboard">
             <span class="nav-icon">📊</span> <span class="nav-text">Dashboard</span>
         </a>
+
+        <!-- LIVE COUNTER POS: Direct Fullscreen Counter Terminal -->
+        <a href="/portal/{{ username }}/pos" class="{{ 'active' if 'pos' in request.path else '' }}" title="Counter POS" target="_blank">
+            <span class="nav-icon">🖥️</span> <span class="nav-text">Counter POS</span>
+        </a>
         
         <!-- PLATFORM OWNER ADMIN ONLY: Items Accordion Module (Item List, Categories, Modifiers, Discounts) -->
         {% if session.get('staff_role') == 'Platform Owner Admin' %}
@@ -293,7 +298,7 @@
             <a href="/portal/{{ username }}/sales" class="{{ 'active' if 'sales' in request.path else '' }}" title="Sales">
                 <span class="nav-icon">💰</span> <span class="nav-text">Sales</span>
             </a>
-            <!-- NEW: Corrections & Voids Tab -->
+            <!-- Corrections & Voids Tab -->
             <a href="/portal/{{ username }}/corrections" class="{{ 'active' if 'corrections' in request.path else '' }}" title="Corrections">
                 <span class="nav-icon">🛑</span> <span class="nav-text">Corrections</span>
             </a>

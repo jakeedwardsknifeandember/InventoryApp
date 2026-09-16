@@ -1,0 +1,1110 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>{{ store_info.name }} - Live Counter POS</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        :root {
+            --pos-bg: #0f0f13;
+            --pos-card-bg: #181824;
+            --pos-card-hover: #1f1f30;
+            --pos-sidebar-bg: #13131a;
+            --pos-border: #28283a;
+            --pos-accent: #10b981;
+            --pos-accent-hover: #059669;
+            --pos-text: #f8fafc;
+            --pos-muted: #94a3b8;
+        }
+
+        /* Modern Dark Scrollbars */
+        ::-webkit-scrollbar {
+            width: 8px;
+            height: 8px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #111117;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #2b2b3d;
+            border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #3b3b52;
+        }
+
+        body {
+            background-color: var(--pos-bg);
+            color: var(--pos-text);
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            overflow: hidden;
+            height: 100vh;
+            margin: 0;
+            user-select: none;
+        }
+
+        .pos-container {
+            display: flex;
+            height: 100vh;
+            width: 100vw;
+        }
+
+        /* Product Catalog Column */
+        .catalog-pane {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            border-right: 1px solid var(--pos-border);
+            height: 100vh;
+            overflow: hidden;
+        }
+
+        .catalog-header {
+            padding: 14px 20px;
+            background: #14141c;
+            border-bottom: 1px solid var(--pos-border);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 15px;
+        }
+
+        .category-scroll {
+            display: flex;
+            gap: 8px;
+            overflow-x: auto;
+            padding: 10px 20px;
+            background: #111117;
+            border-bottom: 1px solid var(--pos-border);
+            scrollbar-width: none;
+        }
+        .category-scroll::-webkit-scrollbar { display: none; }
+
+        .cat-btn {
+            background: #1e1e28;
+            color: #cbd5e1;
+            border: 1px solid var(--pos-border);
+            border-radius: 20px;
+            padding: 6px 16px;
+            font-size: 13px;
+            font-weight: 700;
+            white-space: nowrap;
+            transition: all 0.15s ease;
+        }
+        .cat-btn.active, .cat-btn:hover {
+            background: var(--pos-accent);
+            color: #ffffff;
+            border-color: var(--pos-accent);
+        }
+
+        .product-grid {
+            flex: 1;
+            overflow-y: auto;
+            padding: 20px;
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+            gap: 14px;
+            align-content: start;
+        }
+
+        /* Product Card Layout */
+        .product-card {
+            background: var(--pos-card-bg);
+            border: 1px solid var(--pos-border);
+            border-radius: 10px;
+            padding: 12px 14px;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            cursor: pointer;
+            transition: transform 0.08s ease, border-color 0.15s ease, background-color 0.15s ease;
+            height: 142px;
+            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.25);
+            position: relative;
+        }
+        .product-card:hover {
+            background: var(--pos-card-hover);
+            border-color: #3b82f6;
+        }
+        .product-card:active {
+            transform: scale(0.98);
+            border-color: var(--pos-accent);
+        }
+
+        .product-card.card-depleted {
+            border-color: rgba(239, 68, 68, 0.45);
+            background: linear-gradient(180deg, #1d1519 0%, #181824 100%);
+        }
+        .product-card.card-low {
+            border-color: rgba(245, 158, 11, 0.4);
+        }
+
+        .product-card .card-top {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            width: 100%;
+            margin-bottom: 4px;
+            gap: 6px;
+        }
+
+        .product-card .p-category {
+            font-size: 10px;
+            font-weight: 700;
+            background-color: #232332;
+            color: #cbd5e1;
+            border: 1px solid #333346;
+            padding: 3px 8px;
+            border-radius: 4px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            white-space: nowrap;
+        }
+
+        .stock-pill {
+            font-size: 10px;
+            font-weight: 800;
+            padding: 3px 8px;
+            border-radius: 4px;
+            letter-spacing: 0.5px;
+            white-space: nowrap;
+            text-transform: uppercase;
+        }
+        .stock-pill.stock-low {
+            background-color: #f59e0b;
+            color: #000000;
+        }
+        .stock-pill.stock-depleted {
+            background-color: #ef4444;
+            color: #ffffff;
+        }
+
+        .product-card .card-middle {
+            display: flex;
+            flex-direction: column;
+            margin-top: 4px;
+            margin-bottom: auto;
+        }
+
+        .product-card .p-name {
+            font-size: 13.5px;
+            font-weight: 600;
+            line-height: 1.35;
+            color: #ffffff;
+            letter-spacing: -0.1px;
+            word-break: normal;
+            overflow-wrap: break-word;
+        }
+
+        .product-card .stock-cause {
+            font-size: 11px;
+            font-weight: 600;
+            margin-top: 3px;
+            line-height: 1.25;
+            word-break: normal;
+            overflow-wrap: break-word;
+        }
+
+        .product-card .card-bottom {
+            display: flex;
+            justify-content: flex-end;
+            align-items: center;
+            width: 100%;
+            border-top: 1px solid rgba(255, 255, 255, 0.07);
+            padding-top: 6px;
+            margin-top: 6px;
+        }
+
+        .product-card .p-price {
+            font-size: 15px;
+            font-weight: 800;
+            font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+            color: var(--pos-accent);
+            white-space: nowrap;
+        }
+
+        /* Cart & Ticket Sidebar */
+        .cart-pane {
+            width: 420px;
+            background: var(--pos-sidebar-bg);
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+            border-left: 1px solid var(--pos-border);
+        }
+
+        .cart-header {
+            padding: 16px 20px;
+            background: #14141c;
+            border-bottom: 1px solid var(--pos-border);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .cart-header-title {
+            font-weight: 700;
+            font-size: 14.5px;
+            color: #ffffff;
+            display: block;
+        }
+
+        .cart-header-cashier {
+            color: #cbd5e1;
+            font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+            font-size: 11.5px;
+            font-weight: 500;
+        }
+
+        .cart-items-wrapper {
+            flex: 1;
+            overflow-y: auto;
+            padding: 12px 16px;
+        }
+
+        .empty-cart-box {
+            text-align: center;
+            color: #94a3b8;
+            padding: 60px 20px;
+            font-size: 13px;
+            line-height: 1.6;
+        }
+
+        .cart-row {
+            background: #191924;
+            border: 1px solid var(--pos-border);
+            border-radius: 8px;
+            padding: 10px 12px;
+            margin-bottom: 8px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .cart-row .item-info {
+            flex: 1;
+            padding-right: 10px;
+        }
+        .cart-row .item-title {
+            font-weight: 700;
+            font-size: 13.5px;
+            color: #ffffff;
+            margin-bottom: 2px;
+        }
+        .cart-row .item-unit-price {
+            font-size: 12px;
+            color: #94a3b8;
+            font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+        }
+
+        .qty-controls {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+        .qty-btn {
+            background: #252533;
+            color: #ffffff;
+            border: 1px solid var(--pos-border);
+            width: 28px;
+            height: 28px;
+            border-radius: 6px;
+            font-weight: bold;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+        }
+        .qty-btn:active { background: #3b82f6; }
+        .qty-display {
+            font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+            font-weight: 800;
+            min-width: 24px;
+            text-align: center;
+            font-size: 14px;
+            color: #ffffff;
+        }
+
+        /* Ticket Calculation Footer */
+        .cart-footer {
+            background: #14141c;
+            border-top: 1px solid var(--pos-border);
+            padding: 16px 20px;
+        }
+
+        .discount-section-title {
+            color: #cbd5e1;
+            font-size: 11px;
+            font-weight: 700;
+            letter-spacing: 0.5px;
+            text-transform: uppercase;
+            margin-bottom: 6px;
+        }
+
+        .discount-pill-row {
+            display: flex;
+            gap: 6px;
+            margin-bottom: 14px;
+            overflow-x: auto;
+            scrollbar-width: none;
+        }
+        .discount-pill-row::-webkit-scrollbar { display: none; }
+
+        .disc-pill {
+            background: #222230;
+            border: 1px solid #333346;
+            color: #e2e8f0;
+            font-size: 11.5px;
+            font-weight: 700;
+            padding: 5px 12px;
+            border-radius: 6px;
+            cursor: pointer;
+            white-space: nowrap;
+            transition: all 0.15s ease;
+        }
+        .disc-pill:hover {
+            background: #2b2b3d;
+            border-color: #4b4b62;
+        }
+        .disc-pill.active {
+            background: #f59e0b;
+            color: #000000;
+            border-color: #f59e0b;
+        }
+
+        .calc-line {
+            display: flex;
+            justify-content: space-between;
+            font-size: 13px;
+            color: #cbd5e1;
+            margin-bottom: 5px;
+            font-weight: 500;
+        }
+        .calc-line .calc-val {
+            font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+            color: #ffffff;
+            font-weight: 700;
+        }
+
+        .calc-total {
+            display: flex;
+            justify-content: space-between;
+            font-size: 20px;
+            font-weight: 800;
+            color: #ffffff;
+            padding-top: 10px;
+            border-top: 1px solid var(--pos-border);
+            margin-top: 8px;
+        }
+
+        .pay-btn {
+            background: var(--pos-accent);
+            color: #ffffff;
+            font-weight: 800;
+            font-size: 16px;
+            width: 100%;
+            border: none;
+            padding: 14px;
+            border-radius: 8px;
+            margin-top: 14px;
+            transition: background 0.15s ease;
+        }
+        .pay-btn:hover { background: var(--pos-accent-hover); }
+        .pay-btn:disabled {
+            background: #222230;
+            color: #94a3b8;
+            border: 1px solid #333346;
+            cursor: not-allowed;
+        }
+
+        /* Tender Keypad Modal */
+        .tender-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 10px;
+            margin-top: 15px;
+        }
+        .tender-method-btn {
+            background: #20202c;
+            border: 1px solid var(--pos-border);
+            color: #ffffff;
+            padding: 14px 10px;
+            border-radius: 8px;
+            font-weight: 700;
+            font-size: 13px;
+            text-align: center;
+            cursor: pointer;
+        }
+        .tender-method-btn.active {
+            background: #3b82f6;
+            border-color: #3b82f6;
+        }
+
+        .quick-cash-row {
+            display: flex;
+            gap: 8px;
+            margin-top: 12px;
+        }
+        .quick-cash-btn {
+            flex: 1;
+            background: #252533;
+            border: 1px solid var(--pos-border);
+            color: #10b981;
+            font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+            font-weight: 700;
+            padding: 8px 4px;
+            border-radius: 6px;
+            font-size: 12px;
+            cursor: pointer;
+        }
+
+        /* 80mm Thermal Receipt Styling */
+        #printableReceipt {
+            display: none;
+        }
+
+        @media print {
+            body * {
+                visibility: hidden;
+            }
+            #printableReceipt, #printableReceipt * {
+                visibility: visible;
+            }
+            #printableReceipt {
+                display: block !important;
+                position: absolute;
+                left: 0;
+                top: 0;
+                width: 80mm;
+                margin: 0;
+                padding: 4mm 6mm;
+                color: #000000 !important;
+                background: #ffffff !important;
+                font-family: "Courier New", Courier, monospace;
+                font-size: 12px;
+                line-height: 1.3;
+            }
+            .thermal-center { text-align: center; }
+            .thermal-right { text-align: right; }
+            .thermal-row { display: flex; justify-content: space-between; }
+            .thermal-divider { border-top: 1px dashed #000000; margin: 6px 0; }
+        }
+    </style>
+</head>
+<body>
+
+<div class="pos-container">
+
+    <!-- LEFT: PRODUCT SELECTION CATALOG -->
+    <div class="catalog-pane">
+        <div class="catalog-header">
+            <div class="d-flex align-items-center gap-3">
+                <a href="/portal/{{ username }}/sales" class="btn btn-sm btn-outline-secondary font-monospace" style="font-size: 11px;">Back to Office</a>
+                <h5 class="m-0 fw-bold font-monospace text-success">{{ store_info.name }} LIVE TERMINAL</h5>
+            </div>
+            <div style="width: 240px;">
+                <input type="text" id="posSearchInput" class="form-control form-control-sm bg-dark text-white border-secondary" placeholder="Search product or scan..." oninput="filterCatalog()">
+            </div>
+        </div>
+
+        <div class="category-scroll">
+            <button class="cat-btn active" onclick="selectCategory('All', this)">All Items</button>
+            {% for cat in categories %}
+            <button class="cat-btn" onclick="selectCategory('{{ cat }}', this)">{{ cat }}</button>
+            {% endfor %}
+        </div>
+
+        <div class="product-grid" id="productCatalogGrid">
+            {% for p in products %}
+            {% set is_depleted = (p.portions_left is not none and p.portions_left == 0) %}
+            {% set is_low = (p.portions_left is not none and p.portions_left > 0 and p.portions_left <= 5) %}
+            
+            <div class="product-card {% if is_depleted %}card-depleted{% elif is_low %}card-low{% endif %}" 
+                 data-id="{{ p.Product_ID }}"
+                 data-name="{{ p.Product_Name }}"
+                 data-price="{{ p.Selling_Price }}"
+                 data-portions="{{ p.portions_left if p.portions_left is not none else 'null' }}"
+                 data-category="{{ p.Category }}"
+                 data-deficits='{{ p.deficit_breakdown|tojson|safe }}'
+                 onclick="handleCardClick(this)">
+                
+                <!-- TOP ROW: Category Left & Stock Pill Right -->
+                <div class="card-top">
+                    <span class="p-category">{{ p.Category or 'General' }}</span>
+                    {% if p.portions_left is not none %}
+                        {% if p.portions_left == 0 %}
+                            <span class="stock-pill stock-depleted">0 LEFT</span>
+                        {% elif p.portions_left <= 5 %}
+                            <span class="stock-pill stock-low">{{ p.portions_left }} LEFT</span>
+                        {% endif %}
+                    {% endif %}
+                </div>
+
+                <!-- MIDDLE: Name & Missing Ingredients Callout -->
+                <div class="card-middle">
+                    <div class="p-name">{{ p.Product_Name }}</div>
+                    {% if is_depleted %}
+                        <div class="stock-cause text-danger">
+                            {% if p.depleted_ingredients|length > 1 %}
+                                Out of: {{ p.depleted_ingredients[0] }}, {{ p.depleted_ingredients[1] }}
+                                {% if p.depleted_ingredients|length > 2 %}(+{{ p.depleted_ingredients|length - 2 }} more){% endif %}
+                            {% else %}
+                                Out of: {{ p.limiting_ingredient or 'Ingredient' }}
+                            {% endif %}
+                        </div>
+                    {% elif is_low %}
+                        <div class="stock-cause text-warning">
+                            Low on: {{ p.limiting_ingredient }}
+                        </div>
+                    {% endif %}
+                </div>
+
+                <!-- BOTTOM ROW: Price Lower-Right -->
+                <div class="card-bottom">
+                    <span class="p-price">PHP {{ "%.2f"|format(p.Selling_Price) }}</span>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+
+    <!-- RIGHT: CART ORDER TICKET -->
+    <div class="cart-pane">
+        <div class="cart-header">
+            <div>
+                <span class="cart-header-title">Active Order Ticket</span>
+                <span class="cart-header-cashier">Cashier: {{ store_info.cashier }}</span>
+            </div>
+            <button class="btn btn-sm btn-outline-danger py-0 px-2 fw-bold" style="font-size: 11px;" onclick="clearCart()">Clear</button>
+        </div>
+
+        <div class="cart-items-wrapper" id="cartItemsContainer">
+            <div class="empty-cart-box" id="emptyCartLabel">
+                No items on active ticket.<br>Tap products from the grid to begin order.
+            </div>
+        </div>
+
+        <div class="cart-footer">
+            <div class="discount-section-title">APPLY DISCOUNT:</div>
+            <div class="discount-pill-row">
+                <div class="disc-pill active" onclick="setDiscount('None', 0, this)">None</div>
+                <div class="disc-pill" onclick="setDiscount('Senior Citizen (SC 20%)', 0.20, this)">Senior Citizen (20%)</div>
+                <div class="disc-pill" onclick="setDiscount('PWD (20%)', 0.20, this)">PWD (20%)</div>
+                <div class="disc-pill" onclick="setDiscount('Solo Parent (10%)', 0.10, this)">Solo Parent (10%)</div>
+            </div>
+
+            <div id="seniorIdBox" class="mb-2" style="display: none;">
+                <input type="text" id="customerIdInput" class="form-control form-control-sm bg-dark text-white border-warning font-monospace" placeholder="Enter Senior / PWD ID Booklet #">
+            </div>
+
+            <div class="calc-line">
+                <span>Gross Orders:</span>
+                <span class="calc-val" id="labelSubtotal">PHP 0.00</span>
+            </div>
+            <div class="calc-line" style="color: #fbbf24;">
+                <span>Discounts Deducted:</span>
+                <span class="calc-val" style="color: #fbbf24;" id="labelDiscount">-PHP 0.00</span>
+            </div>
+            <div class="calc-total">
+                <span>Net Total Due:</span>
+                <span class="font-monospace text-success" id="labelNetTotal">PHP 0.00</span>
+            </div>
+
+            <button class="pay-btn" id="openPayModalBtn" onclick="openPaymentModal()" disabled>
+                Charge PHP 0.00
+            </button>
+        </div>
+    </div>
+
+</div>
+
+<!-- STREAMLINED, SECURE INGREDIENT DEFICIT MODAL -->
+<div class="modal fade" id="stockOverrideModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content bg-dark text-white border border-warning shadow-lg">
+            <div class="modal-header border-warning" style="background: #1e1b13;">
+                <h5 class="modal-title fw-bold text-warning">Ingredient Deficit Alert</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body p-4" style="background: #151520;">
+                <div class="d-flex justify-content-between align-items-center mb-3">
+                    <div>
+                        <h4 id="overrideItemName" class="fw-bold text-white mb-0"></h4>
+                    </div>
+                    <span class="font-monospace fw-bold text-success" id="overrideItemPrice" style="font-size: 18px;"></span>
+                </div>
+
+                <p style="color: #cbd5e1; font-size: 13.5px; line-height: 1.5;" class="mb-3">
+                    The following ingredient(s) have zero recorded stock in the system. Check physical availability with the kitchen or bar before continuing:
+                </p>
+
+                <!-- Clean Deficit List Cards -->
+                <div id="overrideIngredientsList" class="d-flex flex-column gap-2 mb-3">
+                    <!-- Populated dynamically via JS -->
+                </div>
+
+                <div class="alert alert-dark border-secondary p-2.5 mb-0" style="background: #101018; font-size: 12px; color: #94a3b8; border-radius: 6px;">
+                    <strong style="color: #cbd5e1;">Operational Policy:</strong> Proceeding will complete the sale and log tender normally. Stock will buffer into negative until replenishment is entered.
+                </div>
+            </div>
+            <div class="modal-footer border-secondary p-3 justify-content-between" style="background: #14141c;">
+                <button type="button" class="btn btn-secondary px-4 fw-bold" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-warning fw-bold text-dark px-4" onclick="confirmStockOverride()">
+                    Proceed with Sale
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- PAYMENT TENDER MODAL -->
+<div class="modal fade" id="paymentModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content bg-dark text-white border border-secondary shadow-lg">
+            <div class="modal-header border-secondary" style="background: #14141c;">
+                <h5 class="modal-title fw-bold">Select Settlement Channel</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body p-4" style="background: #181822;">
+                <div class="d-flex justify-content-between align-items-center mb-3 p-3 rounded" style="background: #111118; border: 1px solid var(--pos-border);">
+                    <span class="text-muted fw-bold">TOTAL AMOUNT PAYABLE:</span>
+                    <h3 class="m-0 font-monospace text-success fw-bold" id="modalPayableTotal">PHP 0.00</h3>
+                </div>
+
+                <div class="tender-grid">
+                    <div class="tender-method-btn active" onclick="selectTenderMethod('Cash', this)">Cash</div>
+                    <div class="tender-method-btn" onclick="selectTenderMethod('GCash', this)">GCash</div>
+                    <div class="tender-method-btn" onclick="selectTenderMethod('Maya', this)">Maya</div>
+                    <div class="tender-method-btn" onclick="selectTenderMethod('Card', this)">Card (EDC)</div>
+                    <div class="tender-method-btn" onclick="selectTenderMethod('GrabFood', this)">GrabFood</div>
+                    <div class="tender-method-btn" onclick="selectTenderMethod('Foodpanda', this)">Foodpanda</div>
+                </div>
+
+                <!-- Cash Tender Controls -->
+                <div id="cashInputSection" class="mt-3">
+                    <label class="form-label text-muted small fw-bold mb-1">CASH AMOUNT RECEIVED:</label>
+                    <input type="number" step="1" id="cashReceivedInput" class="form-control form-control-lg bg-dark text-white font-monospace border-secondary text-end fw-bold" placeholder="0.00" oninput="calculateChange()">
+
+                    <div class="quick-cash-row">
+                        <button type="button" class="quick-cash-btn" onclick="fillExactCash()">Exact</button>
+                        <button type="button" class="quick-cash-btn" onclick="addQuickCash(100)">+100</button>
+                        <button type="button" class="quick-cash-btn" onclick="addQuickCash(200)">+200</button>
+                        <button type="button" class="quick-cash-btn" onclick="addQuickCash(500)">+500</button>
+                        <button type="button" class="quick-cash-btn" onclick="addQuickCash(1000)">+1,000</button>
+                    </div>
+
+                    <div class="d-flex justify-content-between align-items-center mt-3 p-2 rounded" style="background: #14141c;">
+                        <span class="text-muted fw-bold">CHANGE DUE:</span>
+                        <h4 class="m-0 font-monospace text-warning fw-bold" id="changeDueLabel">PHP 0.00</h4>
+                    </div>
+                </div>
+
+                <!-- Digital Reference Section -->
+                <div id="referenceInputSection" class="mt-3" style="display: none;">
+                    <label class="form-label text-muted small fw-bold mb-1">TRANSACTION REF / APPROVAL CODE (OPTIONAL):</label>
+                    <input type="text" id="digitalReferenceInput" class="form-control bg-dark text-white border-secondary font-monospace" placeholder="e.g., GCash Ref #, Trace #">
+                </div>
+            </div>
+            <div class="modal-footer border-secondary justify-content-between" style="background: #14141c;">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-success fw-bold px-4" id="submitCheckoutBtn" onclick="commitOrderCheckout()">
+                    Confirm & Print Receipt
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 80MM THERMAL RECEIPT PRINT SHELL -->
+<div id="printableReceipt">
+    <div class="thermal-center">
+        <strong style="font-size: 15px;">{{ store_info.name }}</strong><br>
+        FOOD & BEVERAGE SERVICES<br>
+        San Jose del Monte, Bulacan<br>
+        OFFICIAL ACKNOWLEDGMENT RECEIPT<br>
+    </div>
+    <div class="thermal-divider"></div>
+    <div class="thermal-row">
+        <span>TXN: <span id="rTxnId">POS00000</span></span>
+        <span id="rDate">2026-09-16</span>
+    </div>
+    <div class="thermal-row">
+        <span>CASHIER: {{ store_info.cashier }}</span>
+        <span id="rTime">12:00:00</span>
+    </div>
+    <div class="thermal-divider"></div>
+
+    <div id="receiptItemsBlock"></div>
+
+    <div class="thermal-divider"></div>
+    <div class="thermal-row">
+        <span>GROSS SUBTOTAL:</span>
+        <span id="rSubtotal">0.00</span>
+    </div>
+    <div class="thermal-row" id="rDiscountRow" style="display: none;">
+        <span id="rDiscountLabel">DISCOUNT:</span>
+        <span id="rDiscount">-0.00</span>
+    </div>
+    <div class="thermal-row" style="font-weight: bold; font-size: 14px; margin-top: 4px;">
+        <span>AMOUNT DUE:</span>
+        <span id="rTotal">PHP 0.00</span>
+    </div>
+    <div class="thermal-divider"></div>
+
+    <div class="thermal-row">
+        <span>TENDER (<span id="rTenderType">CASH</span>):</span>
+        <span id="rTendered">0.00</span>
+    </div>
+    <div class="thermal-row" id="rChangeRow">
+        <span>CHANGE:</span>
+        <span id="rChange">0.00</span>
+    </div>
+    <div class="thermal-row" id="rRefRow" style="display: none;">
+        <span>REF #:</span>
+        <span id="rRefNo">N/A</span>
+    </div>
+
+    <div class="thermal-divider"></div>
+    <div class="thermal-center" style="font-size: 11px;">
+        THANK YOU FOR DINING WITH US!<br>
+        HAVE A GREAT DAY!
+    </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+<script>
+    let cart = [];
+    let currentDiscountType = 'None';
+    let currentDiscountRate = 0.0;
+    let selectedTender = 'Cash';
+    let pendingProductOverride = null;
+
+    function handleCardClick(cardElement) {
+        const productId = cardElement.getAttribute('data-id');
+        const name = cardElement.getAttribute('data-name');
+        const price = parseFloat(cardElement.getAttribute('data-price') || 0.0);
+        const portionsStr = cardElement.getAttribute('data-portions');
+        const portionsLeft = portionsStr === 'null' ? null : parseInt(portionsStr);
+        const deficitData = JSON.parse(cardElement.getAttribute('data-deficits') || '[]');
+
+        if (portionsLeft !== null && portionsLeft <= 0) {
+            pendingProductOverride = { productId, name, price };
+            document.getElementById('overrideItemName').textContent = name;
+            document.getElementById('overrideItemPrice').textContent = "PHP " + price.toFixed(2);
+
+            const listContainer = document.getElementById('overrideIngredientsList');
+            listContainer.innerHTML = '';
+
+            if (deficitData.length === 0) {
+                listContainer.innerHTML = `
+                    <div class="p-3 rounded text-center text-warning" style="background: #1e1e2c; border: 1px solid #2e2e42;">
+                        Recipe component depleted in system stock.
+                    </div>
+                `;
+            } else {
+                deficitData.forEach(ing => {
+                    const itemDiv = document.createElement('div');
+                    itemDiv.className = 'd-flex justify-content-between align-items-center p-2 px-3 rounded';
+                    itemDiv.style.background = '#1e1e2c';
+                    itemDiv.style.border = '1px solid #2e2e42';
+
+                    const isDepleted = ing.status === 'depleted';
+                    const badgeBg = isDepleted ? '#ef4444' : '#f59e0b';
+                    const badgeColor = isDepleted ? '#ffffff' : '#000000';
+                    const badgeText = isDepleted ? 'DEPLETED (0 LEFT)' : `${ing.servings_left} LEFT`;
+
+                    itemDiv.innerHTML = `
+                        <div class="d-flex align-items-center gap-2">
+                            <span style="color: ${isDepleted ? '#ef4444' : '#f59e0b'}; font-size: 14px;">•</span>
+                            <span class="fw-bold" style="color: #ffffff; font-size: 13.5px;">${ing.name}</span>
+                        </div>
+                        <span style="background: ${badgeBg}; color: ${badgeColor}; font-size: 10px; font-weight: 800; padding: 3px 8px; border-radius: 4px; text-transform: uppercase;">
+                            ${badgeText}
+                        </span>
+                    `;
+                    listContainer.appendChild(itemDiv);
+                });
+            }
+
+            new bootstrap.Modal(document.getElementById('stockOverrideModal')).show();
+            return;
+        }
+
+        addToCart(productId, name, price);
+    }
+
+    function confirmStockOverride() {
+        if (pendingProductOverride) {
+            addToCart(pendingProductOverride.productId, pendingProductOverride.name, pendingProductOverride.price);
+            pendingProductOverride = null;
+        }
+        const modalEl = document.getElementById('stockOverrideModal');
+        const modalInstance = bootstrap.Modal.getInstance(modalEl);
+        if (modalInstance) modalInstance.hide();
+    }
+
+    function addToCart(productId, name, price) {
+        const existing = cart.find(item => item.product_id === productId);
+        if (existing) {
+            existing.qty += 1;
+        } else {
+            cart.push({
+                product_id: productId,
+                name: name,
+                price: parseFloat(price),
+                qty: 1,
+                modifiers: []
+            });
+        }
+        renderCart();
+    }
+
+    function updateQty(index, delta) {
+        cart[index].qty += delta;
+        if (cart[index].qty <= 0) {
+            cart.splice(index, 1);
+        }
+        renderCart();
+    }
+
+    function clearCart() {
+        cart = [];
+        setDiscount('None', 0, document.querySelector('.disc-pill'));
+        renderCart();
+    }
+
+    function setDiscount(type, rate, element) {
+        currentDiscountType = type;
+        currentDiscountRate = rate;
+        document.querySelectorAll('.disc-pill').forEach(p => p.classList.remove('active'));
+        if (element) element.classList.add('active');
+
+        const idBox = document.getElementById('seniorIdBox');
+        if (type.includes('Senior') || type.includes('PWD')) {
+            idBox.style.display = 'block';
+        } else {
+            idBox.style.display = 'none';
+            document.getElementById('customerIdInput').value = '';
+        }
+        renderCart();
+    }
+
+    function calculateTotals() {
+        const subtotal = cart.reduce((sum, item) => sum + (item.qty * item.price), 0);
+        const discountAmount = subtotal * currentDiscountRate;
+        const total = Math.max(0, subtotal - discountAmount);
+
+        return {
+            subtotal: subtotal,
+            discount: discountAmount,
+            total: total
+        };
+    }
+
+    function renderCart() {
+        const container = document.getElementById('cartItemsContainer');
+        const emptyLabel = document.getElementById('emptyCartLabel');
+        const payBtn = document.getElementById('openPayModalBtn');
+
+        if (cart.length === 0) {
+            container.innerHTML = '<div class="empty-cart-box" id="emptyCartLabel">No items on active ticket.<br>Tap products from the grid to begin order.</div>';
+            payBtn.disabled = true;
+            payBtn.innerText = "Charge PHP 0.00";
+            document.getElementById('labelSubtotal').innerText = "PHP 0.00";
+            document.getElementById('labelDiscount').innerText = "-PHP 0.00";
+            document.getElementById('labelNetTotal').innerText = "PHP 0.00";
+            return;
+        }
+
+        payBtn.disabled = false;
+        container.innerHTML = '';
+
+        cart.forEach((item, index) => {
+            const lineTotal = item.qty * item.price;
+            const row = document.createElement('div');
+            row.className = 'cart-row';
+            row.innerHTML = `
+                <div class="item-info">
+                    <div class="item-title">${item.name}</div>
+                    <div class="item-unit-price">PHP ${item.price.toFixed(2)} / unit</div>
+                </div>
+                <div class="qty-controls">
+                    <button type="button" class="qty-btn" onclick="updateQty(${index}, -1)">-</button>
+                    <span class="qty-display">${item.qty}</span>
+                    <button type="button" class="qty-btn" onclick="updateQty(${index}, 1)">+</button>
+                </div>
+                <div class="text-end font-monospace fw-bold ms-3 text-white" style="min-width: 70px;">
+                    PHP ${lineTotal.toFixed(2)}
+                </div>
+            `;
+            container.appendChild(row);
+        });
+
+        const totals = calculateTotals();
+        document.getElementById('labelSubtotal').innerText = "PHP " + totals.subtotal.toFixed(2);
+        document.getElementById('labelDiscount').innerText = "-PHP " + totals.discount.toFixed(2);
+        document.getElementById('labelNetTotal').innerText = "PHP " + totals.total.toFixed(2);
+        payBtn.innerText = `Charge PHP ${totals.total.toFixed(2)}`;
+    }
+
+    function filterCatalog() {
+        const query = document.getElementById('posSearchInput').value.toLowerCase();
+        document.querySelectorAll('.product-card').forEach(card => {
+            const name = card.getAttribute('data-name');
+            card.style.display = name.includes(query) ? 'flex' : 'none';
+        });
+    }
+
+    function selectCategory(cat, element) {
+        document.querySelectorAll('.cat-btn').forEach(b => b.classList.remove('active'));
+        element.classList.add('active');
+
+        document.querySelectorAll('.product-card').forEach(card => {
+            const pCat = card.getAttribute('data-category');
+            if (cat === 'All' || pCat === cat) {
+                card.style.display = 'flex';
+            } else {
+                card.style.display = 'none';
+            }
+        });
+    }
+
+    function openPaymentModal() {
+        const totals = calculateTotals();
+        document.getElementById('modalPayableTotal').innerText = "PHP " + totals.total.toFixed(2);
+        document.getElementById('cashReceivedInput').value = '';
+        document.getElementById('changeDueLabel').innerText = "PHP 0.00";
+        selectTenderMethod('Cash', document.querySelector('.tender-method-btn'));
+        new bootstrap.Modal(document.getElementById('paymentModal')).show();
+    }
+
+    function selectTenderMethod(method, element) {
+        selectedTender = method;
+        document.querySelectorAll('.tender-method-btn').forEach(b => b.classList.remove('active'));
+        if (element) element.classList.add('active');
+
+        const cashSec = document.getElementById('cashInputSection');
+        const refSec = document.getElementById('referenceInputSection');
+
+        if (method === 'Cash') {
+            cashSec.style.display = 'block';
+            refSec.style.display = 'none';
+        } else {
+            cashSec.style.display = 'none';
+            refSec.style.display = 'block';
+        }
+    }
+
+    function calculateChange() {
+        const totals = calculateTotals();
+        const cashEntered = parseFloat(document.getElementById('cashReceivedInput').value) || 0;
+        const change = Math.max(0, cashEntered - totals.total);
+        document.getElementById('changeDueLabel').innerText = "PHP " + change.toFixed(2);
+    }
+
+    function fillExactCash() {
+        const totals = calculateTotals();
+        document.getElementById('cashReceivedInput').value = totals.total.toFixed(2);
+        calculateChange();
+    }
+
+    function addQuickCash(amount) {
+        const current = parseFloat(document.getElementById('cashReceivedInput').value) || 0;
+        document.getElementById('cashReceivedInput').value = (current + amount).toFixed(2);
+        calculateChange();
+    }
+
+    async function commitOrderCheckout() {
+        const totals = calculateTotals();
+        const cashReceived = parseFloat(document.getElementById('cashReceivedInput').value) || 0;
+        
+        if (selectedTender === 'Cash' && cashReceived < totals.total) {
+            alert("Tender Error: Received cash is lower than the amount due.");
+            return;
+        }
+
+        const submitBtn = document.getElementById('submitCheckoutBtn');
+        submitBtn.disabled = true;
+        submitBtn.innerText = "Processing...";
+
+        const payload = {
+            items: cart,
+            subtotal: totals.subtotal,
+            discount_type: currentDiscountType,
+            discount_amount: totals.discount,
+            customer_id: document.getElementById('customerIdInput').value.trim(),
+            total: totals.total,
+            tender_type: selectedTender,
+            amount_tendered: selectedTender === 'Cash' ? cashReceived : totals.total,
+            change_due: selectedTender === 'Cash' ? Math.max(0, cashReceived - totals.total) : 0,
+            reference_no: document.getElementById('digitalReferenceInput').value.trim()
+        };
+
+        try {
+            const response = await fetch('/portal/{{ username }}/pos/checkout', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            });
+
+            const result = await response.json();
+
+            if (result.status === 'success') {
+                populateReceipt(result.receipt);
+                bootstrap.Modal.getInstance(document.getElementById('paymentModal')).hide();
+                window.print();
+                clearCart();
+            } else {
+                alert("Transaction Failed: " + result.message);
+            }
+        } catch (err) {
+            alert("Network / Server Error: " + err.message);
+        } finally {
+            submitBtn.disabled = false;
+            submitBtn.innerText = "Confirm & Print Receipt";
+        }
+    }
+
+    function populateReceipt(r) {
+        document.getElementById('rTxnId').innerText = r.txn_id;
+        document.getElementById('rDate').innerText = r.date;
+        document.getElementById('rTime').innerText = r.time;
+        document.getElementById('rSubtotal').innerText = r.subtotal.toFixed(2);
+        document.getElementById('rTotal').innerText = "PHP " + r.net_total.toFixed(2);
+        document.getElementById('rTenderType').innerText = r.tender_type.toUpperCase();
+        document.getElementById('rTendered').innerText = r.amount_tendered.toFixed(2);
+        document.getElementById('rChange').innerText = r.change_due.toFixed(2);
+
+        const itemsBlock = document.getElementById('receiptItemsBlock');
+        itemsBlock.innerHTML = '';
+        r.items.forEach(it => {
+            const line = document.createElement('div');
+            line.className = 'thermal-row';
+            line.innerHTML = `
+                <span>${it.qty}x ${it.name}</span>
+                <span>${(it.qty * it.price).toFixed(2)}</span>
+            `;
+            itemsBlock.appendChild(line);
+        });
+
+        const discRow = document.getElementById('rDiscountRow');
+        if (r.discount_amount > 0) {
+            discRow.style.display = 'flex';
+            document.getElementById('rDiscountLabel').innerText = r.discount_type.toUpperCase() + ":";
+            document.getElementById('rDiscount').innerText = "-" + r.discount_amount.toFixed(2);
+        } else {
+            discRow.style.display = 'none';
+        }
+
+        const refRow = document.getElementById('rRefRow');
+        if (r.reference_no) {
+            refRow.style.display = 'flex';
+            document.getElementById('rRefNo').innerText = r.reference_no;
+        } else {
+            refRow.style.display = 'none';
+        }
+    }
+</script>
+
+</body>
+</html>

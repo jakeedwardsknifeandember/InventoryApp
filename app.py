@@ -22,6 +22,7 @@ from routes.reports import reports_bp
 from routes.settings import settings_bp
 from routes.admin import admin_bp
 from routes.corrections import corrections_bp
+from routes.pos import pos_bp
 
 app = Flask(__name__)
 app.secret_key = 'knife-and-ember-secret-saas-key'
@@ -41,6 +42,7 @@ app.register_blueprint(reports_bp)
 app.register_blueprint(settings_bp)
 app.register_blueprint(admin_bp)
 app.register_blueprint(corrections_bp)
+app.register_blueprint(pos_bp)
 
 USER_DB_PATH = "data/users.db"
 
