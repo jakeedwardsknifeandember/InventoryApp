@@ -1,4 +1,4 @@
-# routes/inventory.py - Stock Inventory Module with Dynamic Packaging & Dual-Input Yield Prep Engine
+# routes/inventory.py - Stock Inventory Module with Role-Based Access Control, Dynamic Packaging & Dual-Input Yield Prep Engine
 from flask import Blueprint, request, redirect, session, render_template
 from modules.database import InventoryDB
 from routes.settings import get_store_settings
@@ -18,18 +18,38 @@ def web_inventory_tab(username):
     client_db = InventoryDB(client_db_path)
     store_settings = get_store_settings(client_db_path)
     
+    # 1. RBAC SECURITY ROLE RESOLUTION
+    active_role = session.get('staff_role')
+    if not active_role and session.get('logged_in_user') == username:
+        active_role = 'Platform Owner Admin'
+        session['staff_role'] = active_role
+    elif not active_role:
+        active_role = 'Barista / Kitchen Crew'
+
+    is_owner = (active_role == 'Platform Owner Admin')
+    is_manager = (active_role in ['Store Manager', 'Platform Owner Admin'])
+    is_crew = not is_manager
+
     feedback_msg = None
     alert_type = "success"
     
     current_type = request.args.get('type', 'RAW').upper().strip()
     if current_type not in ['RAW', 'PREPPED']:
         current_type = 'RAW'
+
+    # STRICT CREW LOCKDOWN: Crew accounts cannot access Bulk Warehouse Operations
+    if is_crew:
+        current_type = 'PREPPED'
     
-    # ===== POST METHODS: BULK OPERATIONAL WAREHOUSE MUTATIONS =====
+    # ===== POST METHODS: OPERATIONAL WAREHOUSE & KITCHEN LINE MUTATIONS =====
     if request.method == 'POST':
         action = request.form.get('action_type')
         date_str = datetime.now().strftime("%Y-%m-%d")
         
+        # Crew Security Gate: Crew cannot perform physical raw count reconciliation
+        if is_crew and action == 'reconcile_stock':
+            return redirect(f"/portal/{username}/inventory?type={current_type}&error=Security Block: Physical inventory reconciliation is strictly reserved for Store Managers and Platform Owner Admins.")
+
         ingredients_df = client_db.read_tab('Ingredients')
         audit_ledger_df = client_db.read_tab('Inventory_Audit_Log')
         
@@ -359,7 +379,7 @@ def web_inventory_tab(username):
                     feedback_msg = "Waste Log Complete: Deducted stock components successfully."
                     alert_type = "warning"
 
-            # 4. PROCESS PHYSICAL RECONCILIATION AUDITS (WITH FINANCIAL SHRINKAGE VALUATION)
+            # 4. PROCESS PHYSICAL RECONCILIATION AUDITS (MANAGERS / OWNERS ONLY)
             elif action == 'reconcile_stock':
                 ing_ids = request.form.getlist('ingredient_id[]')
                 quantities = request.form.getlist('quantity[]')
@@ -449,6 +469,64 @@ def web_inventory_tab(username):
     if products_df is not None and not products_df.empty:
         products_list = products_df.to_dict(orient='records')
 
+    # ENRICHED PREPPED COMPONENT PAYLOAD FOR DUAL-INPUT SCALING & YIELD PREVIEW
+    full_ingredients_pool = client_db.read_tab('Ingredients')
+    prep_recipes_df = client_db.read_tab('Prep_Recipes')
+    prepped_dropdown_options = []
+    all_raw_ingredients = []
+    
+    if not full_ingredients_pool.empty:
+        # Separate raw ingredients to guarantee deliveries and waste dropdowns always contain all goods
+        raw_rows = full_ingredients_pool[full_ingredients_pool['Ingredient_Type'] != 'PREPPED']
+        all_raw_ingredients = raw_rows.to_dict(orient='records')
+
+        prepped_rows = full_ingredients_pool[full_ingredients_pool['Ingredient_Type'] == 'PREPPED']
+        for _, p_row in prepped_rows.iterrows():
+            p_id = str(p_row['Ingredient_ID'])
+            p_name = str(p_row['Ingredient_Name'])
+            p_unit = str(p_row.get('Unit', 'g'))
+            p_yield = 1.0
+            p_components = []
+            
+            if prep_recipes_df is not None and not prep_recipes_df.empty:
+                f_df = prep_recipes_df[prep_recipes_df['Prepped_Ingredient_ID'] == p_id]
+                if not f_df.empty:
+                    if 'Batch_Yield' in f_df.columns and pd.notna(f_df['Batch_Yield'].iloc[0]) and float(f_df['Batch_Yield'].iloc[0] or 0) > 0:
+                        p_yield = float(f_df['Batch_Yield'].iloc[0])
+                    else:
+                        p_yield = pd.to_numeric(f_df['Quantity_Required'], errors='coerce').fillna(0.0).sum()
+                        if p_yield <= 0:
+                            p_yield = 1.0
+                            
+                    for _, comp in f_df.iterrows():
+                        raw_id = str(comp['Raw_Ingredient_ID'])
+                        raw_match = full_ingredients_pool[full_ingredients_pool['Ingredient_ID'] == raw_id]
+                        c_name = raw_match['Ingredient_Name'].values[0] if not raw_match.empty else raw_id
+                        c_stock = float(raw_match['Current_Stock'].values[0]) if not raw_match.empty else 0.0
+                        c_unit = str(raw_match['Unit'].values[0]) if not raw_match.empty and 'Unit' in raw_match.columns else str(comp.get('Unit', ''))
+                        
+                        p_components.append({
+                            'raw_id': raw_id,
+                            'name': c_name,
+                            'qty_per_batch': float(comp.get('Quantity_Required', 0.0) or 0.0),
+                            'unit': c_unit,
+                            'current_stock': c_stock
+                        })
+
+            prepped_dropdown_options.append({
+                'Ingredient_ID': p_id,
+                'Ingredient_Name': p_name,
+                'Unit': p_unit,
+                'Batch_Yield': p_yield,
+                'has_formula': len(p_components) > 0,
+                'components': p_components
+            })
+
+    # Enrich inventory list with prepped batch yield for crew station view
+    yield_map = {opt['Ingredient_ID']: opt['Batch_Yield'] for opt in prepped_dropdown_options}
+    for it in inventory_list:
+        it['Batch_Yield'] = yield_map.get(str(it['Ingredient_ID']), 1.0)
+
     # HISTORICAL TIMELINE ACCORDION PRE-COMPILER
     audit_df = client_db.read_tab('Inventory_Audit_Log')
     delivery_history_list = []
@@ -512,59 +590,16 @@ def web_inventory_tab(username):
                     'name': ing_name, 'variance': variance
                 })
 
-    # ENRICHED PREPPED COMPONENT PAYLOAD FOR DUAL-INPUT SCALING
-    full_ingredients_pool = client_db.read_tab('Ingredients')
-    prep_recipes_df = client_db.read_tab('Prep_Recipes')
-    prepped_dropdown_options = []
-    
-    if not full_ingredients_pool.empty:
-        prepped_rows = full_ingredients_pool[full_ingredients_pool['Ingredient_Type'] == 'PREPPED']
-        for _, p_row in prepped_rows.iterrows():
-            p_id = str(p_row['Ingredient_ID'])
-            p_name = str(p_row['Ingredient_Name'])
-            p_unit = str(p_row.get('Unit', 'g'))
-            p_yield = 1.0
-            p_components = []
-            
-            if prep_recipes_df is not None and not prep_recipes_df.empty:
-                f_df = prep_recipes_df[prep_recipes_df['Prepped_Ingredient_ID'] == p_id]
-                if not f_df.empty:
-                    if 'Batch_Yield' in f_df.columns and pd.notna(f_df['Batch_Yield'].iloc[0]) and float(f_df['Batch_Yield'].iloc[0] or 0) > 0:
-                        p_yield = float(f_df['Batch_Yield'].iloc[0])
-                    else:
-                        p_yield = pd.to_numeric(f_df['Quantity_Required'], errors='coerce').fillna(0.0).sum()
-                        if p_yield <= 0:
-                            p_yield = 1.0
-                            
-                    for _, comp in f_df.iterrows():
-                        raw_id = str(comp['Raw_Ingredient_ID'])
-                        raw_match = full_ingredients_pool[full_ingredients_pool['Ingredient_ID'] == raw_id]
-                        c_name = raw_match['Ingredient_Name'].values[0] if not raw_match.empty else raw_id
-                        c_stock = float(raw_match['Current_Stock'].values[0]) if not raw_match.empty else 0.0
-                        c_unit = str(raw_match['Unit'].values[0]) if not raw_match.empty and 'Unit' in raw_match.columns else str(comp.get('Unit', ''))
-                        
-                        p_components.append({
-                            'raw_id': raw_id,
-                            'name': c_name,
-                            'qty_per_batch': float(comp.get('Quantity_Required', 0.0) or 0.0),
-                            'unit': c_unit,
-                            'current_stock': c_stock
-                        })
-
-            prepped_dropdown_options.append({
-                'Ingredient_ID': p_id,
-                'Ingredient_Name': p_name,
-                'Unit': p_unit,
-                'Batch_Yield': p_yield,
-                'has_formula': len(p_components) > 0,
-                'components': p_components
-            })
-
     return render_template(
         'inventory.html',
         username=username,
+        is_owner=is_owner,
+        is_manager=is_manager,
+        is_crew=is_crew,
+        active_role=active_role,
         inventory_status=inventory_list,
         all_products=products_list,
+        all_raw_ingredients=all_raw_ingredients,
         categories=categories,
         delivery_history=delivery_history_list,
         waste_history=waste_history_list,

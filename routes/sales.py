@@ -625,7 +625,6 @@ def web_sales_tab(username):
     # =================================================================
     # 4. QUERY LIVE POS ACTIVITY FOR TARGET DATE (NET OF VOIDS/REFUNDS)
     # =================================================================
-    # Query Products Live Count (Net of voids)
     cursor.execute("""
         SELECT Product_ID, SUM(Quantity)
         FROM Sales
@@ -638,7 +637,6 @@ def web_sales_tab(username):
     """, (target_date,))
     pos_prod_qty = {str(r[0]): float(r[1] or 0.0) for r in cursor.fetchall()}
 
-    # Query Modifiers Live Count
     cursor.execute("""
         SELECT Product_ID, SUM(Quantity)
         FROM Sales
@@ -648,7 +646,6 @@ def web_sales_tab(username):
     """, (target_date,))
     pos_mod_qty = {str(r[0]): float(r[1] or 0.0) for r in cursor.fetchall()}
 
-    # Query Discounts Live Count
     cursor.execute("""
         SELECT Product_Name, SUM(ABS(Total_Amount))
         FROM Sales
@@ -658,7 +655,6 @@ def web_sales_tab(username):
     """, (target_date,))
     pos_discounts = {str(r[0]): float(r[1] or 0.0) for r in cursor.fetchall()}
 
-    # Query POS Tenders (from Live Counter transactions on target_date)
     cursor.execute("""
         SELECT 
             COALESCE(SUM(Cash_Sales), 0.0),
@@ -676,7 +672,6 @@ def web_sales_tab(username):
         'card': float(t_row[3] or 0.0) if t_row else 0.0
     }
 
-    # Calculate overall financial metrics for target_date
     cursor.execute("""
         SELECT 
             COALESCE(SUM(CASE WHEN Total_Amount > 0 THEN Total_Amount ELSE 0 END), 0.0),
@@ -693,7 +688,16 @@ def web_sales_tab(username):
         'total_items': sum(pos_prod_qty.values()) + sum(pos_mod_qty.values())
     }
 
-    # 5. Read historical sales & cash drawer balancing grouped by date
+    # 5. Query Store Settings for Blind Till & Master Security PIN
+    cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='Store_Settings'")
+    store_settings = {}
+    if cursor.fetchone():
+        cursor.execute("SELECT Setting_Key, Setting_Value FROM Store_Settings")
+        store_settings = dict(cursor.fetchall())
+    store_settings.setdefault('enforce_blind_till', 'yes')
+    store_settings.setdefault('master_admin_pin', '9999')
+
+    # 6. Read historical sales & cash drawer balancing grouped by date
     sales_history = []
     cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='Sales'")
     if cursor.fetchone():
@@ -769,6 +773,7 @@ def web_sales_tab(username):
         pos_discounts=pos_discounts,
         pos_tenders=pos_tenders,
         live_pos_summary=live_pos_summary,
+        store_settings=store_settings,
         sales_history=sales_history,
         msg=request.args.get('msg', feedback_msg),
         alert_type=request.args.get('alert_type', alert_type)

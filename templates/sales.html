@@ -1,112 +1,42 @@
 {% extends 'base.html' %}
 {% block content %}
 <style>
-    .alert-warning {
-        color: #664d03 !important;
-        background-color: #fff3cd !important;
-        border: 1px solid #ffecb5 !important;
-    }
-    .alert-warning small, .alert-warning span {
-        color: #664d03 !important;
-    }
-    .alert-success {
-        color: #0f5132 !important;
-        background-color: #d1e7dd !important;
-    }
-    .alert-danger {
-        color: #842029 !important;
-        background-color: #f8d7da !important;
-    }
-    .high-contrast-subtext {
-        color: #cbd5e1 !important;
-        font-weight: 500;
-    }
+    .alert-warning { color: #664d03 !important; background-color: #fff3cd !important; border: 1px solid #ffecb5 !important; }
+    .alert-warning small, .alert-warning span { color: #664d03 !important; }
+    .alert-success { color: #0f5132 !important; background-color: #d1e7dd !important; }
+    .alert-danger { color: #842029 !important; background-color: #f8d7da !important; }
+    .high-contrast-subtext { color: #cbd5e1 !important; font-weight: 500; }
     .ledger-accordion-btn::after {
         background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='%23ffffff'%3e%3cpath fill-rule='evenodd' d='M1.646 4.646a.5.5 0 0 1 .708 0L8 10.293l5.646-5.647a.5.5 0 0 1 .708.708l-6 6a.5.5 0 0 1-.708 0l-6-6a.5.5 0 0 1 0-.708z'/%3e%3c/svg%3e") !important;
     }
-    .neon-mint-green {
-        color: #2dfc8a !important;
-        text-shadow: 0 0 2px rgba(45, 252, 138, 0.2);
-    }
-    .neon-coral-red {
-        color: #ff5555 !important;
-        text-shadow: 0 0 2px rgba(255, 85, 85, 0.2);
-    }
-    .eod-parent-row {
-        background-color: #1e1e24 !important;
-        transition: background-color 0.15s ease;
-    }
-    .eod-parent-row:hover {
-        background-color: #262630 !important;
-    }
-    .eod-variant-row {
-        background-color: #18181c !important;
-        transition: background-color 0.15s ease;
-    }
-    .eod-variant-row:hover {
-        background-color: #22222a !important;
-    }
-    .variant-indent-tree {
-        color: #94a3b8;
-        font-family: monospace;
-        margin-right: 6px;
-        font-weight: bold;
-    }
+    .neon-mint-green { color: #2dfc8a !important; text-shadow: 0 0 2px rgba(45, 252, 138, 0.2); }
+    .neon-coral-red { color: #ff5555 !important; text-shadow: 0 0 2px rgba(255, 85, 85, 0.2); }
+    .eod-parent-row { background-color: #1e1e24 !important; transition: background-color 0.15s ease; }
+    .eod-parent-row:hover { background-color: #262630 !important; }
+    .eod-variant-row { background-color: #18181c !important; transition: background-color 0.15s ease; }
+    .eod-variant-row:hover { background-color: #22222a !important; }
+    .variant-indent-tree { color: #94a3b8; font-family: monospace; margin-right: 6px; font-weight: bold; }
 
-    .badge-statutory {
-        background: #1e3a8a33;
-        color: #60a5fa;
-        border: 1px solid #3b82f644;
-    }
-    .badge-promo {
-        background: #064e3b33;
-        color: #34d399;
-        border: 1px solid #10b98144;
-    }
-    .badge-staff {
-        background: #581c8733;
-        color: #c084fc;
-        border: 1px solid #a855f744;
-    }
-    .badge-comp {
-        background: #88133733;
-        color: #fb7185;
-        border: 1px solid #f43f5e44;
-    }
+    .badge-statutory { background: #1e3a8a33; color: #60a5fa; border: 1px solid #3b82f644; }
+    .badge-promo { background: #064e3b33; color: #34d399; border: 1px solid #10b98144; }
+    .badge-staff { background: #581c8733; color: #c084fc; border: 1px solid #a855f744; }
+    .badge-comp { background: #88133733; color: #fb7185; border: 1px solid #f43f5e44; }
 
-    /* High-Contrast Tender & Settlement Hub Styles */
-    .tender-hub-card {
-        background: #1e1e24;
-        border: 1px solid #2d2d38;
-        border-radius: 8px;
-    }
+    /* High-Contrast Tender & Settlement Hub */
+    .tender-hub-card { background: #1e1e24; border: 1px solid #2d2d38; border-radius: 8px; }
     .tender-hub-card label {
-        color: #f1f5f9 !important;
-        font-weight: 700 !important;
-        font-size: 11px !important;
-        letter-spacing: 0.3px;
-        margin-bottom: 3px;
-        display: block;
+        color: #f1f5f9 !important; font-weight: 700 !important; font-size: 11px !important; letter-spacing: 0.3px; margin-bottom: 3px; display: block;
     }
-    .tender-hub-card .form-control {
-        background-color: #15151c !important;
-        color: #ffffff !important;
-        border: 1px solid #3d3d4e !important;
-    }
-    .tender-hub-card .form-control:focus {
-        border-color: #3b82f6 !important;
-        box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.25) !important;
-    }
-    .tender-channel-header {
-        font-size: 11.5px;
-        font-weight: 800;
-        text-transform: uppercase;
-        letter-spacing: 0.5px;
-    }
+    .tender-hub-card .form-control { background-color: #15151c !important; color: #ffffff !important; border: 1px solid #3d3d4e !important; }
+    .tender-hub-card .form-control:focus { border-color: #3b82f6 !important; box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.25) !important; }
+    .tender-channel-header { font-size: 11.5px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.5px; }
 </style>
 
 <div class="d-flex justify-content-between align-items-center mb-3">
-    <h3 class="m-0 text-white" style="font-weight: bold;">End-of-Day (EOD) Sales Entry</h3>
+    <div>
+        <h3 class="m-0 text-white" style="font-weight: bold;">End-of-Day (EOD) Sales & Shift Closeout</h3>
+        <small class="text-secondary">Live counter integration, automated inventory protection, and blind cash drawer governance.</small>
+    </div>
     <span class="badge bg-primary p-2 font-monospace" style="font-size: 13px;">Back-of-House Ledger</span>
 </div>
 
@@ -116,11 +46,12 @@
 </div>
 {% endif %}
 
+<!-- FILTER & SEARCH BAR WITH STRICT BROWSER AUTOFILL DEFENSE -->
 <div class="content-card mb-3 p-3" style="background-color: #2b2b2b;">
     <div class="row gx-2 gy-2 align-items-center">
         <div class="col-md-3">
             <label class="text-light me-1 mb-1 small d-block">Live Search:</label>
-            <input type="text" id="liveSearchInput" class="form-control bg-dark text-white border-secondary" placeholder="ID or Product Name" autocomplete="off">
+            <input type="text" id="liveSearchInput" name="filter_query_no_autofill" class="form-control bg-dark text-white border-secondary" placeholder="ID or Product Name" autocomplete="new-password" data-lpignore="true" data-form-type="other">
         </div>
         <div class="col-md-3">
             <label class="text-light me-1 mb-1 small d-block">Filter Category:</label>
@@ -152,11 +83,12 @@
 
 <div class="row g-3">
     
+    <!-- LEFT: CLOSING WORKSHEET WITH BLIND TILL & LIVE POS AUTO-POPULATION -->
     <div class="col-md-6">
         <div class="card border-secondary bg-dark text-white shadow-sm">
             <div class="card-header bg-secondary text-white fw-bold d-flex justify-content-between align-items-center">
                 <span>Closing Sales Entry Worksheet</span>
-                <small class="text-white-50">Match counts to your physical POS report</small>
+                <small class="text-white-50">Auto-populated from Live Counter POS</small>
             </div>
             <div class="card-body p-0">
                 <form method="post" id="eodSalesMasterForm">
@@ -174,12 +106,12 @@
                         </div>
                     </div>
 
-                    <!-- LIVE COUNTER POS SUMMARY CALLOUT (WHEN SALES OCCURRED TODAY) -->
+                    <!-- LIVE COUNTER POS SUMMARY CALLOUT -->
                     {% if live_pos_summary.total_items > 0 %}
                     <div class="p-2 px-3 border-bottom border-secondary d-flex justify-content-between align-items-center" style="background: #101c18; font-size: 11.5px;">
                         <div>
                             <span class="text-success fw-bold">⚡ Live POS Auto-Count Active:</span>
-                            <span class="text-white ms-1">{{ live_pos_summary.total_items|int }} pcs sold today</span>
+                            <span class="text-white ms-1">{{ live_pos_summary.total_items|int }} pcs recorded today</span>
                             <span class="text-white-50 ms-1">(Net: ₱{{ "%.2f"|format(live_pos_summary.net) }})</span>
                         </div>
                         <span class="badge bg-dark border border-success text-success font-monospace" style="font-size: 9.5px;">
@@ -206,7 +138,6 @@
                                     {% set has_multiple_variants = (variants|length > 1) or (variants|length == 1 and variants[0].Variant_Name != 'Regular') %}
 
                                     {% if has_multiple_variants %}
-                                        <!-- Calculate parent total from Live POS sales -->
                                         {% set parent_pos_total = namespace(val=0) %}
                                         {% for v in variants %}
                                             {% set parent_pos_total.val = parent_pos_total.val + pos_prod_qty.get(v.Product_ID, 0.0) %}
@@ -248,10 +179,9 @@
                                             <td><span class="badge bg-secondary" style="font-size: 11px;">{{ prod.Category or 'General' }}</span></td>
                                             <td class="text-light font-monospace">₱{{ "%.2f"|format(prod.Selling_Price) }}</td>
                                             
-                                            <!-- UNEDITABLE LIVE POS AUTO-COUNT -->
                                             <td class="text-center">
                                                 {% if p_pos_sold > 0 %}
-                                                    <span class="badge bg-success font-monospace px-2 py-1" style="font-size: 12.5px;" title="Sold on Live POS (Inventory already deducted)">
+                                                    <span class="badge bg-success font-monospace px-2 py-1" style="font-size: 12px;" title="Sold on Live POS (Inventory already depleted)">
                                                         {{ p_pos_sold|int if p_pos_sold % 1 == 0 else p_pos_sold }}
                                                     </span>
                                                 {% else %}
@@ -259,7 +189,6 @@
                                                 {% endif %}
                                             </td>
 
-                                            <!-- EDITABLE MANUAL / OFFLINE INPUT -->
                                             <td class="text-end pe-3">
                                                 <input type="number" 
                                                        name="quantity[]" 
@@ -294,10 +223,9 @@
                                             <td><span class="badge bg-secondary" style="font-size: 11px;">{{ prod.Category or 'General' }}</span></td>
                                             <td class="text-light font-monospace">₱{{ "%.2f"|format(prod.Selling_Price) }}</td>
                                             
-                                            <!-- UNEDITABLE LIVE POS AUTO-COUNT -->
                                             <td class="text-center">
                                                 {% if p_pos_sold > 0 %}
-                                                    <span class="badge bg-success font-monospace px-2 py-1" style="font-size: 12.5px;" title="Sold on Live POS (Inventory already deducted)">
+                                                    <span class="badge bg-success font-monospace px-2 py-1" style="font-size: 12px;" title="Sold on Live POS (Inventory already depleted)">
                                                         {{ p_pos_sold|int if p_pos_sold % 1 == 0 else p_pos_sold }}
                                                     </span>
                                                 {% else %}
@@ -305,7 +233,6 @@
                                                 {% endif %}
                                             </td>
 
-                                            <!-- EDITABLE MANUAL / OFFLINE INPUT -->
                                             <td class="text-end pe-3">
                                                 <input type="number" 
                                                        name="quantity[]" 
@@ -356,7 +283,6 @@
                                         </td>
                                         <td class="text-light font-monospace">₱{{ "%.2f"|format(mod.Price) }}</td>
                                         
-                                        <!-- UNEDITABLE LIVE POS AUTO-COUNT -->
                                         <td class="text-center">
                                             {% if m_pos_sold > 0 %}
                                                 <span class="badge bg-success font-monospace px-2 py-1" style="font-size: 11.5px;">
@@ -390,7 +316,7 @@
                         </div>
                     </div>
 
-                    <!-- EOD SHIFT DISCOUNTS (WITH LIVE POS DISCOUNTS DISPLAY) -->
+                    <!-- EOD SHIFT DISCOUNTS -->
                     <div class="p-2 bg-dark border-top border-secondary">
                         <div class="d-flex justify-content-between align-items-center mb-1 px-2">
                             <span class="fw-bold text-warning" style="font-size: 12px; letter-spacing: 0.5px;">EOD DISCOUNTS & ALLOWANCES</span>
@@ -458,25 +384,34 @@
                         </div>
                     </div>
 
-                    <!-- MULTI-CHANNEL TENDER & AGGREGATOR SETTLEMENT HUB (PRE-FILLED FROM POS) -->
+                    <!-- MULTI-CHANNEL TENDER & AGGREGATOR SETTLEMENT HUB -->
                     <div class="p-3 bg-dark border-top border-secondary">
                         <div class="d-flex justify-content-between align-items-center mb-2 px-1">
                             <span class="fw-bold text-success" style="font-size: 12.5px; letter-spacing: 0.5px;">MULTI-CHANNEL TENDER & AGGREGATOR SETTLEMENT</span>
-                            <small class="text-muted" style="font-size: 10px;">Pre-populated from today's Live Counter register orders</small>
+                            <div class="d-flex align-items-center gap-2">
+                                <button type="button" class="btn btn-sm btn-outline-warning py-0 px-2 fw-bold" style="font-size: 10px;" onclick="openMasterPinAuditModal()">
+                                    Audit View (Master PIN)
+                                </button>
+                            </div>
                         </div>
 
-                        <!-- SECTION 1: IN-STORE PHYSICAL CASH TILL BALANCING -->
+                        <!-- SECTION 1: IN-STORE PHYSICAL CASH TILL BALANCING WITH ANTI-THEFT BLIND ENFORCEMENT -->
                         <div class="p-3 mb-3 tender-hub-card">
                             <div class="d-flex justify-content-between align-items-center mb-2 pb-1 border-bottom border-secondary">
                                 <div>
                                     <span class="tender-channel-header text-info">1. In-Store Cash Till Balancing</span>
-                                    {% if pos_tenders.cash > 0 %}
-                                        <span class="badge bg-dark border border-info text-info font-monospace ms-2" style="font-size: 9.5px;">
-                                            Live POS Cash: ₱{{ "%.2f"|format(pos_tenders.cash) }}
+                                    {% set is_blind = (store_settings.get('enforce_blind_till', 'yes') == 'yes') %}
+                                    {% if is_blind %}
+                                        <span id="blindTillIndicatorBadge" class="badge bg-dark border border-warning text-warning font-monospace ms-2" style="font-size: 9.5px;">
+                                            Blind Till Protected
                                         </span>
                                     {% endif %}
                                 </div>
-                                <a href="javascript:void(0)" onclick="copyNetSalesToCashSales()" class="text-info text-decoration-none fw-bold" style="font-size: 11px;">Match Net Sales &rarr;</a>
+                                <div class="d-flex gap-2 align-items-center">
+                                    <button type="button" class="btn btn-sm btn-outline-success py-0 px-2 fw-bold" style="font-size: 10.5px;" onclick="openDenominationModal()">
+                                        Cash Denomination Breakdown
+                                    </button>
+                                </div>
                             </div>
 
                             <div class="row g-2 mb-2">
@@ -487,18 +422,27 @@
                                         <input type="number" step="0.01" min="0" name="starting_float" id="startingFloatInput" value="0.00" class="form-control font-monospace fw-bold" oninput="recalculateRunningTotals()" onfocus="if(this.value=='0.00' || this.value=='0') this.value='';" onblur="if(this.value=='') this.value='0.00';">
                                     </div>
                                 </div>
+
                                 <div class="col-md-4">
-                                    <label>In-Store Cash Sales (Z-Tape / POS):</label>
+                                    <label>In-Store Cash Sales (POS Z-Tape):</label>
                                     <div class="input-group">
                                         <span class="input-group-text bg-secondary border-0 text-white font-monospace py-0 px-2">₱</span>
-                                        <input type="number" step="0.01" min="0" name="cash_sales" id="cashSalesInput" value="{{ '%.2f'|format(pos_tenders.cash) }}" class="form-control font-monospace fw-bold text-success" oninput="recalculateRunningTotals()" onfocus="if(this.value=='0.00' || this.value=='0') this.value='';" onblur="if(this.value=='') this.value='0.00';">
+                                        <!-- BLIND TILL MASKED INPUT -->
+                                        <input type="text" name="cash_sales" id="cashSalesInput" 
+                                               value="{{ '%.2f'|format(pos_tenders.cash) }}" 
+                                               data-real-val="{{ '%.2f'|format(pos_tenders.cash) }}"
+                                               class="form-control font-monospace fw-bold text-success" 
+                                               style="{{ 'color: transparent !important; text-shadow: 0 0 8px #34d399;' if is_blind else '' }}"
+                                               readonly
+                                               oninput="recalculateRunningTotals()">
                                     </div>
                                 </div>
+
                                 <div class="col-md-4">
-                                    <label>Actual Physical Cash in Till:</label>
+                                    <label>Actual Counted Cash in Till:</label>
                                     <div class="input-group">
                                         <span class="input-group-text bg-secondary border-0 text-white font-monospace py-0 px-2">₱</span>
-                                        <input type="number" step="0.01" min="0" name="actual_counted_cash" id="actualCashInput" value="0.00" class="form-control font-monospace fw-bold text-warning" oninput="recalculateRunningTotals()" onfocus="if(this.value=='0.00' || this.value=='0') this.value='';" onblur="if(this.value=='') this.value='0.00';">
+                                        <input type="number" step="0.01" min="0" name="actual_counted_cash" id="actualCashInput" value="0.00" class="form-control font-monospace fw-bold text-warning" oninput="recalculateRunningTotals()" onfocus="if(this.value=='0.00' || this.value=='0') this.value='';" onblur="if(this.value=='') this.value='0.00';" placeholder="Counted drawer cash">
                                     </div>
                                 </div>
                             </div>
@@ -512,8 +456,8 @@
                                     </div>
                                 </div>
                                 <div class="col-md-4">
-                                    <label>Paid-Out Expense Memo:</label>
-                                    <input type="text" name="cash_paid_outs_reason" id="cashPaidOutsReasonInput" class="form-control" placeholder="e.g. Ice, water, courier..." autocomplete="off">
+                                    <label>Mandatory Paid-Out Voucher / OR #:</label>
+                                    <input type="text" name="cash_paid_outs_reason" id="cashPaidOutsReasonInput" class="form-control" placeholder="Required if paid-out entered (e.g. Ice OR #1234)" autocomplete="off">
                                 </div>
                                 <div class="col-md-4">
                                     <label>Discrepancy Explanation Notes:</label>
@@ -521,14 +465,19 @@
                                 </div>
                             </div>
 
+                            <!-- BLIND TILL SHIELDED LABELS -->
                             <div class="p-2 rounded d-flex justify-content-between align-items-center flex-wrap" style="background: #111118; font-size: 12px;">
                                 <div>
                                     <span class="text-light">Expected Cash in Till:</span>
-                                    <span class="font-monospace text-white fw-bold ms-1" id="liveExpectedCashLabel">₱0.00</span>
+                                    <span class="font-monospace text-white fw-bold ms-1" id="liveExpectedCashLabel">
+                                        {% if is_blind %}•••••• (Blind Till Protected){% else %}₱0.00{% endif %}
+                                    </span>
                                 </div>
                                 <div>
                                     <span class="text-light">Till Variance:</span>
-                                    <span class="badge bg-secondary font-monospace ms-1" id="liveOverShortBadge">Balanced (₱0.00)</span>
+                                    <span class="badge {% if is_blind %}bg-dark border border-warning text-warning{% else %}bg-secondary{% endif %} font-monospace ms-1" id="liveOverShortBadge">
+                                        {% if is_blind %}Calculated on Shift Close{% else %}Balanced (₱0.00){% endif %}
+                                    </span>
                                 </div>
                             </div>
                         </div>
@@ -563,7 +512,7 @@
                             </div>
                         </div>
 
-                        <!-- SECTION 3: DELIVERY AGGREGATORS (GRABFOOD & FOODPANDA) -->
+                        <!-- SECTION 3: DELIVERY AGGREGATORS -->
                         <div class="p-3 tender-hub-card">
                             <div class="d-flex justify-content-between align-items-center mb-2 pb-1 border-bottom border-secondary">
                                 <span class="tender-channel-header text-success">3. Third-Party Delivery Portals (Read from Merchant Tablet)</span>
@@ -618,7 +567,7 @@
                         </div>
                     </div>
 
-                    <!-- LIVE RUNNING TOTAL & MULTI-TENDER RECONCILIATION SUMMARY STRIP -->
+                    <!-- LIVE RUNNING TOTAL & RECONCILIATION SUMMARY STRIP -->
                     <div class="p-3 border-top border-secondary d-flex justify-content-between align-items-center flex-wrap px-4" style="background: #111116;">
                         <div>
                             <small class="text-light opacity-75 text-uppercase d-block" style="font-size: 10px;">Gross Orders</small>
@@ -641,7 +590,7 @@
                     <div class="p-3 bg-secondary border-top border-secondary text-end rounded-bottom">
                         <button type="button" class="btn btn-outline-light fw-bold me-2" onclick="resetClosingFormMatrixFields()">Clear Inputs</button>
                         <button type="button" class="btn btn-success fw-bold px-4" onclick="triggerSecurityModalCheck()">
-                            Sync & Deduct Inventory
+                            Sync & Close Shift
                         </button>
                     </div>
                 </form>
@@ -779,6 +728,111 @@
 
 </div>
 
+<!-- PHILIPPINE PESO CASH DENOMINATION BREAKDOWN MODAL -->
+<div class="modal fade" id="denominationModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content bg-dark text-white border border-secondary shadow-lg">
+            <div class="modal-header border-secondary" style="background: #14141c;">
+                <h5 class="modal-title fw-bold text-success">Physical Cash Till Denomination Counter</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body p-4" style="background: #181822;">
+                <p class="text-secondary small mb-3">Count your physical drawer cash by bill denominations and coin values:</p>
+
+                <div class="d-flex flex-column gap-2 font-monospace">
+                    <div class="d-flex align-items-center justify-content-between p-2 rounded" style="background: #121218; border: 1px solid #282836;">
+                        <span class="fw-bold text-white" style="width: 100px;">₱1,000.00</span>
+                        <div class="d-flex align-items-center gap-2">
+                            <span class="text-muted small">x</span>
+                            <input type="number" min="0" id="d_1000" class="form-control form-control-sm bg-dark text-white text-center fw-bold border-secondary" style="width: 80px;" value="0" oninput="calculateDenominationTotal()">
+                            <span class="text-info fw-bold text-end" style="width: 110px;" id="sub_1000">₱0.00</span>
+                        </div>
+                    </div>
+                    <div class="d-flex align-items-center justify-content-between p-2 rounded" style="background: #121218; border: 1px solid #282836;">
+                        <span class="fw-bold text-white" style="width: 100px;">₱500.00</span>
+                        <div class="d-flex align-items-center gap-2">
+                            <span class="text-muted small">x</span>
+                            <input type="number" min="0" id="d_500" class="form-control form-control-sm bg-dark text-white text-center fw-bold border-secondary" style="width: 80px;" value="0" oninput="calculateDenominationTotal()">
+                            <span class="text-info fw-bold text-end" style="width: 110px;" id="sub_500">₱0.00</span>
+                        </div>
+                    </div>
+                    <div class="d-flex align-items-center justify-content-between p-2 rounded" style="background: #121218; border: 1px solid #282836;">
+                        <span class="fw-bold text-white" style="width: 100px;">₱200.00</span>
+                        <div class="d-flex align-items-center gap-2">
+                            <span class="text-muted small">x</span>
+                            <input type="number" min="0" id="d_200" class="form-control form-control-sm bg-dark text-white text-center fw-bold border-secondary" style="width: 80px;" value="0" oninput="calculateDenominationTotal()">
+                            <span class="text-info fw-bold text-end" style="width: 110px;" id="sub_200">₱0.00</span>
+                        </div>
+                    </div>
+                    <div class="d-flex align-items-center justify-content-between p-2 rounded" style="background: #121218; border: 1px solid #282836;">
+                        <span class="fw-bold text-white" style="width: 100px;">₱100.00</span>
+                        <div class="d-flex align-items-center gap-2">
+                            <span class="text-muted small">x</span>
+                            <input type="number" min="0" id="d_100" class="form-control form-control-sm bg-dark text-white text-center fw-bold border-secondary" style="width: 80px;" value="0" oninput="calculateDenominationTotal()">
+                            <span class="text-info fw-bold text-end" style="width: 110px;" id="sub_100">₱0.00</span>
+                        </div>
+                    </div>
+                    <div class="d-flex align-items-center justify-content-between p-2 rounded" style="background: #121218; border: 1px solid #282836;">
+                        <span class="fw-bold text-white" style="width: 100px;">₱50.00</span>
+                        <div class="d-flex align-items-center gap-2">
+                            <span class="text-muted small">x</span>
+                            <input type="number" min="0" id="d_50" class="form-control form-control-sm bg-dark text-white text-center fw-bold border-secondary" style="width: 80px;" value="0" oninput="calculateDenominationTotal()">
+                            <span class="text-info fw-bold text-end" style="width: 110px;" id="sub_50">₱0.00</span>
+                        </div>
+                    </div>
+                    <div class="d-flex align-items-center justify-content-between p-2 rounded" style="background: #121218; border: 1px solid #282836;">
+                        <span class="fw-bold text-white" style="width: 100px;">₱20.00</span>
+                        <div class="d-flex align-items-center gap-2">
+                            <span class="text-muted small">x</span>
+                            <input type="number" min="0" id="d_20" class="form-control form-control-sm bg-dark text-white text-center fw-bold border-secondary" style="width: 80px;" value="0" oninput="calculateDenominationTotal()">
+                            <span class="text-info fw-bold text-end" style="width: 110px;" id="sub_20">₱0.00</span>
+                        </div>
+                    </div>
+                    <div class="d-flex align-items-center justify-content-between p-2 rounded" style="background: #121218; border: 1px solid #282836;">
+                        <span class="fw-bold text-white" style="width: 100px;">Loose Coins</span>
+                        <div class="d-flex align-items-center gap-2">
+                            <span class="text-muted small">₱</span>
+                            <input type="number" step="0.01" min="0" id="d_coins" class="form-control form-control-sm bg-dark text-white text-end fw-bold border-secondary" style="width: 130px;" value="0.00" oninput="calculateDenominationTotal()">
+                        </div>
+                    </div>
+                </div>
+
+                <div class="mt-3 p-3 rounded d-flex justify-content-between align-items-center" style="background: #101c18; border: 1px solid #10b981;">
+                    <span class="fw-bold text-white">TOTAL CASH COUNTED:</span>
+                    <h4 class="m-0 font-monospace text-success fw-bold" id="totalDenominationSum">₱0.00</h4>
+                </div>
+            </div>
+            <div class="modal-footer border-secondary justify-content-between" style="background: #14141c;">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-success fw-bold px-4" onclick="applyDenominationTotalToTill()">
+                    Apply Total to Cash Drawer
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- MASTER SECURITY PIN UNLOCK MODAL -->
+<div class="modal fade" id="masterPinAuditModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered modal-sm">
+        <div class="modal-content bg-dark text-white border border-warning shadow-lg">
+            <div class="modal-header border-warning" style="background: #1a160d;">
+                <h6 class="modal-title fw-bold text-warning">Master Security PIN Required</h6>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body p-3 text-center" style="background: #14141c;">
+                <small class="text-secondary d-block mb-2">Enter Master Security PIN to unmask blind till numbers:</small>
+                <input type="password" id="inputMasterAuditPin" maxlength="6" class="form-control bg-dark text-warning border-warning text-center font-monospace fw-bold fs-4 mb-2" placeholder="••••">
+                <div id="masterPinErrorLabel" class="text-danger small fw-bold mb-2" style="display: none;">Invalid Master PIN entered.</div>
+            </div>
+            <div class="modal-footer border-secondary justify-content-between p-2" style="background: #14141c;">
+                <button type="button" class="btn btn-sm btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-sm btn-warning fw-bold text-dark px-3" onclick="submitMasterPinVerification()">Unlock Figures</button>
+            </div>
+        </div>
+    </div>
+</div>
+
 <!-- SECURITY & CONFIRMATION MODALS -->
 <div class="modal fade" id="confirmEodModal" tabindex="-1" aria-hidden="true">
     <div class="modal-dialog modal-dialog-centered">
@@ -829,7 +883,7 @@
             <div class="modal-body p-4 text-center" style="background-color: #1a1a1a;">
                 <h5 class="fw-bold text-white mb-2">Audit Explanation Notes Required</h5>
                 <p class="text-light mb-0" id="securityModalExplanationMsg" style="font-size: 14px; line-height: 1.5; color: #e0e0e0 !important;">
-                    Audit entry notes are <strong class="text-danger">strictly mandatory</strong> whenever attempting backdated ledger submissions, applying negative quantity balancing updates, or reporting unresolved cash till shortages.
+                    Audit entry notes are <strong class="text-danger">strictly mandatory</strong> whenever attempting backdated ledger submissions.
                 </p>
             </div>
             <div class="modal-footer border-secondary justify-content-center" style="background-color: #1a1a1a;">
@@ -840,7 +894,6 @@
 </div>
 
 <script>
-// LIVE POS AUDIT DATA PASSED FROM BACKEND
 const livePosData = {
     gross: {{ live_pos_summary.gross|default(0.0) }},
     discounts: {{ live_pos_summary.discounts|default(0.0) }},
@@ -849,8 +902,12 @@ const livePosData = {
     posGcash: {{ pos_tenders.gcash|default(0.0) }},
     posMaya: {{ pos_tenders.maya|default(0.0) }},
     posCard: {{ pos_tenders.card|default(0.0) }},
-    totalItems: {{ live_pos_summary.total_items|default(0) }}
+    totalItems: {{ live_pos_summary.total_items|default(0) }},
+    isBlindTill: {{ 'true' if (store_settings.get('enforce_blind_till', 'yes') == 'yes') else 'false' }},
+    masterAdminPin: "{{ store_settings.get('master_admin_pin', '9999') }}"
 };
+
+let isTillUnlocked = !livePosData.isBlindTill;
 
 function changeTargetAccountingDate(newDate) {
     if (newDate) {
@@ -866,6 +923,70 @@ function getLocalTodayString() {
     return `${year}-${month}-${day}`;
 }
 
+// DENOMINATION COUNTER FUNCTIONS
+function openDenominationModal() {
+    calculateDenominationTotal();
+    new bootstrap.Modal(document.getElementById('denominationModal')).show();
+}
+
+function calculateDenominationTotal() {
+    const d1000 = (parseInt(document.getElementById('d_1000').value) || 0) * 1000;
+    const d500 = (parseInt(document.getElementById('d_500').value) || 0) * 500;
+    const d200 = (parseInt(document.getElementById('d_200').value) || 0) * 200;
+    const d100 = (parseInt(document.getElementById('d_100').value) || 0) * 100;
+    const d50 = (parseInt(document.getElementById('d_50').value) || 0) * 50;
+    const d20 = (parseInt(document.getElementById('d_20').value) || 0) * 20;
+    const coins = parseFloat(document.getElementById('d_coins').value) || 0.0;
+
+    document.getElementById('sub_1000').textContent = '₱' + d1000.toLocaleString(undefined, {minimumFractionDigits: 2});
+    document.getElementById('sub_500').textContent = '₱' + d500.toLocaleString(undefined, {minimumFractionDigits: 2});
+    document.getElementById('sub_200').textContent = '₱' + d200.toLocaleString(undefined, {minimumFractionDigits: 2});
+    document.getElementById('sub_100').textContent = '₱' + d100.toLocaleString(undefined, {minimumFractionDigits: 2});
+    document.getElementById('sub_50').textContent = '₱' + d50.toLocaleString(undefined, {minimumFractionDigits: 2});
+    document.getElementById('sub_20').textContent = '₱' + d20.toLocaleString(undefined, {minimumFractionDigits: 2});
+
+    const grandTotal = d1000 + d500 + d200 + d100 + d50 + d20 + coins;
+    document.getElementById('totalDenominationSum').textContent = '₱' + grandTotal.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2});
+    return grandTotal;
+}
+
+function applyDenominationTotalToTill() {
+    const totalCounted = calculateDenominationTotal();
+    document.getElementById('actualCashInput').value = totalCounted.toFixed(2);
+    bootstrap.Modal.getInstance(document.getElementById('denominationModal')).hide();
+    recalculateRunningTotals();
+}
+
+// MASTER PIN AUDIT UNLOCK
+function openMasterPinAuditModal() {
+    document.getElementById('inputMasterAuditPin').value = '';
+    document.getElementById('masterPinErrorLabel').style.display = 'none';
+    new bootstrap.Modal(document.getElementById('masterPinAuditModal')).show();
+}
+
+function submitMasterPinVerification() {
+    const enteredPin = document.getElementById('inputMasterAuditPin').value.trim();
+    if (enteredPin === livePosData.masterAdminPin) {
+        isTillUnlocked = true;
+        
+        const cashInput = document.getElementById('cashSalesInput');
+        cashInput.style.color = '';
+        cashInput.style.textShadow = '';
+        
+        const badge = document.getElementById('blindTillIndicatorBadge');
+        if (badge) {
+            badge.className = "badge bg-dark border border-success text-success font-monospace ms-2";
+            badge.textContent = "Auditor Unlocked";
+        }
+
+        bootstrap.Modal.getInstance(document.getElementById('masterPinAuditModal')).hide();
+        recalculateRunningTotals();
+    } else {
+        const errLabel = document.getElementById('masterPinErrorLabel');
+        errLabel.style.display = 'block';
+    }
+}
+
 function resetClosingFormMatrixFields() {
     const inputs = document.querySelectorAll('.ingredient-qty-input, .modifier-qty-input, .discount-amount-input');
     inputs.forEach(input => {
@@ -879,12 +1000,8 @@ function resetClosingFormMatrixFields() {
     if (auditInput) auditInput.style.border = "1px solid #3d3d3d";
     
     document.getElementById('startingFloatInput').value = '0.00';
-    document.getElementById('cashSalesInput').value = livePosData.posCash.toFixed(2);
     document.getElementById('actualCashInput').value = '0.00';
     document.getElementById('cashPaidOutsInput').value = '0.00';
-    document.getElementById('gcashSalesInput').value = livePosData.posGcash.toFixed(2);
-    document.getElementById('mayaSalesInput').value = livePosData.posMaya.toFixed(2);
-    document.getElementById('cardSalesInput').value = livePosData.posCard.toFixed(2);
     document.getElementById('grabGrossInput').value = '0.00';
     document.getElementById('grabCommInput').value = '0.00';
     document.getElementById('pandaGrossInput').value = '0.00';
@@ -980,29 +1097,16 @@ function recalculateRunningTotals() {
     const expectedCash = startingFloat + cashSales - cashPaidOuts;
     const diff = actualCash - expectedCash;
 
-    document.getElementById('liveExpectedCashLabel').innerText = '₱' + expectedCash.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2});
-    
-    const badge = document.getElementById('liveOverShortBadge');
-    if (actualCash === 0 && cashSales === 0 && startingFloat === 0) {
-        badge.className = "badge bg-secondary font-monospace ms-1";
-        badge.innerText = "No Till Entry (₱0.00)";
-    } else if (Math.abs(diff) < 0.01) {
-        badge.className = "badge bg-success font-monospace ms-1";
-        badge.innerText = "Balanced (₱0.00)";
-    } else if (diff < -0.01) {
-        badge.className = "badge bg-danger font-monospace ms-1";
-        badge.innerText = "Short: -₱" + Math.abs(diff).toFixed(2);
-    } else {
-        badge.className = "badge bg-info text-dark font-monospace ms-1";
-        badge.innerText = "Over: +₱" + diff.toFixed(2);
-    }
+    // Blind Till Shielding Engine
+    const expLabel = document.getElementById('liveExpectedCashLabel');
+    const varBadge = document.getElementById('liveOverShortBadge');
+    const tenderBadge = document.getElementById('liveTenderVarianceBadge');
 
-    // 2. In-Store Digital & Card Tenders
+    // 2. Digital & Delivery Tenders
     const gcash = parseFloat(document.getElementById('gcashSalesInput')?.value || 0) || 0.0;
     const maya = parseFloat(document.getElementById('mayaSalesInput')?.value || 0) || 0.0;
     const card = parseFloat(document.getElementById('cardSalesInput')?.value || 0) || 0.0;
 
-    // 3. Delivery Aggregators Calculations
     const grabGross = parseFloat(document.getElementById('grabGrossInput')?.value || 0) || 0.0;
     const grabComm = parseFloat(document.getElementById('grabCommInput')?.value || 0) || 0.0;
     const grabNet = Math.max(0.0, grabGross - grabComm);
@@ -1013,20 +1117,45 @@ function recalculateRunningTotals() {
     const pandaNet = Math.max(0.0, pandaGross - pandaComm);
     document.getElementById('livePandaNetLabel').innerText = '₱' + pandaNet.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2});
 
-    // 4. Multi-Tender Reconciliation vs Net Sales
     const totalSettledTenders = cashSales + gcash + maya + card + grabNet + pandaNet;
     const tenderDiff = totalSettledTenders - netSales;
 
-    const tenderBadge = document.getElementById('liveTenderVarianceBadge');
-    if (Math.abs(tenderDiff) < 0.01) {
-        tenderBadge.className = "badge bg-success font-monospace";
-        tenderBadge.innerText = "Tenders Balanced (₱0.00)";
-    } else if (tenderDiff < -0.01) {
-        tenderBadge.className = "badge bg-danger font-monospace";
-        tenderBadge.innerText = "Unsettled Net: -₱" + Math.abs(tenderDiff).toFixed(2);
+    if (!isTillUnlocked) {
+        // MASK VALUES IN BLIND TILL MODE
+        expLabel.textContent = '•••••• (Blind Till Protected)';
+        varBadge.className = "badge bg-dark border border-warning text-warning font-monospace ms-1";
+        varBadge.textContent = "Calculated on Shift Close";
+
+        tenderBadge.className = "badge bg-dark border border-warning text-warning font-monospace";
+        tenderBadge.textContent = "Reconciliation: Protected on Shift Close";
     } else {
-        tenderBadge.className = "badge bg-info text-dark font-monospace";
-        tenderBadge.innerText = "Tender Surplus: +₱" + tenderDiff.toFixed(2);
+        // UNMASKED AUDIT MODE
+        expLabel.innerText = '₱' + expectedCash.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2});
+        
+        if (actualCash === 0 && cashSales === 0 && startingFloat === 0) {
+            varBadge.className = "badge bg-secondary font-monospace ms-1";
+            varBadge.innerText = "No Till Entry (₱0.00)";
+        } else if (Math.abs(diff) < 0.01) {
+            varBadge.className = "badge bg-success font-monospace ms-1";
+            varBadge.innerText = "Balanced (₱0.00)";
+        } else if (diff < -0.01) {
+            varBadge.className = "badge bg-danger font-monospace ms-1";
+            varBadge.innerText = "Short: -₱" + Math.abs(diff).toFixed(2);
+        } else {
+            varBadge.className = "badge bg-info text-dark font-monospace ms-1";
+            varBadge.innerText = "Over: +₱" + diff.toFixed(2);
+        }
+
+        if (Math.abs(tenderDiff) < 0.01) {
+            tenderBadge.className = "badge bg-success font-monospace";
+            tenderBadge.innerText = "Tenders Balanced (₱0.00)";
+        } else if (tenderDiff < -0.01) {
+            tenderBadge.className = "badge bg-danger font-monospace";
+            tenderBadge.innerText = "Unsettled Net: -₱" + Math.abs(tenderDiff).toFixed(2);
+        } else {
+            tenderBadge.className = "badge bg-info text-dark font-monospace";
+            tenderBadge.innerText = "Tender Surplus: +₱" + tenderDiff.toFixed(2);
+        }
     }
 
     // Modal Labels
@@ -1040,15 +1169,20 @@ function recalculateRunningTotals() {
     }
     const statusLabel = document.getElementById('modalConfirmStatusLabel');
     if (statusLabel) {
-        if (Math.abs(tenderDiff) < 0.01) {
-            statusLabel.className = "text-success fs-6";
-            statusLabel.innerText = "Balanced";
-        } else if (tenderDiff < -0.01) {
-            statusLabel.className = "text-danger fs-6";
-            statusLabel.innerText = "Unsettled -₱" + Math.abs(tenderDiff).toFixed(2);
+        if (!isTillUnlocked) {
+            statusLabel.className = "text-warning fs-6";
+            statusLabel.innerText = "Blind Protected";
         } else {
-            statusLabel.className = "text-info fs-6";
-            statusLabel.innerText = "Surplus +₱" + tenderDiff.toFixed(2);
+            if (Math.abs(tenderDiff) < 0.01) {
+                statusLabel.className = "text-success fs-6";
+                statusLabel.innerText = "Balanced";
+            } else if (tenderDiff < -0.01) {
+                statusLabel.className = "text-danger fs-6";
+                statusLabel.innerText = "Unsettled -₱" + Math.abs(tenderDiff).toFixed(2);
+            } else {
+                statusLabel.className = "text-info fs-6";
+                statusLabel.innerText = "Surplus +₱" + tenderDiff.toFixed(2);
+            }
         }
     }
 }
@@ -1057,48 +1191,51 @@ function triggerSecurityModalCheck() {
     const datePicker = document.getElementById('eodClosingDatePicker');
     const auditInput = document.getElementById('eodAuditNoteInput');
     const drawerNotesInput = document.getElementById('drawerNotesInput');
-    const qtyInputs = document.querySelectorAll('.ingredient-qty-input');
-    const modInputs = document.querySelectorAll('.modifier-qty-input');
+    const paidOutsReasonInput = document.getElementById('cashPaidOutsReasonInput');
+    const paidOutsInput = document.getElementById('cashPaidOutsInput');
     
     const todayStr = getLocalTodayString();
     const isBackdated = (datePicker.value !== todayStr);
     
-    let hasNegativeValue = false;
-    qtyInputs.forEach(input => {
-        const val = parseFloat(input.value) || 0;
-        if (val < 0) hasNegativeValue = true;
-    });
-    modInputs.forEach(input => {
-        const val = parseFloat(input.value) || 0;
-        if (val < 0) hasNegativeValue = true;
-    });
-
-    const startingFloat = parseFloat(document.getElementById('startingFloatInput')?.value || 0) || 0.0;
-    const cashSales = parseFloat(document.getElementById('cashSalesInput')?.value || 0) || 0.0;
-    const cashPaidOuts = parseFloat(document.getElementById('cashPaidOutsInput')?.value || 0) || 0.0;
-    const actualCash = parseFloat(document.getElementById('actualCashInput')?.value || 0) || 0.0;
-    const expectedCash = startingFloat + cashSales - cashPaidOuts;
-    const hasShortage = (actualCash > 0 || cashSales > 0) && (actualCash - expectedCash < -0.01);
-
-    if (hasShortage && drawerNotesInput && drawerNotesInput.value.trim() === "") {
-        drawerNotesInput.style.border = "2px solid #ff4d4d";
-        drawerNotesInput.focus();
-        
-        document.getElementById('securityModalExplanationMsg').innerHTML = `
-            Cash drawer has an unresolved shortage of <strong class="text-danger font-monospace">₱${Math.abs(actualCash - expectedCash).toFixed(2)}</strong>.
-            Please provide an audit explanation in the <strong class="text-warning">Discrepancy Notes</strong> field before synchronizing.
-        `;
-        const warningModal = new bootstrap.Modal(document.getElementById('securityWarningModal'));
-        warningModal.show();
+    // 1. Mandatory Paid-Out Voucher Check
+    const cashPaidOuts = parseFloat(paidOutsInput?.value || 0) || 0.0;
+    if (cashPaidOuts > 0 && paidOutsReasonInput.value.trim().length < 3) {
+        paidOutsReasonInput.style.border = "2px solid #ff4d4d";
+        paidOutsReasonInput.focus();
+        alert("Paid-Out Policy Block: A valid Voucher # or Official Receipt description is strictly required for all cash paid-outs.");
         return false;
     }
+    paidOutsReasonInput.style.border = "1px solid #3d3d4e";
 
-    if ((isBackdated || hasNegativeValue) && auditInput.value.trim() === "") {
+    // 2. Anti-Theft Blind Till Handling:
+    // When Blind Till is active, DO NOT pop up or reveal shortages to cashiers!
+    if (isTillUnlocked) {
+        const startingFloat = parseFloat(document.getElementById('startingFloatInput')?.value || 0) || 0.0;
+        const cashSales = parseFloat(document.getElementById('cashSalesInput')?.value || 0) || 0.0;
+        const actualCash = parseFloat(document.getElementById('actualCashInput')?.value || 0) || 0.0;
+        const expectedCash = startingFloat + cashSales - cashPaidOuts;
+        const hasShortage = (actualCash > 0 || cashSales > 0) && (actualCash - expectedCash < -0.01);
+
+        if (hasShortage && drawerNotesInput && drawerNotesInput.value.trim() === "") {
+            drawerNotesInput.style.border = "2px solid #ff4d4d";
+            drawerNotesInput.focus();
+            
+            document.getElementById('securityModalExplanationMsg').innerHTML = `
+                Cash drawer has an unresolved shortage of <strong class="text-danger font-monospace">₱${Math.abs(actualCash - expectedCash).toFixed(2)}</strong>.
+                Please provide an explanation in the <strong class="text-warning">Discrepancy Notes</strong> field before synchronizing.
+            `;
+            const warningModal = new bootstrap.Modal(document.getElementById('securityWarningModal'));
+            warningModal.show();
+            return false;
+        }
+    }
+
+    if (isBackdated && auditInput.value.trim() === "") {
         auditInput.style.border = "2px solid #ff4d4d";
         auditInput.focus();
         
         document.getElementById('securityModalExplanationMsg').innerHTML = `
-            Audit entry notes are <strong class="text-danger">strictly mandatory</strong> whenever attempting backdated ledger submissions or applying negative quantity balancing updates.
+            Audit entry notes are <strong class="text-danger">strictly mandatory</strong> whenever attempting backdated ledger submissions.
         `;
         const warningModal = new bootstrap.Modal(document.getElementById('securityWarningModal'));
         warningModal.show();
@@ -1112,8 +1249,16 @@ function triggerSecurityModalCheck() {
     confirmModal.show();
 }
 
-// LIVE FILTER AND SORT ENGINE
+// LIVE FILTER AND SORT ENGINE WITH AUTO-WIPE OF BROWSER AUTOFILL USERNAME
 document.addEventListener("DOMContentLoaded", function() {
+    const searchInput = document.getElementById('liveSearchInput');
+    const tenantUsername = "{{ username|lower }}";
+
+    // Immediate cleanup of browser-injected tenant username
+    if (searchInput && searchInput.value.toLowerCase().trim() === tenantUsername) {
+        searchInput.value = '';
+    }
+
     const auditInput = document.getElementById('eodAuditNoteInput');
     if (auditInput) {
         auditInput.addEventListener('input', function() {
@@ -1133,7 +1278,6 @@ document.addEventListener("DOMContentLoaded", function() {
         });
     }
 
-    const searchInput = document.getElementById('liveSearchInput');
     const categorySelect = document.getElementById('liveCategorySelect');
     const sortSelect = document.getElementById('liveSortSelect');
     const orderSelect = document.getElementById('liveOrderSelect');
@@ -1319,6 +1463,9 @@ document.addEventListener("DOMContentLoaded", function() {
     categorySelect.addEventListener('change', applyFiltersAndSort);
     sortSelect.addEventListener('change', applyFiltersAndSort);
     orderSelect.addEventListener('change', applyFiltersAndSort);
+
+    // Initial filter execution to ensure products show up immediately
+    applyFiltersAndSort();
     recalculateRunningTotals();
 });
 

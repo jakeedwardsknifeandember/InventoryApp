@@ -1,4 +1,4 @@
-# routes/settings.py - Enterprise Settings Engine with Multi-Encoding CSV Sync, Token-Sorted Key Matching, Integrity Guard & Thermal Receipt Designer
+# routes/settings.py - Enterprise Settings Engine with Sub-Tab Routing, Multi-Encoding CSV Sync, Token-Sorted Key Matching, Integrity Guard & Master Security PIN
 from flask import Blueprint, request, redirect, session, render_template, send_file
 from modules.database import InventoryDB
 import sqlite3
@@ -83,7 +83,7 @@ def build_entity_resolver(id_name_pairs):
     return valid_ids, resolve
 
 def ensure_store_settings_exist(client_db_path, username="STORE"):
-    """Ensures the Store_Settings key-value table exists with defaults including thermal printer configs."""
+    """Ensures the Store_Settings key-value table exists with complete anti-theft, master PIN, and thermal printer defaults."""
     conn = sqlite3.connect(client_db_path)
     cursor = conn.cursor()
     cursor.execute("""
@@ -94,6 +94,8 @@ def ensure_store_settings_exist(client_db_path, username="STORE"):
     """)
     default_settings = {
         'enforce_blind_count': 'yes',
+        'enforce_blind_till': 'yes',
+        'master_admin_pin': '9999',
         'variance_alert_pct': '2.0',
         'variance_alert_value': '100.0',
         'receipt_header_name': username.upper(),
@@ -223,12 +225,14 @@ def web_settings_tab(username):
     
     feedback_msg = None
     alert_type = "success"
+    target_tab = "receipt"
 
     if request.method == 'POST':
         action = request.form.get('action_type')
         
-        # 1. CHANGE MASTER PASSWORD
+        # 1. CHANGE MASTER PASSWORD (GOVERNANCE TAB)
         if action == 'change_password':
+            target_tab = "governance"
             old_p = request.form.get('old_password')
             new_p = request.form.get('new_password')
             conn = sqlite3.connect(USER_DB_PATH)
@@ -246,8 +250,9 @@ def web_settings_tab(username):
                 alert_type = "danger"
             conn.close()
 
-        # 2. ADD STAFF SUB-ACCOUNT WITH IDENTITY & 4-DIGIT PIN
+        # 2. ADD STAFF SUB-ACCOUNT (TEAM TAB)
         elif action == 'add_staff':
+            target_tab = "team"
             full_name = request.form.get('full_name', '').strip()
             display_name = request.form.get('display_name', '').strip()
             staff_user = request.form.get('staff_username', '').lower().strip()
@@ -286,8 +291,9 @@ def web_settings_tab(username):
                     alert_type = "danger"
                 conn.close()
 
-        # 3. RESET STAFF PASSWORD & QUICK PIN
+        # 3. RESET STAFF PASSWORD & PIN (TEAM TAB)
         elif action == 'reset_staff_password':
+            target_tab = "team"
             staff_id = request.form.get('staff_id')
             new_pass = request.form.get('new_password', '').strip()
             new_pin = request.form.get('new_pin', '').strip()
@@ -310,8 +316,9 @@ def web_settings_tab(username):
                     feedback_msg = "Security Override: Staff access token passkey and PIN updated successfully."
                     alert_type = "success"
 
-        # 4. DELETE STAFF ACCOUNT
+        # 4. DELETE STAFF ACCOUNT (TEAM TAB)
         elif action == 'delete_staff':
+            target_tab = "team"
             staff_id = request.form.get('staff_id')
             if staff_id:
                 conn = sqlite3.connect(client_db_path)
@@ -322,7 +329,7 @@ def web_settings_tab(username):
                 feedback_msg = "Access terminated: Crew token stripped from active registers cleanly."
                 alert_type = "warning"
 
-        # 5. BACKUP DATABASE FILE
+        # 5. BACKUP DATABASE FILE (DATA TAB)
         elif action == 'backup_database':
             try:
                 date_stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -334,9 +341,11 @@ def web_settings_tab(username):
             except Exception as e:
                 feedback_msg = f"Error executing file packaging: {str(e)}"
                 alert_type = "danger"
+                target_tab = "data"
 
-        # 6. RESTORE DATABASE FILE
+        # 6. RESTORE DATABASE FILE (DATA TAB)
         elif action == 'restore_database':
+            target_tab = "data"
             uploaded_file = request.files.get('backup_file')
             if not uploaded_file or uploaded_file.filename == '':
                 feedback_msg = "Error: No database backup archive file selected for transmission."
@@ -358,8 +367,9 @@ def web_settings_tab(username):
                     feedback_msg = f"Restoration Fault during file overwrite sequencing: {str(e)}"
                     alert_type = "danger"
 
-        # 7. BULK CSV IMPORT
+        # 7. BULK CSV IMPORT (DATA TAB)
         elif action == 'bulk_import':
+            target_tab = "data"
             target_table = request.form.get('import_target')
             uploaded_file = request.files.get('csv_file')
             
@@ -728,7 +738,7 @@ def web_settings_tab(username):
                     feedback_msg = f"CSV Format Error: {str(e)}"
                     alert_type = "danger"
 
-        # 8. DOWNLOAD CSV TEMPLATES
+        # 8. DOWNLOAD CSV TEMPLATES (DATA TAB)
         elif action == 'download_template':
             template_type = request.form.get('template_type')
             
@@ -756,8 +766,9 @@ def web_settings_tab(username):
             except Exception as e:
                 feedback_msg = f"Template Generation Error: {str(e)}"
                 alert_type = "danger"
+                target_tab = "data"
 
-        # 9. EXPORT CSV DATA
+        # 9. EXPORT CSV DATA (DATA TAB)
         elif action == 'export_csv':
             export_target = request.form.get('export_target')
             
@@ -818,9 +829,11 @@ def web_settings_tab(username):
             except Exception as e:
                 feedback_msg = f"Export Error: {str(e)}"
                 alert_type = "danger"
+                target_tab = "data"
 
-        # 10. SELECTIVE RESET
+        # 10. SELECTIVE RESET (DATA TAB)
         elif action == 'reset_database':
+            target_tab = "data"
             confirm_input = request.form.get('secure_reset_token', '').strip().upper()
             if confirm_input == 'RESET':
                 try:
@@ -871,9 +884,16 @@ def web_settings_tab(username):
                 feedback_msg = "Safety Cancel: Database reset aborted. You must type the keyword 'RESET' exactly to clear storage tables."
                 alert_type = "danger"
 
-        # 11. SAVE INVENTORY AUDIT & GOVERNANCE POLICY
+        # 11. SAVE INVENTORY & CASH AUDIT GOVERNANCE POLICY WITH MASTER PIN (GOVERNANCE TAB)
         elif action == 'save_audit_policy':
-            enforce_blind = 'yes' if request.form.get('enforce_blind_count') == 'yes' else 'no'
+            target_tab = "governance"
+            enforce_blind_count = 'yes' if request.form.get('enforce_blind_count') == 'yes' else 'no'
+            enforce_blind_till = 'yes' if request.form.get('enforce_blind_till') == 'yes' else 'no'
+            
+            master_pin = request.form.get('master_admin_pin', '').strip()
+            if not master_pin or not master_pin.isdigit() or len(master_pin) < 4 or len(master_pin) > 6:
+                master_pin = '9999'
+
             try:
                 alert_pct = float(request.form.get('variance_alert_pct', 2.0) or 2.0)
                 if alert_pct < 0:
@@ -891,17 +911,20 @@ def web_settings_tab(username):
             ensure_store_settings_exist(client_db_path, username)
             conn = sqlite3.connect(client_db_path)
             cursor = conn.cursor()
-            cursor.execute("INSERT OR REPLACE INTO Store_Settings (Setting_Key, Setting_Value) VALUES ('enforce_blind_count', ?)", (enforce_blind,))
+            cursor.execute("INSERT OR REPLACE INTO Store_Settings (Setting_Key, Setting_Value) VALUES ('enforce_blind_count', ?)", (enforce_blind_count,))
+            cursor.execute("INSERT OR REPLACE INTO Store_Settings (Setting_Key, Setting_Value) VALUES ('enforce_blind_till', ?)", (enforce_blind_till,))
+            cursor.execute("INSERT OR REPLACE INTO Store_Settings (Setting_Key, Setting_Value) VALUES ('master_admin_pin', ?)", (master_pin,))
             cursor.execute("INSERT OR REPLACE INTO Store_Settings (Setting_Key, Setting_Value) VALUES ('variance_alert_pct', ?)", (str(alert_pct),))
             cursor.execute("INSERT OR REPLACE INTO Store_Settings (Setting_Key, Setting_Value) VALUES ('variance_alert_value', ?)", (str(alert_val),))
             conn.commit()
             conn.close()
 
-            feedback_msg = "Success: Inventory Audit & Governance policy updated successfully."
+            feedback_msg = f"Success: Audit Governance & Master Security PIN ({master_pin}) saved successfully."
             alert_type = "success"
 
-        # 12. SAVE THERMAL RECEIPT TEMPLATE & PRINTER HARDWARE CONFIG
+        # 12. SAVE THERMAL RECEIPT TEMPLATE & PRINTER HARDWARE CONFIG (RECEIPT TAB)
         elif action == 'save_receipt_config':
+            target_tab = "receipt"
             receipt_header_name = request.form.get('receipt_header_name', '').strip()
             receipt_tagline = request.form.get('receipt_tagline', '').strip()
             receipt_address = request.form.get('receipt_address', '').strip()
@@ -953,7 +976,7 @@ def web_settings_tab(username):
             feedback_msg = "Success: Thermal Receipt Template & Printer Hardware configuration saved successfully."
             alert_type = "success"
 
-        return redirect(f"/portal/{username}/settings?msg={feedback_msg}&alert_type={alert_type}")
+        return redirect(f"/portal/{username}/settings?tab={target_tab}&msg={feedback_msg}&alert_type={alert_type}")
 
     # ===== GET METHOD: HEAL INTEGRITY & RETRIEVE NOTICES =====
     conn = sqlite3.connect(client_db_path)
@@ -965,9 +988,14 @@ def web_settings_tab(username):
     skipped_errors = session.pop('skipped_errors', None)
     store_settings = get_store_settings(client_db_path, username)
 
+    current_tab = request.args.get('tab', 'receipt').lower().strip()
+    if current_tab not in ['receipt', 'governance', 'team', 'data']:
+        current_tab = 'receipt'
+
     return render_template(
         'settings.html', 
         username=username, 
+        current_tab=current_tab,
         msg=request.args.get('msg', feedback_msg),
         alert_type=request.args.get('alert_type', alert_type),
         staff_members=staff_list,
