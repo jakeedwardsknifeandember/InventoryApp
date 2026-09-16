@@ -31,16 +31,37 @@ def ensure_operational_tables_exist(db_path):
             Amount REAL
         )
     """)
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS Cash_Drawer_Logs (
+            Drawer_Tx_ID TEXT PRIMARY KEY,
+            Batch_ID TEXT,
+            Date TEXT,
+            Time TEXT,
+            Starting_Float REAL,
+            Cash_Sales REAL,
+            Cash_Paid_Outs REAL,
+            Expected_Cash REAL,
+            Actual_Counted_Cash REAL,
+            Discrepancy_Over_Short REAL,
+            GCash_Sales REAL DEFAULT 0.0,
+            Maya_Sales REAL DEFAULT 0.0,
+            Card_Sales REAL DEFAULT 0.0,
+            Grab_Gross REAL DEFAULT 0.0,
+            Grab_Commission REAL DEFAULT 0.0,
+            Grab_Net REAL DEFAULT 0.0,
+            Foodpanda_Gross REAL DEFAULT 0.0,
+            Foodpanda_Commission REAL DEFAULT 0.0,
+            Foodpanda_Net REAL DEFAULT 0.0,
+            Total_Settled_Tenders REAL DEFAULT 0.0,
+            Tender_Variance REAL DEFAULT 0.0,
+            Explanation_Notes TEXT,
+            Recorded_By TEXT
+        )
+    """)
     conn.commit()
     conn.close()
 
 def calculate_sales_cogs(sales_slice_df, db_path):
-    """
-    Computes accurate, multi-tiered Cost of Goods Sold (COGS) across:
-    1. Direct Product Recipes (Recipes + Ingredients.Cost_Per_Unit)
-    2. Modifier Add-ons (Modifier_Recipes + Ingredients.Cost_Per_Unit)
-    3. Products.Cost_Price fallback
-    """
     if sales_slice_df is None or sales_slice_df.empty:
         return 0.0
         
@@ -79,9 +100,8 @@ def calculate_sales_cogs(sales_slice_df, db_path):
 
     total_cogs = 0.0
     for _, s_row in sales_slice_df.iterrows():
-        # Exclude discount rows from COGS recipe calculations
         p_name = str(s_row.get('Product_Name', ''))
-        if p_name.startswith('Discount:'):
+        if 'Discount:' in p_name:
             continue
 
         item_id = str(s_row.get('Product_ID', '')).strip()
@@ -231,6 +251,17 @@ def web_reports_tab(username):
     products_df = db.read_tab('Products')
     audit_df = db.read_tab('Inventory_Audit_Log')  
     ingredients_df = db.read_tab('Ingredients')
+    
+    drawer_logs_df = pd.DataFrame()
+    try:
+        conn = sqlite3.connect(db_path, timeout=20.0)
+        cursor = conn.cursor()
+        cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='Cash_Drawer_Logs'")
+        if cursor.fetchone():
+            drawer_logs_df = pd.read_sql_query("SELECT * FROM Cash_Drawer_Logs", conn)
+        conn.close()
+    except Exception:
+        drawer_logs_df = pd.DataFrame()
 
     if not sales_df.empty:
         sales_df['Total_Amount'] = pd.to_numeric(sales_df['Total_Amount'], errors='coerce').fillna(0.0)
@@ -260,6 +291,19 @@ def web_reports_tab(username):
             if col in audit_df.columns:
                 parsed_col = pd.to_datetime(audit_df[col], errors='coerce')
                 audit_df['Parsed_Date'] = audit_df['Parsed_Date'].fillna(parsed_col)
+
+    if not drawer_logs_df.empty:
+        num_drawer_cols = [
+            'Starting_Float', 'Cash_Sales', 'Cash_Paid_Outs', 'Expected_Cash',
+            'Actual_Counted_Cash', 'Discrepancy_Over_Short', 'GCash_Sales',
+            'Maya_Sales', 'Card_Sales', 'Grab_Gross', 'Grab_Commission',
+            'Grab_Net', 'Foodpanda_Gross', 'Foodpanda_Commission',
+            'Foodpanda_Net', 'Total_Settled_Tenders', 'Tender_Variance'
+        ]
+        for num_col in num_drawer_cols:
+            if num_col in drawer_logs_df.columns:
+                drawer_logs_df[num_col] = pd.to_numeric(drawer_logs_df[num_col], errors='coerce').fillna(0.0)
+        drawer_logs_df['Parsed_Date'] = pd.to_datetime(drawer_logs_df['Date'], errors='coerce')
 
     # --- ALL-TIME ROI CALCULATIONS BEFORE DATE FILTER ---
     all_time_revenue = float(sales_df['Total_Amount'].sum()) if not sales_df.empty else 0.0
@@ -338,9 +382,11 @@ def web_reports_tab(username):
             expenses_df = expenses_df[(expenses_df['Parsed_Date'] >= start_bound) & (expenses_df['Parsed_Date'] <= end_bound)]
         if not audit_df.empty and 'Parsed_Date' in audit_df.columns:
             audit_df = audit_df[(audit_df['Parsed_Date'] >= start_bound) & (audit_df['Parsed_Date'] <= end_bound)]
+        if not drawer_logs_df.empty and 'Parsed_Date' in drawer_logs_df.columns:
+            drawer_logs_df = drawer_logs_df[(drawer_logs_df['Parsed_Date'] >= start_bound) & (drawer_logs_df['Parsed_Date'] <= end_bound)]
 
     # =================================================================
-    # GROSS-TO-NET REVENUE BRIDGE & COSTING CALCULATIONS
+    # GROSS-TO-NET REVENUE BRIDGE (HANDLES BOTH NORMAL & VOIDED ENTRIES)
     # =================================================================
     gross_sales = 0.0
     total_discounts = 0.0
@@ -348,19 +394,23 @@ def web_reports_tab(username):
     total_sales_count = 0
 
     if not sales_df.empty:
-        # Separate positive product/modifier sales from negative discount rows
-        pos_sales = sales_df[sales_df['Total_Amount'] > 0]
-        neg_discounts = sales_df[sales_df['Total_Amount'] < 0]
+        # Match discounts across both normal ('Discount:') and voided ('[VOID] Discount:') records
+        is_discount_row = sales_df['Product_Name'].astype(str).str.contains('Discount:', case=False, na=False)
         
-        gross_sales = float(pos_sales['Total_Amount'].sum())
-        total_discounts = abs(float(neg_discounts['Total_Amount'].sum()))
-        net_sales = float(sales_df['Total_Amount'].sum())
+        discount_rows = sales_df[is_discount_row]
+        net_discount_val = float(discount_rows['Total_Amount'].sum()) if not discount_rows.empty else 0.0
+        total_discounts = abs(net_discount_val) if net_discount_val < -0.001 else 0.0
         
-        # Product line volume count
-        product_rows = sales_df[~sales_df['Product_Name'].astype(str).str.startswith('Discount:')]
-        total_sales_count = len(product_rows)
+        product_rows = sales_df[~is_discount_row]
+        sum_products = float(product_rows['Total_Amount'].sum()) if not product_rows.empty else 0.0
+        gross_sales = max(0.0, sum_products)
+        
+        sum_net = float(sales_df['Total_Amount'].sum())
+        net_sales = 0.0 if abs(sum_net) < 0.001 else sum_net
+        total_sales_count = len(product_rows[product_rows['Quantity'] > 0])
 
     total_cogs = calculate_sales_cogs(sales_df, db_path)
+    total_cogs = 0.0 if abs(total_cogs) < 0.001 else total_cogs
     total_expenses = float(expenses_df['Amount'].sum()) if not expenses_df.empty else 0.0
 
     total_waste_cost = 0.0
@@ -407,9 +457,81 @@ def web_reports_tab(username):
                     
                 opportunity_cost += (row_financial_cost * retail_multiplier)
 
-    # Margins and bottom-line profit calculated strictly from Net Sales
+    # =================================================================
+    # MULTI-CHANNEL TENDER RECONCILIATION & AUTO-DROP OF VOIDED BATCHES
+    # =================================================================
+    tender_summary = {
+        'cash_sales': 0.0,
+        'cash_paid_outs': 0.0,
+        'expected_cash': 0.0,
+        'actual_cash': 0.0,
+        'over_short': 0.0,
+        'gcash': 0.0,
+        'maya': 0.0,
+        'card': 0.0,
+        'grab_gross': 0.0,
+        'grab_comm': 0.0,
+        'grab_net': 0.0,
+        'panda_gross': 0.0,
+        'panda_comm': 0.0,
+        'panda_net': 0.0,
+        'total_settled_tenders': 0.0,
+        'total_commissions': 0.0,
+        'tender_variance': 0.0,
+        'has_entries': False,
+        'log_count': 0
+    }
+
+    if not drawer_logs_df.empty:
+        # 1. Filter out drawer logs explicitly marked [VOIDED]
+        if 'Explanation_Notes' in drawer_logs_df.columns:
+            drawer_logs_df = drawer_logs_df[
+                ~drawer_logs_df['Explanation_Notes'].astype(str).str.contains(r'\[VOIDED\]', case=False, na=False)
+            ]
+
+        # 2. Filter out drawer logs whose entire parent sales batch has been fully voided to 0.00
+        if not sales_df.empty and not drawer_logs_df.empty:
+            temp_sales = sales_df.copy()
+            temp_sales['Batch_Prefix'] = temp_sales['Sale_ID'].astype(str).str.replace('VOID-', '').str.split('-').str[0]
+            batch_net_rev = temp_sales.groupby('Batch_Prefix')['Total_Amount'].sum()
+            voided_batches = set(batch_net_rev[batch_net_rev.abs() < 0.001].index)
+            
+            drawer_logs_df = drawer_logs_df[~drawer_logs_df['Batch_ID'].isin(voided_batches)]
+
+        if not drawer_logs_df.empty:
+            tender_summary['cash_sales'] = float(drawer_logs_df['Cash_Sales'].sum())
+            tender_summary['cash_paid_outs'] = float(drawer_logs_df['Cash_Paid_Outs'].sum())
+            tender_summary['expected_cash'] = float(drawer_logs_df['Expected_Cash'].sum())
+            tender_summary['actual_cash'] = float(drawer_logs_df['Actual_Counted_Cash'].sum())
+            tender_summary['over_short'] = float(drawer_logs_df['Discrepancy_Over_Short'].sum())
+            tender_summary['gcash'] = float(drawer_logs_df['GCash_Sales'].sum()) if 'GCash_Sales' in drawer_logs_df.columns else 0.0
+            tender_summary['maya'] = float(drawer_logs_df['Maya_Sales'].sum()) if 'Maya_Sales' in drawer_logs_df.columns else 0.0
+            tender_summary['card'] = float(drawer_logs_df['Card_Sales'].sum()) if 'Card_Sales' in drawer_logs_df.columns else 0.0
+            tender_summary['grab_gross'] = float(drawer_logs_df['Grab_Gross'].sum()) if 'Grab_Gross' in drawer_logs_df.columns else 0.0
+            tender_summary['grab_comm'] = float(drawer_logs_df['Grab_Commission'].sum()) if 'Grab_Commission' in drawer_logs_df.columns else 0.0
+            tender_summary['grab_net'] = float(drawer_logs_df['Grab_Net'].sum()) if 'Grab_Net' in drawer_logs_df.columns else 0.0
+            tender_summary['panda_gross'] = float(drawer_logs_df['Foodpanda_Gross'].sum()) if 'Foodpanda_Gross' in drawer_logs_df.columns else 0.0
+            tender_summary['panda_comm'] = float(drawer_logs_df['Foodpanda_Commission'].sum()) if 'Foodpanda_Commission' in drawer_logs_df.columns else 0.0
+            tender_summary['panda_net'] = float(drawer_logs_df['Foodpanda_Net'].sum()) if 'Foodpanda_Net' in drawer_logs_df.columns else 0.0
+            tender_summary['total_commissions'] = tender_summary['grab_comm'] + tender_summary['panda_comm']
+            
+            computed_settled = (
+                tender_summary['cash_sales'] + tender_summary['gcash'] + tender_summary['maya'] + 
+                tender_summary['card'] + tender_summary['grab_net'] + tender_summary['panda_net']
+            )
+            tender_summary['total_settled_tenders'] = computed_settled
+            tender_summary['tender_variance'] = computed_settled - net_sales
+            tender_summary['has_entries'] = (computed_settled > 0 or tender_summary['actual_cash'] > 0 or tender_summary['expected_cash'] > 0)
+            tender_summary['log_count'] = len(drawer_logs_df)
+
+    cash_discrepancy_over_short = tender_summary['over_short'] if tender_summary['has_entries'] else 0.0
+
+    # Margins and bottom-line profit calculated strictly from Net Sales + Cash Discrepancy
     gross_profit_margin = net_sales - total_cogs
-    net_profit = gross_profit_margin - total_expenses - total_waste_cost
+    gross_profit_margin = 0.0 if abs(gross_profit_margin) < 0.001 else gross_profit_margin
+
+    net_profit = gross_profit_margin - total_expenses - total_waste_cost + cash_discrepancy_over_short
+    net_profit = 0.0 if abs(net_profit) < 0.001 else net_profit
 
     warehouse_asset_value = 0.0
     if not ingredients_df.empty:
@@ -515,7 +637,6 @@ def web_reports_tab(username):
                     
             menu_data_json = json.dumps(chart_points)
 
-    # COST VARIANCE & INFLATION TRACKER
     inflation_data = []
     full_audit_df = db.read_tab('Inventory_Audit_Log')
     
@@ -618,6 +739,8 @@ def web_reports_tab(username):
         total_expenses=total_expenses,
         waste_cost=total_waste_cost,
         opportunity_cost=opportunity_cost,
+        cash_over_short=cash_discrepancy_over_short,
+        tender_summary=tender_summary,
         warehouse_asset=warehouse_asset_value,
         net_profit=net_profit,
         total_assets=total_assets,

@@ -57,6 +57,19 @@
         color: #fff; 
         border-color: #2fa572; 
     }
+
+    /* High-contrast tender summary card */
+    .tender-summary-box {
+        background: #15151a;
+        border: 1px solid #2e2e3e;
+        border-radius: 8px;
+    }
+    .tender-summary-box .channel-title {
+        font-size: 11px;
+        font-weight: 800;
+        letter-spacing: 0.5px;
+        text-transform: uppercase;
+    }
 </style>
 
 <div class="reports-workspace">
@@ -188,6 +201,26 @@
                                 <td class="financial-title text-warning">(-) Cost of Spoilage / Waste</td>
                                 <td class="text-end font-monospace text-warning">- PHP {{ "{:,.2f}".format(waste_cost) }}</td>
                             </tr>
+                            <tr>
+                                <td class="financial-title {% if cash_over_short < 0 %}text-danger{% elif cash_over_short > 0 %}text-info{% else %}text-muted{% endif %}">
+                                    {% if cash_over_short < 0 %}
+                                        (-) Cash Till Shortage (Discrepancy)
+                                    {% elif cash_over_short > 0 %}
+                                        (+) Cash Till Surplus (Overage)
+                                    {% else %}
+                                        (+/-) Cash Till Discrepancy
+                                    {% endif %}
+                                </td>
+                                <td class="text-end font-monospace {% if cash_over_short < 0 %}text-danger{% elif cash_over_short > 0 %}text-info{% else %}text-muted{% endif %}" style="font-weight: 700;">
+                                    {% if cash_over_short < 0 %}
+                                        - PHP {{ "{:,.2f}".format(cash_over_short|abs) }}
+                                    {% elif cash_over_short > 0 %}
+                                        + PHP {{ "{:,.2f}".format(cash_over_short) }}
+                                    {% else %}
+                                        PHP 0.00
+                                    {% endif %}
+                                </td>
+                            </tr>
                             <tr style="background: #151518;">
                                 <td style="font-weight: 800; font-size:16px;">Net Operating Income</td>
                                 <td class="text-end font-monospace" style="font-weight: 800; font-size: 16px; color: {% if net_profit >= 0 %}#3b82f6{% else %}#ef4444{% endif %};">
@@ -240,6 +273,142 @@
                                 </td>
                             </tr>
                         </table>
+                    </div>
+                </div>
+
+                <!-- DEDICATED MULTI-CHANNEL TENDER SETTLEMENT & CASH RECONCILIATION CARD -->
+                <div class="col-12">
+                    <div class="p-4" style="background: #1e1e24; border-radius: 8px; border: 1px solid #2d2d34;">
+                        <div class="d-flex justify-content-between align-items-center mb-3 pb-2 border-bottom border-secondary flex-wrap gap-2">
+                            <div>
+                                <h5 class="m-0 text-white fw-bold">Multi-Channel Tender & Cash Reconciliation</h5>
+                                <small class="text-muted">Settlement breakdown of physical till cash, digital wallets, credit cards, and delivery net remittances in active scope.</small>
+                            </div>
+                            <div>
+                                {% if tender_summary.has_entries %}
+                                    {% if tender_summary.over_short == 0 %}
+                                        <span class="badge bg-success font-monospace px-3 py-1.5" style="font-size:12px;">Till Balanced (PHP 0.00)</span>
+                                    {% elif tender_summary.over_short < 0 %}
+                                        <span class="badge bg-danger font-monospace px-3 py-1.5" style="font-size:12px;">Till Short: -PHP {{ "{:,.2f}".format(tender_summary.over_short|abs) }}</span>
+                                    {% else %}
+                                        <span class="badge bg-info text-dark font-monospace px-3 py-1.5" style="font-size:12px;">Till Over: +PHP {{ "{:,.2f}".format(tender_summary.over_short) }}</span>
+                                    {% endif %}
+                                {% else %}
+                                    <span class="badge bg-secondary font-monospace px-3 py-1.5" style="font-size:12px;">No Tender Logs in Scope</span>
+                                {% endif %}
+                            </div>
+                        </div>
+
+                        <div class="row g-3">
+                            <!-- Channel 1: In-Store Physical Cash Till -->
+                            <div class="col-12 col-md-4">
+                                <div class="p-3 rounded h-100 tender-summary-box">
+                                    <div class="channel-title text-info mb-2">1. In-Store Cash Till Balancing</div>
+                                    <div class="d-flex justify-content-between py-1 border-bottom border-dark small">
+                                        <span class="text-light">In-Store Cash Sales:</span>
+                                        <strong class="text-white font-monospace">PHP {{ "{:,.2f}".format(tender_summary.cash_sales) }}</strong>
+                                    </div>
+                                    <div class="d-flex justify-content-between py-1 border-bottom border-dark small">
+                                        <span class="text-danger">(-) Till Paid-Outs:</span>
+                                        <strong class="text-danger font-monospace">-PHP {{ "{:,.2f}".format(tender_summary.cash_paid_outs) }}</strong>
+                                    </div>
+                                    <div class="d-flex justify-content-between py-1 border-bottom border-dark small">
+                                        <span class="text-muted">Expected in Till:</span>
+                                        <strong class="text-white font-monospace">PHP {{ "{:,.2f}".format(tender_summary.expected_cash) }}</strong>
+                                    </div>
+                                    <div class="d-flex justify-content-between py-1 border-bottom border-dark small">
+                                        <span class="text-warning fw-bold">Actual Counted Cash:</span>
+                                        <strong class="text-warning font-monospace">PHP {{ "{:,.2f}".format(tender_summary.actual_cash) }}</strong>
+                                    </div>
+                                    <div class="d-flex justify-content-between pt-2 small">
+                                        <span class="fw-bold text-light">Till Variance (Over/Short):</span>
+                                        <strong class="font-monospace {% if tender_summary.over_short < 0 %}text-danger{% elif tender_summary.over_short > 0 %}text-info{% else %}text-success{% endif %}">
+                                            {% if tender_summary.over_short < 0 %}
+                                                -PHP {{ "{:,.2f}".format(tender_summary.over_short|abs) }}
+                                            {% elif tender_summary.over_short > 0 %}
+                                                +PHP {{ "{:,.2f}".format(tender_summary.over_short) }}
+                                            {% else %}
+                                                PHP 0.00
+                                            {% endif %}
+                                        </strong>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Channel 2: Digital Wallets & Cards -->
+                            <div class="col-12 col-md-4">
+                                <div class="p-3 rounded h-100 tender-summary-box">
+                                    <div class="channel-title text-warning mb-2">2. In-Store Digital & Card Tenders</div>
+                                    <div class="d-flex justify-content-between py-1 border-bottom border-dark small">
+                                        <span class="text-light">GCash Merchant Settlement:</span>
+                                        <strong class="text-white font-monospace">PHP {{ "{:,.2f}".format(tender_summary.gcash) }}</strong>
+                                    </div>
+                                    <div class="d-flex justify-content-between py-1 border-bottom border-dark small">
+                                        <span class="text-light">Maya / QRPH Settlement:</span>
+                                        <strong class="text-white font-monospace">PHP {{ "{:,.2f}".format(tender_summary.maya) }}</strong>
+                                    </div>
+                                    <div class="d-flex justify-content-between py-1 border-bottom border-dark small">
+                                        <span class="text-light">Debit / Credit Card Terminal:</span>
+                                        <strong class="text-white font-monospace">PHP {{ "{:,.2f}".format(tender_summary.card) }}</strong>
+                                    </div>
+                                    <div class="d-flex justify-content-between pt-3 small">
+                                        <span class="fw-bold text-muted text-uppercase" style="font-size:10px;">Subtotal Digital Inflows:</span>
+                                        <strong class="text-info font-monospace">PHP {{ "{:,.2f}".format(tender_summary.gcash + tender_summary.maya + tender_summary.card) }}</strong>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Channel 3: Aggregator Portals -->
+                            <div class="col-12 col-md-4">
+                                <div class="p-3 rounded h-100 tender-summary-box">
+                                    <div class="channel-title text-success mb-2">3. Aggregator Portals (Net Payout)</div>
+                                    <div class="d-flex justify-content-between py-1 border-bottom border-dark small">
+                                        <span class="text-light">GrabFood Net Remittance:</span>
+                                        <strong class="text-white font-monospace">PHP {{ "{:,.2f}".format(tender_summary.grab_net) }}</strong>
+                                    </div>
+                                    <div class="d-flex justify-content-between py-1 border-bottom border-dark small">
+                                        <span class="text-muted" style="font-size:11px;">(Gross: PHP {{ "{:,.2f}".format(tender_summary.grab_gross) }} | Fee: -PHP {{ "{:,.2f}".format(tender_summary.grab_comm) }})</span>
+                                    </div>
+                                    <div class="d-flex justify-content-between py-1 border-bottom border-dark small">
+                                        <span class="text-light">Foodpanda Net Remittance:</span>
+                                        <strong class="text-white font-monospace">PHP {{ "{:,.2f}".format(tender_summary.panda_net) }}</strong>
+                                    </div>
+                                    <div class="d-flex justify-content-between py-1 border-bottom border-dark small">
+                                        <span class="text-muted" style="font-size:11px;">(Gross: PHP {{ "{:,.2f}".format(tender_summary.panda_gross) }} | Fee: -PHP {{ "{:,.2f}".format(tender_summary.panda_comm) }})</span>
+                                    </div>
+                                    <div class="d-flex justify-content-between pt-2 small">
+                                        <span class="fw-bold text-muted text-uppercase" style="font-size:10px;">Commissions Deducted:</span>
+                                        <strong class="text-danger font-monospace">-PHP {{ "{:,.2f}".format(tender_summary.total_commissions) }}</strong>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Settlement Reconciliation Strip -->
+                        <div class="p-3 rounded mt-3 d-flex justify-content-between align-items-center flex-wrap gap-2" style="background: #111116; border: 1px solid #2d2d38;">
+                            <div>
+                                <span class="text-muted small text-uppercase fw-bold d-block" style="font-size: 10px;">Total Settled Tenders (Cash + Digital + Net Delivery)</span>
+                                <span class="font-monospace text-success fw-bold fs-5">PHP {{ "{:,.2f}".format(tender_summary.total_settled_tenders) }}</span>
+                            </div>
+                            <div>
+                                <span class="text-muted small text-uppercase fw-bold d-block" style="font-size: 10px;">Net Sales Revenue Target</span>
+                                <span class="font-monospace text-info fw-bold fs-5">PHP {{ "{:,.2f}".format(total_revenue) }}</span>
+                            </div>
+                            <div class="text-end">
+                                <span class="text-muted small text-uppercase fw-bold d-block" style="font-size: 10px;">Tender vs Net Sales Reconciliation</span>
+                                {% if tender_summary.has_entries %}
+                                    {% if tender_summary.tender_variance|abs < 0.01 %}
+                                        <span class="badge bg-success font-monospace px-3 py-1.5" style="font-size: 12px;">Fully Balanced (PHP 0.00)</span>
+                                    {% elif tender_summary.tender_variance < 0 %}
+                                        <span class="badge bg-danger font-monospace px-3 py-1.5" style="font-size: 12px;">Unsettled Variance: -PHP {{ "{:,.2f}".format(tender_summary.tender_variance|abs) }}</span>
+                                    {% else %}
+                                        <span class="badge bg-info text-dark font-monospace px-3 py-1.5" style="font-size: 12px;">Tender Surplus: +PHP {{ "{:,.2f}".format(tender_summary.tender_variance) }}</span>
+                                    {% endif %}
+                                {% else %}
+                                    <span class="badge bg-secondary font-monospace px-3 py-1.5" style="font-size: 12px;">Awaiting Shift Closing Logs</span>
+                                {% endif %}
+                            </div>
+                        </div>
                     </div>
                 </div>
                 

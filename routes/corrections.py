@@ -58,7 +58,7 @@ def web_corrections_tab(username):
                     err_msg = urllib.parse.quote_plus("Duplicate Action: This transaction has already been voided.")
                     return redirect(f"/portal/{username}/corrections?error={err_msg}")
 
-                # Fetch all line items for this Sale_ID
+                # Fetch line items for this Sale_ID
                 sales_cols = _get_table_columns(cursor, "Sales")
                 cursor.execute("SELECT * FROM Sales WHERE Sale_ID = ?", (sale_id,))
                 sale_rows = cursor.fetchall()
@@ -79,7 +79,6 @@ def web_corrections_tab(username):
                     original_amt = float(row[col_idx['Total_Amount']] or 0.0) if 'Total_Amount' in col_idx else 0.0
                     original_sale_date = row[col_idx['Sale_Date']] if 'Sale_Date' in col_idx else datetime.now().strftime("%Y-%m-%d")
 
-                    # Construct dynamic insert statement based on existing columns
                     insert_cols = ['Sale_ID', 'Sale_Date', 'Sale_Time', 'Product_ID', 'Product_Name', 'Quantity', 'Price', 'Total_Amount']
                     insert_vals = [
                         void_sale_id,
@@ -153,6 +152,39 @@ def web_corrections_tab(username):
                             ))
                             restocked_summary.append(f"{tot_refund:g} {base_unit} {ing_name}".strip())
 
+                # Check if the entire EOD batch is now voided and neutralize its Cash_Drawer_Logs and auto-expenses
+                clean_batch_id = sale_id.replace('VOID-', '').split('-')[0] if '-' in sale_id else sale_id.replace('VOID-', '')
+                cursor.execute("""
+                    SELECT COUNT(*) FROM Sales 
+                    WHERE (Sale_ID LIKE ? OR Sale_ID = ?) 
+                      AND Sale_ID NOT LIKE 'VOID-%'
+                      AND Sale_ID NOT IN (SELECT REPLACE(Sale_ID, 'VOID-', '') FROM Sales WHERE Sale_ID LIKE 'VOID-%')
+                """, (f"{clean_batch_id}-%", clean_batch_id))
+                remaining_active = cursor.fetchone()[0]
+
+                if remaining_active == 0:
+                    cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='Cash_Drawer_Logs'")
+                    if cursor.fetchone():
+                        cursor.execute("""
+                            UPDATE Cash_Drawer_Logs
+                            SET Starting_Float = 0.0, Cash_Sales = 0.0, Cash_Paid_Outs = 0.0,
+                                Expected_Cash = 0.0, Actual_Counted_Cash = 0.0, Discrepancy_Over_Short = 0.0,
+                                GCash_Sales = 0.0, Maya_Sales = 0.0, Card_Sales = 0.0,
+                                Grab_Gross = 0.0, Grab_Commission = 0.0, Grab_Net = 0.0,
+                                Foodpanda_Gross = 0.0, Foodpanda_Commission = 0.0, Foodpanda_Net = 0.0,
+                                Total_Settled_Tenders = 0.0, Tender_Variance = 0.0,
+                                Explanation_Notes = '[VOIDED] ' || coalesce(Explanation_Notes, '')
+                            WHERE Batch_ID = ? OR Drawer_Tx_ID LIKE ?
+                        """, (clean_batch_id, f"{clean_batch_id}%"))
+                    
+                    cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='Expenses'")
+                    if cursor.fetchone():
+                        cursor.execute("""
+                            UPDATE Expenses
+                            SET Amount = 0.0, Description = '[VOIDED] ' || Description
+                            WHERE Expense_ID LIKE ? AND Description NOT LIKE '[VOIDED]%'
+                        """, (f"%{clean_batch_id}%",))
+
                 conn.commit()
                 conn.close()
 
@@ -200,14 +232,12 @@ def web_corrections_tab(username):
                 
                 refund_qty = abs(float(variance or 0.0))
                 
-                # Restore stock in Ingredients table
                 cursor.execute("""
                     UPDATE Ingredients 
                     SET Current_Stock = Current_Stock + ? 
                     WHERE Ingredient_Name = ? COLLATE NOCASE OR Ingredient_ID = ?
                 """, (refund_qty, item_name, item_name))
                 
-                # Neutralize original audit log row
                 new_notes = f"[VOIDED] {existing_notes or ''} | Auth: {operator} | Reason: {void_reason}"
                 cursor.execute("""
                     UPDATE Inventory_Audit_Log 
@@ -256,14 +286,12 @@ def web_corrections_tab(username):
                 
                 deduct_qty = abs(float(variance or 0.0))
                 
-                # Deduct overstated intake from physical inventory
                 cursor.execute("""
                     UPDATE Ingredients 
                     SET Current_Stock = Current_Stock - ? 
                     WHERE Ingredient_Name = ? COLLATE NOCASE OR Ingredient_ID = ?
                 """, (deduct_qty, item_name, item_name))
                 
-                # Neutralize original audit entry
                 new_notes = f"[VOIDED] {existing_notes or ''} | Auth: {operator} | Reason: {void_reason}"
                 cursor.execute("""
                     UPDATE Inventory_Audit_Log 
@@ -338,7 +366,6 @@ def web_corrections_tab(username):
         conn.row_factory = sqlite3.Row
         cursor = conn.cursor()
 
-        # 1. Fetch Sales & Identify Voided Records
         cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='Sales'")
         if cursor.fetchone():
             sales_cols = _get_table_columns(cursor, "Sales")
@@ -359,7 +386,6 @@ def web_corrections_tab(username):
                 sale['is_voided'] = str(sale.get('Sale_ID', '')) in voided_sale_ids
                 recent_sales.append(sale)
 
-        # 2. Fetch Audit Logs (Wastage and Intake)
         cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='Inventory_Audit_Log'")
         if cursor.fetchone():
             cursor.execute("""
@@ -374,16 +400,13 @@ def web_corrections_tab(username):
                 notes = str(entry.get('Notes', ''))
                 entry['is_voided'] = '[VOIDED]' in notes
 
-                # Filter Wastage
                 if audit_id.startswith('WST') or any(w in notes.lower() for w in ['waste', 'spoil', 'damaged', 'expired']):
                     if len(recent_waste) < 100:
                         recent_waste.append(entry)
-                # Filter Intake
                 elif audit_id.startswith('RCV') or audit_id.startswith('AUD') or any(w in notes.lower() for w in ['intake', 'delivery', 'restock']):
                     if len(recent_intake) < 100:
                         recent_intake.append(entry)
 
-        # 3. Fetch Expenses
         cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='Expenses'")
         if cursor.fetchone():
             cursor.execute("SELECT rowid, * FROM Expenses ORDER BY rowid DESC LIMIT 100")

@@ -1,4 +1,4 @@
-# routes/sales.py - End-of-Day (EOD) Sales Entry, Recipe Inventory Deduction & Discounts Engine
+# routes/sales.py - End-of-Day (EOD) Sales Entry, Recipe Deduction, Discounts & Multi-Channel Tender Balancing Engine
 from flask import Blueprint, request, redirect, session, render_template
 from modules.database import InventoryDB
 import sqlite3
@@ -49,8 +49,8 @@ def resolve_parent_and_variant(p):
 
 def ensure_sales_database_schema(conn):
     """
-    Auto-migrates the Sales, Inventory_Audit_Log, and Sales_Discounts tables.
-    Safely adds missing columns without data loss.
+    Auto-migrates Sales, Inventory_Audit_Log, Sales_Discounts, and Cash_Drawer_Logs tables.
+    Safely adds missing multi-channel tender columns without data loss.
     """
     cursor = conn.cursor()
     cursor.execute("""
@@ -125,6 +125,63 @@ def ensure_sales_database_schema(conn):
         )
     """)
 
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS Cash_Drawer_Logs (
+            Drawer_Tx_ID TEXT PRIMARY KEY,
+            Batch_ID TEXT,
+            Date TEXT,
+            Time TEXT,
+            Starting_Float REAL,
+            Cash_Sales REAL,
+            Cash_Paid_Outs REAL,
+            Expected_Cash REAL,
+            Actual_Counted_Cash REAL,
+            Discrepancy_Over_Short REAL,
+            GCash_Sales REAL DEFAULT 0.0,
+            Maya_Sales REAL DEFAULT 0.0,
+            Card_Sales REAL DEFAULT 0.0,
+            Grab_Gross REAL DEFAULT 0.0,
+            Grab_Commission REAL DEFAULT 0.0,
+            Grab_Net REAL DEFAULT 0.0,
+            Foodpanda_Gross REAL DEFAULT 0.0,
+            Foodpanda_Commission REAL DEFAULT 0.0,
+            Foodpanda_Net REAL DEFAULT 0.0,
+            Total_Settled_Tenders REAL DEFAULT 0.0,
+            Tender_Variance REAL DEFAULT 0.0,
+            Explanation_Notes TEXT,
+            Recorded_By TEXT
+        )
+    """)
+    cursor.execute("PRAGMA table_info(Cash_Drawer_Logs)")
+    existing_drawer_cols = {row[1] for row in cursor.fetchall()}
+    needed_drawer_cols = {
+        'Batch_ID': 'TEXT',
+        'Date': 'TEXT',
+        'Time': 'TEXT',
+        'Starting_Float': 'REAL',
+        'Cash_Sales': 'REAL',
+        'Cash_Paid_Outs': 'REAL',
+        'Expected_Cash': 'REAL',
+        'Actual_Counted_Cash': 'REAL',
+        'Discrepancy_Over_Short': 'REAL',
+        'GCash_Sales': 'REAL DEFAULT 0.0',
+        'Maya_Sales': 'REAL DEFAULT 0.0',
+        'Card_Sales': 'REAL DEFAULT 0.0',
+        'Grab_Gross': 'REAL DEFAULT 0.0',
+        'Grab_Commission': 'REAL DEFAULT 0.0',
+        'Grab_Net': 'REAL DEFAULT 0.0',
+        'Foodpanda_Gross': 'REAL DEFAULT 0.0',
+        'Foodpanda_Commission': 'REAL DEFAULT 0.0',
+        'Foodpanda_Net': 'REAL DEFAULT 0.0',
+        'Total_Settled_Tenders': 'REAL DEFAULT 0.0',
+        'Tender_Variance': 'REAL DEFAULT 0.0',
+        'Explanation_Notes': 'TEXT',
+        'Recorded_By': 'TEXT'
+    }
+    for col_name, col_type in needed_drawer_cols.items():
+        if col_name not in existing_drawer_cols:
+            cursor.execute(f"ALTER TABLE Cash_Drawer_Logs ADD COLUMN {col_name} {col_type}")
+
     conn.commit()
 
 @sales_bp.route('/portal/<username>/sales', methods=['GET', 'POST'])
@@ -145,7 +202,7 @@ def web_sales_tab(username):
     conn.close()
 
     # =================================================================
-    # 1. POST METHOD: SUBMIT CONSOLIDATED EOD SALES & Z-READING DISCOUNTS
+    # 1. POST METHOD: SUBMIT CONSOLIDATED EOD SALES & MULTI-TENDER SETTLEMENT
     # =================================================================
     if request.method == 'POST':
         sale_date = request.form.get('sale_date', '').strip() or datetime.now().strftime("%Y-%m-%d")
@@ -161,6 +218,54 @@ def web_sales_tab(username):
         disc_ids = request.form.getlist('discount_id[]')
         disc_amts = request.form.getlist('discount_amount[]')
         disc_notes = request.form.getlist('discount_notes[]')
+
+        # Tender Breakdown Inputs
+        starting_float_str = request.form.get('starting_float', '0').strip()
+        cash_sales_str = request.form.get('cash_sales', '0').strip()
+        cash_paid_outs_str = request.form.get('cash_paid_outs', '0').strip()
+        cash_paid_outs_reason = request.form.get('cash_paid_outs_reason', '').strip()
+        actual_counted_cash_str = request.form.get('actual_counted_cash', '0').strip()
+        drawer_notes = request.form.get('drawer_notes', '').strip()
+
+        # In-Store Digital & Card Tenders
+        gcash_sales_str = request.form.get('gcash_sales', '0').strip()
+        maya_sales_str = request.form.get('maya_sales', '0').strip()
+        card_sales_str = request.form.get('card_sales', '0').strip()
+
+        # Delivery Aggregators (GrabFood & Foodpanda)
+        grab_gross_str = request.form.get('grab_gross', '0').strip()
+        grab_comm_str = request.form.get('grab_comm', '0').strip()
+        foodpanda_gross_str = request.form.get('foodpanda_gross', '0').strip()
+        foodpanda_comm_str = request.form.get('foodpanda_comm', '0').strip()
+
+        def parse_float_safe(val_str):
+            try:
+                return float(val_str or 0.0)
+            except (ValueError, TypeError):
+                return 0.0
+
+        starting_float = parse_float_safe(starting_float_str)
+        cash_sales = parse_float_safe(cash_sales_str)
+        cash_paid_outs = parse_float_safe(cash_paid_outs_str)
+        actual_counted_cash = parse_float_safe(actual_counted_cash_str)
+
+        gcash_sales = parse_float_safe(gcash_sales_str)
+        maya_sales = parse_float_safe(maya_sales_str)
+        card_sales = parse_float_safe(card_sales_str)
+
+        grab_gross = parse_float_safe(grab_gross_str)
+        grab_comm = parse_float_safe(grab_comm_str)
+        grab_net = max(0.0, grab_gross - grab_comm)
+
+        foodpanda_gross = parse_float_safe(foodpanda_gross_str)
+        foodpanda_comm = parse_float_safe(foodpanda_comm_str)
+        foodpanda_net = max(0.0, foodpanda_gross - foodpanda_comm)
+
+        expected_cash = starting_float + cash_sales - cash_paid_outs
+        has_drawer_entry = (actual_counted_cash > 0 or cash_sales > 0 or starting_float > 0 or cash_paid_outs > 0)
+        over_short = (actual_counted_cash - expected_cash) if has_drawer_entry else 0.0
+
+        total_settled_tenders = cash_sales + gcash_sales + maya_sales + card_sales + grab_net + foodpanda_net
         
         conn = sqlite3.connect(client_db_path, timeout=20.0)
         ensure_sales_database_schema(conn)
@@ -182,10 +287,7 @@ def web_sales_tab(username):
 
         # 1. Process Product Requirements & Prepare Itemized Payload
         for p_id, q_str in zip(prod_ids, prod_qtys):
-            try:
-                p_qty = float(q_str or 0)
-            except (ValueError, TypeError):
-                p_qty = 0.0
+            p_qty = parse_float_safe(q_str)
             if p_qty == 0:
                 continue
 
@@ -211,10 +313,7 @@ def web_sales_tab(username):
 
         # 2. Process Modifier Requirements & Prepare Itemized Payload
         for m_id, mq_str in zip(mod_ids, mod_qtys):
-            try:
-                m_qty = float(mq_str or 0)
-            except (ValueError, TypeError):
-                m_qty = 0.0
+            m_qty = parse_float_safe(mq_str)
             if m_qty == 0:
                 continue
 
@@ -246,10 +345,7 @@ def web_sales_tab(username):
         # 3. Process Discounts from Z-Reading Tape
         discounts_total_amount = 0.0
         for d_id, d_amt_str, d_note in zip(disc_ids, disc_amts, disc_notes):
-            try:
-                d_amt = float(d_amt_str or 0)
-            except (ValueError, TypeError):
-                d_amt = 0.0
+            d_amt = parse_float_safe(d_amt_str)
             if d_amt <= 0:
                 continue
 
@@ -307,7 +403,7 @@ def web_sales_tab(username):
             return redirect(f"/portal/{username}/sales?msg={err_msg}&alert_type=danger")
 
         # =================================================================
-        # COMMIT TRANSACTION (SALES + DISCOUNTS + CONSOLIDATED AUDIT DEPLETION)
+        # COMMIT TRANSACTION (SALES + DISCOUNTS + MULTI-TENDER + DEPLETION)
         # =================================================================
         if len(sold_summary_list) <= 4:
             summary_text = ", ".join(sold_summary_list)
@@ -347,7 +443,6 @@ def web_sales_tab(username):
         for idx, disc in enumerate(valid_discounts_payload, start=1):
             disc_line_id = f"{batch_id}-D{idx:02d}"
             
-            # Compliance Audit Table Record
             cursor.execute("""
                 INSERT INTO Sales_Discounts (
                     Discount_Tx_ID, Batch_ID, Sale_Date, Sale_Time,
@@ -358,7 +453,6 @@ def web_sales_tab(username):
                 disc['id'], disc['name'], disc['category'], disc['amount'], disc['notes'], recorded_by
             ))
 
-            # Financial Ledger Entry in Sales
             reason_str = f"[{disc['category']}] {disc['notes']}".strip()
             cursor.execute("""
                 INSERT INTO Sales (
@@ -370,7 +464,60 @@ def web_sales_tab(username):
                 1, -disc['amount'], -disc['amount'], reason_str or f"EOD Discount {disc['id']}", recorded_by
             ))
 
-        # 4. Consolidated Recipe Inventory Deductions (One Row Per Ingredient under Unified Batch ID)
+        # 4. Insert Multi-Channel Tender & Cash Drawer Balancing Record
+        net_sales_amount = gross_sales_amount - discounts_total_amount
+        tender_variance = total_settled_tenders - net_sales_amount
+
+        drawer_tx_id = f"{batch_id}-TNDR"
+        full_drawer_notes = f"{drawer_notes} | Paid-Out Note: {cash_paid_outs_reason}".strip(" | ")
+
+        cursor.execute("""
+            INSERT INTO Cash_Drawer_Logs (
+                Drawer_Tx_ID, Batch_ID, Date, Time, Starting_Float, Cash_Sales,
+                Cash_Paid_Outs, Expected_Cash, Actual_Counted_Cash, Discrepancy_Over_Short,
+                GCash_Sales, Maya_Sales, Card_Sales, Grab_Gross, Grab_Commission, Grab_Net,
+                Foodpanda_Gross, Foodpanda_Commission, Foodpanda_Net, Total_Settled_Tenders,
+                Tender_Variance, Explanation_Notes, Recorded_By
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """, (
+            drawer_tx_id, batch_id, sale_date, sale_time_str, starting_float, cash_sales,
+            cash_paid_outs, expected_cash, actual_counted_cash, over_short,
+            gcash_sales, maya_sales, card_sales, grab_gross, grab_comm, grab_net,
+            foodpanda_gross, foodpanda_comm, foodpanda_net, total_settled_tenders,
+            tender_variance, full_drawer_notes, recorded_by
+        ))
+
+        # 5. Automatically Book Operational Overhead Expenses
+        cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='Expenses'")
+        has_expenses_table = cursor.fetchone()
+
+        if has_expenses_table:
+            # Auto-book petty cash paid-out
+            if cash_paid_outs > 0:
+                exp_desc = f"Till Paid-Out: {cash_paid_outs_reason}" if cash_paid_outs_reason else f"Till Cash Paid-Out (Batch {batch_id})"
+                exp_tx_id = f"EXP{batch_id.replace('EOD', '')}_PO"
+                cursor.execute("""
+                    INSERT INTO Expenses (Expense_ID, Expense_Date, Expense_Type, Description, Amount, Category, Payment_Method, Notes)
+                    VALUES (?, ?, 'Operational', ?, ?, 'Misc Overhead', 'Petty Cash', ?)
+                """, (exp_tx_id, sale_date, exp_desc, cash_paid_outs, f"Automatic till paid-out booked via EOD Batch {batch_id}"))
+
+            # Auto-book GrabFood merchant commission fee
+            if grab_comm > 0:
+                grab_exp_id = f"EXP{batch_id.replace('EOD', '')}_GRAB"
+                cursor.execute("""
+                    INSERT INTO Expenses (Expense_ID, Expense_Date, Expense_Type, Description, Amount, Category, Payment_Method, Notes)
+                    VALUES (?, ?, 'Operational', ?, ?, 'Logistics & Delivery', 'Bank Transfer', ?)
+                """, (grab_exp_id, sale_date, f"GrabFood Merchant Commission (Batch {batch_id})", grab_comm, f"Auto-booked commission from Grab gross sales of PHP {grab_gross:,.2f}"))
+
+            # Auto-book Foodpanda merchant commission fee
+            if foodpanda_comm > 0:
+                panda_exp_id = f"EXP{batch_id.replace('EOD', '')}_PANDA"
+                cursor.execute("""
+                    INSERT INTO Expenses (Expense_ID, Expense_Date, Expense_Type, Description, Amount, Category, Payment_Method, Notes)
+                    VALUES (?, ?, 'Operational', ?, ?, 'Logistics & Delivery', 'Bank Transfer', ?)
+                """, (panda_exp_id, sale_date, f"Foodpanda Merchant Commission (Batch {batch_id})", foodpanda_comm, f"Auto-booked commission from Foodpanda gross sales of PHP {foodpanda_gross:,.2f}"))
+
+        # 6. Consolidated Recipe Inventory Deductions
         depleted_ingredients_count = 0
         batch_audit_note = f"POS Depletion: {summary_text} | {audit_note}".strip(" | ")
 
@@ -408,11 +555,11 @@ def web_sales_tab(username):
         client_db.update_all_product_costs()
 
         total_units_sold = sum(i['qty'] for i in valid_sales_payload) + sum(i['qty'] for i in valid_modifiers_payload)
-        net_sales_amount = gross_sales_amount - discounts_total_amount
 
         feedback_msg = (
             f"EOD Closing Recorded: Successfully logged {total_units_sold:g} items sold under Batch {batch_id}. "
             f"Gross Sales: ₱{gross_sales_amount:,.2f} | Discounts: -₱{discounts_total_amount:,.2f} | Net Sales: ₱{net_sales_amount:,.2f}. "
+            f"Tenders Settled: ₱{total_settled_tenders:,.2f} (Cash Over/Short: ₱{over_short:+,.2f}). "
             f"Consolidated deductions applied across {depleted_ingredients_count} ingredients."
         )
         return redirect(f"/portal/{username}/sales?msg={feedback_msg}&alert_type=success")
@@ -466,12 +613,17 @@ def web_sales_tab(username):
             d_dict['Category'] = str(d_dict.get('Category') or 'Promotional / Marketing')
             active_discounts.append(d_dict)
 
-    # 4. Read historical sales grouped by date
+    # 4. Read historical sales & cash drawer balancing grouped by date
     sales_history = []
     cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='Sales'")
     if cursor.fetchone():
         sales_ledger_df = pd.read_sql("SELECT * FROM Sales ORDER BY Sale_Date DESC, Sale_Time DESC", conn)
         
+        drawer_df = pd.DataFrame()
+        cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='Cash_Drawer_Logs'")
+        if cursor.fetchone():
+            drawer_df = pd.read_sql("SELECT * FROM Cash_Drawer_Logs ORDER BY Date DESC, Time DESC", conn)
+
         if not sales_ledger_df.empty:
             sales_ledger_df['Sale_Date'] = sales_ledger_df['Sale_Date'].astype(str)
             unique_dates = sales_ledger_df['Sale_Date'].unique()
@@ -486,12 +638,39 @@ def web_sales_tab(username):
                 discount_total = abs(float(pd.to_numeric(day_entries[day_entries['Total_Amount'] < 0]['Total_Amount'], errors='coerce').fillna(0.0).sum()))
                 net_revenue = float(pd.to_numeric(day_entries['Total_Amount'], errors='coerce').fillna(0.0).sum())
 
+                day_drawer = None
+                if not drawer_df.empty and 'Date' in drawer_df.columns:
+                    match_drawer = drawer_df[drawer_df['Date'] == u_date]
+                    if not match_drawer.empty:
+                        d_row = match_drawer.iloc[0]
+                        day_drawer = {
+                            'starting_float': float(d_row.get('Starting_Float') or 0.0),
+                            'cash_sales': float(d_row.get('Cash_Sales') or 0.0),
+                            'cash_paid_outs': float(d_row.get('Cash_Paid_Outs') or 0.0),
+                            'expected_cash': float(d_row.get('Expected_Cash') or 0.0),
+                            'actual_cash': float(d_row.get('Actual_Counted_Cash') or 0.0),
+                            'over_short': float(d_row.get('Discrepancy_Over_Short') or 0.0),
+                            'gcash': float(d_row.get('GCash_Sales') or 0.0),
+                            'maya': float(d_row.get('Maya_Sales') or 0.0),
+                            'card': float(d_row.get('Card_Sales') or 0.0),
+                            'grab_gross': float(d_row.get('Grab_Gross') or 0.0),
+                            'grab_comm': float(d_row.get('Grab_Commission') or 0.0),
+                            'grab_net': float(d_row.get('Grab_Net') or 0.0),
+                            'panda_gross': float(d_row.get('Foodpanda_Gross') or 0.0),
+                            'panda_comm': float(d_row.get('Foodpanda_Commission') or 0.0),
+                            'panda_net': float(d_row.get('Foodpanda_Net') or 0.0),
+                            'total_tenders': float(d_row.get('Total_Settled_Tenders') or 0.0),
+                            'variance': float(d_row.get('Tender_Variance') or 0.0),
+                            'notes': str(d_row.get('Explanation_Notes') or '').strip()
+                        }
+
                 sales_history.append({
                     'date': u_date,
                     'total_qty': total_qty,
                     'total_revenue': net_revenue,
                     'gross_revenue': gross_revenue,
                     'discount_total': discount_total,
+                    'drawer': day_drawer,
                     'entries': day_entries.to_dict('records')
                 })
 
