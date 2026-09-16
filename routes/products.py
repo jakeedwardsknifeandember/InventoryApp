@@ -1,5 +1,5 @@
 # routes/products.py - Complete Product Catalog, Costing & Lifecycle Controller
-from flask import Blueprint, request, redirect, session, render_template, flash
+from flask import Blueprint, request, redirect, session, render_template, flash, jsonify
 from modules.database import InventoryDB
 import pandas as pd
 import sqlite3
@@ -64,6 +64,104 @@ def sync_product_categories(db_path):
         conn.close()
     except Exception as e:
         print(f"Category auto-sync error: {e}")
+
+@products_bp.route('/portal/<username>/products/inline-update', methods=['POST'])
+def inline_update_product(username):
+    """Instant AJAX endpoint for inline editing Selling Price or Category directly from the catalog table."""
+    username = username.lower().strip()
+    if session.get('logged_in_user') != username and not session.get('is_admin'):
+        return jsonify({'status': 'error', 'message': 'Unauthorized'}), 401
+    
+    if session.get('staff_role') != 'Platform Owner Admin':
+        return jsonify({'status': 'error', 'message': 'Strictly reserved for Platform Owner Admin'}), 403
+
+    client_db_path = f"data/client_{username}.db"
+    db = InventoryDB(client_db_path)
+
+    try:
+        payload = request.get_json(force=True)
+    except Exception:
+        return jsonify({'status': 'error', 'message': 'Malformed JSON payload'}), 400
+
+    update_type = payload.get('type')
+
+    # 1. INLINE UPDATE SELLING PRICE
+    if update_type == 'price':
+        product_id = str(payload.get('product_id', '')).strip()
+        try:
+            new_price = float(payload.get('price', 0.0))
+        except (ValueError, TypeError):
+            return jsonify({'status': 'error', 'message': 'Invalid price value'}), 400
+
+        if new_price < 0:
+            return jsonify({'status': 'error', 'message': 'Price cannot be negative'}), 400
+
+        conn = sqlite3.connect(client_db_path, timeout=20.0)
+        cursor = conn.cursor()
+
+        cursor.execute("SELECT Cost_Price FROM Products WHERE Product_ID = ?", (product_id,))
+        row = cursor.fetchone()
+        cost_price = float(row[0] or 0.0) if row else 0.0
+
+        margin_pct = ((new_price - cost_price) / new_price * 100.0) if new_price > 0 else 0.0
+
+        cursor.execute("""
+            UPDATE Products 
+            SET Selling_Price = ?, Margin_Percentage = ? 
+            WHERE Product_ID = ?
+        """, (new_price, margin_pct, product_id))
+
+        conn.commit()
+        conn.close()
+
+        db.update_all_product_costs()
+
+        return jsonify({
+            'status': 'success',
+            'product_id': product_id,
+            'selling_price': new_price,
+            'cost_price': cost_price,
+            'margin_pct': margin_pct
+        })
+
+    # 2. INLINE UPDATE CATEGORY
+    elif update_type == 'category':
+        new_category = str(payload.get('category', '')).strip()
+        target_type = payload.get('target_type', 'product')
+        parent_item = str(payload.get('parent_item', '')).strip()
+        product_id = str(payload.get('product_id', '')).strip()
+
+        if not new_category:
+            return jsonify({'status': 'error', 'message': 'Category name cannot be empty'}), 400
+
+        conn = sqlite3.connect(client_db_path, timeout=20.0)
+        cursor = conn.cursor()
+
+        if target_type == 'parent' and parent_item:
+            cursor.execute("""
+                UPDATE Products 
+                SET Category = ? 
+                WHERE LOWER(TRIM(Parent_Item)) = LOWER(TRIM(?))
+            """, (new_category, parent_item))
+        elif product_id:
+            cursor.execute("""
+                UPDATE Products 
+                SET Category = ? 
+                WHERE Product_ID = ?
+            """, (new_category, product_id))
+
+        conn.commit()
+        conn.close()
+
+        sync_product_categories(client_db_path)
+
+        return jsonify({
+            'status': 'success',
+            'new_category': new_category,
+            'message': f"Category updated to '{new_category}' successfully."
+        })
+
+    return jsonify({'status': 'error', 'message': 'Invalid update type'}), 400
 
 @products_bp.route('/portal/<username>/products', methods=['GET', 'POST'])
 def web_products_tab(username):
@@ -210,7 +308,6 @@ def web_products_tab(username):
         if 'Variant_Name' not in df.columns:
             df['Variant_Name'] = 'Regular'
 
-        # STRICT NORMALIZATION OF PARENT AND VARIANT LABELS
         for idx, row in df.iterrows():
             raw_p = row.get('Parent_Item')
             raw_v = row.get('Variant_Name')

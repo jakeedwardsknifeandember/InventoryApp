@@ -15,7 +15,7 @@
         font-weight: 700;
         text-transform: uppercase;
         letter-spacing: 0.5px;
-        padding: 12px 16px;
+        padding: 12px 14px;
         border-bottom: 2px solid #2d2d34;
     }
     .loyverse-parent-row {
@@ -27,8 +27,8 @@
         background-color: #262630 !important;
     }
     .loyverse-parent-row td {
-        padding: 12px 16px;
-        font-size: 14.5px;
+        padding: 10px 14px;
+        font-size: 14px;
         font-weight: 700;
         color: #ffffff !important;
         border-bottom: 1px solid #2d2d34;
@@ -41,7 +41,7 @@
         background-color: #22222a !important;
     }
     .loyverse-variant-row td {
-        padding: 10px 16px;
+        padding: 8px 14px;
         font-size: 13.5px;
         color: #e2e8f0 !important;
         border-bottom: 1px solid #27272c;
@@ -49,12 +49,61 @@
     .variant-indent-tree {
         color: #64748b;
         font-family: monospace;
-        margin-right: 8px;
+        margin-right: 6px;
         font-weight: bold;
     }
     .high-contrast-subtext {
         color: #94a3b8 !important;
         font-weight: 500;
+    }
+
+    /* INLINE EDIT INPUT & SELECT STYLING */
+    .inline-edit-input {
+        background-color: #121216;
+        color: #ffffff;
+        border: 1px solid #333340;
+        border-radius: 5px;
+        padding: 3px 8px;
+        font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+        font-size: 13px;
+        font-weight: 700;
+        width: 105px;
+        transition: all 0.15s ease;
+    }
+    .inline-edit-input:hover {
+        border-color: #4f46e5;
+        background-color: #1a1a24;
+    }
+    .inline-edit-input:focus {
+        border-color: #10b981;
+        background-color: #1e1e2d;
+        outline: none;
+        box-shadow: 0 0 0 2px rgba(16, 185, 129, 0.2);
+    }
+
+    .inline-category-select {
+        background-color: #121216;
+        color: #cbd5e1;
+        border: 1px solid #333340;
+        border-radius: 5px;
+        padding: 3px 8px;
+        font-size: 12px;
+        font-weight: 600;
+        width: 135px;
+        cursor: pointer;
+        transition: all 0.15s ease;
+    }
+    .inline-category-select:hover {
+        border-color: #4f46e5;
+        background-color: #1a1a24;
+        color: #ffffff;
+    }
+    .inline-category-select:focus {
+        border-color: #10b981;
+        background-color: #1e1e2d;
+        color: #ffffff;
+        outline: none;
+        box-shadow: 0 0 0 2px rgba(16, 185, 129, 0.2);
     }
 
     /* SUB-TAB BAR STYLING */
@@ -113,7 +162,7 @@
 <div class="d-flex justify-content-between align-items-center mb-3">
     <div>
         <h3 class="m-0 text-white" style="font-weight: 800; text-transform: uppercase; letter-spacing: -0.5px;">Products & Portion Costing</h3>
-        <small style="color: #cbd5e1;">Live BOM validation, Food Cost % health badges, and lifecycle catalog management.</small>
+        <small style="color: #cbd5e1;">Live BOM validation, Food Cost % health badges, and instant table catalog management.</small>
     </div>
     <button class="btn btn-primary fw-bold px-4 py-2" style="border-radius: 6px;" data-bs-toggle="modal" data-bs-target="#addProductModal">+ Add New Product</button>
 </div>
@@ -155,14 +204,14 @@
         
         <div class="col-md-4 d-flex align-items-center">
             <label class="text-light me-2 mb-0 small fw-bold">Sort by:</label>
-            <select name="sort_by" class="form-select bg-primary text-white border-primary" style="width: auto;" onchange="this.form.submit()">
+            <select name="sort_by" class="form-select bg-dark text-white border-secondary" style="width: auto;" onchange="this.form.submit()">
                 <option value="id" {% if current_sort == 'id' %}selected{% endif %}>Product ID</option>
                 <option value="name" {% if current_sort == 'name' %}selected{% endif %}>Product Name</option>
                 <option value="price" {% if current_sort == 'price' %}selected{% endif %}>Selling Price</option>
                 <option value="margin" {% if current_sort == 'margin' %}selected{% endif %}>Margin %</option>
                 <option value="food_cost" {% if current_sort == 'food_cost' %}selected{% endif %}>Food Cost %</option>
             </select>
-            <select name="order" class="form-select bg-primary text-white border-primary ms-2" style="width: auto;" onchange="this.form.submit()">
+            <select name="order" class="form-select bg-dark text-white border-secondary ms-2" style="width: auto;" onchange="this.form.submit()">
                 <option value="asc" {% if current_order == 'asc' %}selected{% endif %}>Ascending</option>
                 <option value="desc" {% if current_order == 'desc' %}selected{% endif %}>Descending</option>
             </select>
@@ -170,7 +219,7 @@
 
         <div class="col-md-3 d-flex align-items-center">
             <label class="text-light me-2 mb-0 small fw-bold">Category:</label>
-            <select name="category" class="form-select bg-primary text-white border-primary" onchange="this.form.submit()">
+            <select name="category" class="form-select bg-dark text-white border-secondary" onchange="this.form.submit()">
                 <option value="All" {% if current_category == 'All' %}selected{% endif %}>All Categories</option>
                 {% for c in categories %}
                 <option value="{{ c }}" {% if current_category == c %}selected{% endif %}>{{ c }}</option>
@@ -188,21 +237,21 @@
     Showing <span class="text-white fw-bold">{{ total_count }}</span> product option(s) in this view
 </div>
 
-<!-- UNIFIED LOYVERSE NESTED PRODUCT LEDGER -->
+<!-- UNIFIED LOYVERSE NESTED PRODUCT LEDGER WITH INLINE QUICK EDITING -->
 <div class="content-card p-0 overflow-hidden" style="background: #1e1e24; border: 1px solid #2d2d34; border-radius: 8px;">
     <div class="table-responsive">
         <table class="loyverse-table align-middle m-0">
             <thead>
                 <tr>
                     <th style="width: 10%;">PRODUCT ID</th>
-                    <th style="width: 23%;">PRODUCT / VARIANT ITEM</th>
-                    <th style="width: 13%;">CATEGORY</th>
-                    <th style="width: 11%;">SELLING PRICE</th>
+                    <th style="width: 21%;">PRODUCT / VARIANT ITEM</th>
+                    <th style="width: 14%;">CATEGORY</th>
+                    <th style="width: 13%;">SELLING PRICE</th>
                     <th style="width: 10%;">BOM COST</th>
                     <th style="width: 14%;">GROSS MARGIN</th>
                     <th style="width: 10%;">FOOD COST %</th>
                     <th class="text-center" style="width: 6%;">STATUS</th>
-                    <th class="text-end pe-4" style="width: 13%;">ACTIONS</th>
+                    <th class="text-end pe-4" style="width: 12%;">ACTIONS</th>
                 </tr>
             </thead>
             <tbody>
@@ -211,7 +260,7 @@
                     {% set has_multiple_variants = (variants|length > 1) %}
 
                     {% if has_multiple_variants %}
-                        <!-- PARENT ROW WITH EXPAND CARET (ONLY FOR 2+ VARIANTS) -->
+                        <!-- PARENT ROW WITH EXPAND CARET & AGGREGATE SUMMARY -->
                         <tr class="loyverse-parent-row" style="cursor: pointer;" onclick="toggleParentVariants({{ parent_index }})">
                             <td>
                                 <span id="caret-{{ parent_index }}" class="font-monospace text-info me-2 fw-bold" style="display: inline-block; width: 14px;">v</span>
@@ -220,10 +269,50 @@
                             <td>
                                 <span class="text-white fw-bold fs-6">{{ parent }}</span>
                             </td>
-                            <td>
-                                <span class="badge bg-secondary text-white fw-bold">{{ variants[0].Category if variants else 'General' }}</span>
+                            <td onclick="event.stopPropagation();">
+                                <select class="inline-category-select" data-parent="{{ parent }}" onchange="updateInlineCategory(this, 'parent')">
+                                    {% for c in categories %}
+                                    <option value="{{ c }}" {% if variants[0].Category == c %}selected{% endif %}>{{ c }}</option>
+                                    {% endfor %}
+                                    {% if variants[0].Category not in categories and variants[0].Category %}
+                                    <option value="{{ variants[0].Category }}" selected>{{ variants[0].Category }}</option>
+                                    {% endif %}
+                                </select>
                             </td>
-                            <td colspan="5"></td>
+                            <td class="font-monospace text-light small">
+                                {% set min_p = variants|map(attribute='Selling_Price')|min %}
+                                {% set max_p = variants|map(attribute='Selling_Price')|max %}
+                                {% if min_p == max_p %}
+                                    PHP {{ "%.2f"|format(min_p) }}
+                                {% else %}
+                                    PHP {{ "%.2f"|format(min_p) }} - {{ "%.2f"|format(max_p) }}
+                                {% endif %}
+                            </td>
+                            <td class="font-monospace text-secondary small">
+                                {% set min_c = variants|map(attribute='Cost_Price')|min %}
+                                {% set max_c = variants|map(attribute='Cost_Price')|max %}
+                                {% if min_c == max_c %}
+                                    PHP {{ "%.2f"|format(min_c) }}
+                                {% else %}
+                                    PHP {{ "%.2f"|format(min_c) }} - {{ "%.2f"|format(max_c) }}
+                                {% endif %}
+                            </td>
+                            <td class="text-secondary small font-monospace">
+                                <span>{{ variants|length }} variant options</span>
+                            </td>
+                            <td>
+                                {% set avg_fc = (variants|map(attribute='Food_Cost_Pct')|sum) / (variants|length) %}
+                                {% if avg_fc <= 30.0 %}
+                                    <span class="badge bg-success px-2 py-1" style="font-size:10px;">Avg {{ "%.1f"|format(avg_fc) }}% (Healthy)</span>
+                                {% elif avg_fc <= 35.0 %}
+                                    <span class="badge bg-warning text-dark px-2 py-1" style="font-size:10px;">Avg {{ "%.1f"|format(avg_fc) }}% (Caution)</span>
+                                {% else %}
+                                    <span class="badge bg-danger px-2 py-1" style="font-size:10px;">Avg {{ "%.1f"|format(avg_fc) }}% (High Risk)</span>
+                                {% endif %}
+                            </td>
+                            <td class="text-center">
+                                <span class="badge bg-success px-2 py-1" style="font-size:10px;">Active</span>
+                            </td>
                             <td class="text-end pe-4" onclick="event.stopPropagation();">
                                 <button type="button" 
                                         class="btn btn-sm btn-outline-success fw-bold px-2 py-1" 
@@ -237,9 +326,9 @@
                             </td>
                         </tr>
 
-                        <!-- CHILD VARIANT ROWS -->
+                        <!-- CHILD VARIANT ROWS WITH INLINE PRICE INPUT -->
                         {% for p in variants %}
-                        <tr class="loyverse-variant-row child-group-{{ parent_index }}" style="display: none;">
+                        <tr class="loyverse-variant-row child-group-{{ parent_index }}" style="display: none;" id="row-{{ p.Product_ID }}">
                             <td class="ps-4">
                                 <span class="font-monospace text-info fw-bold" style="font-size: 12.5px;">{{ p.Product_ID }}</span>
                             </td>
@@ -248,15 +337,27 @@
                                 <strong class="text-white">{{ p.Variant_Name }}</strong>
                                 <small class="high-contrast-subtext ms-1">({{ p.Product_Name }})</small>
                             </td>
-                            <td class="text-light small">{{ p.Category }}</td>
-                            <td class="font-monospace text-white fw-bold">PHP {{ "%.2f"|format(p.Selling_Price) }}</td>
-                            <td class="font-monospace text-light">PHP {{ "%.2f"|format(p.Cost_Price) }}</td>
+                            <td class="text-secondary small">
+                                <span class="badge bg-dark border border-secondary text-secondary child-cat-badge" style="font-size: 10px;">↳ {{ p.Category }}</span>
+                            </td>
                             <td>
+                                <div class="d-flex align-items-center">
+                                    <span class="text-secondary small font-monospace me-1">₱</span>
+                                    <input type="number" step="0.01" min="0" 
+                                           class="inline-edit-input" 
+                                           data-id="{{ p.Product_ID }}" 
+                                           data-cost="{{ p.Cost_Price }}"
+                                           value="{{ '%.2f'|format(p.Selling_Price) }}" 
+                                           onchange="updateInlinePrice(this)">
+                                </div>
+                            </td>
+                            <td class="font-monospace text-light" id="cost-{{ p.Product_ID }}">PHP {{ "%.2f"|format(p.Cost_Price) }}</td>
+                            <td id="margin-{{ p.Product_ID }}">
                                 <span class="{{ 'text-success' if p.Margin_Percentage >= 65 else ('text-warning' if p.Margin_Percentage > 0 else 'text-danger') }} font-monospace fw-bold">
                                     PHP {{ "%.2f"|format(p.Cash_Profit) }} ({{ "%.1f"|format(p.Margin_Percentage) }}%)
                                 </span>
                             </td>
-                            <td>
+                            <td id="fc-{{ p.Product_ID }}">
                                 {% if p.Selling_Price <= 0 or p.Cost_Price <= 0 %}
                                     <span class="badge bg-secondary px-2 py-1" style="font-size:10px;">No Recipe Set</span>
                                 {% elif p.Food_Cost_Pct <= 30.0 %}
@@ -296,24 +397,43 @@
                         {% endfor %}
 
                     {% else %}
-                        <!-- SINGLE STANDALONE ITEM (CLEAN DIRECT ROW, NO ACCORDION) -->
+                        <!-- SINGLE STANDALONE ITEM WITH INLINE CATEGORY & PRICE EDITING -->
                         {% set p = variants[0] %}
-                        <tr class="loyverse-variant-row">
+                        <tr class="loyverse-variant-row" id="row-{{ p.Product_ID }}">
                             <td>
                                 <span class="font-monospace text-info fw-bold" style="font-size: 12.5px;">{{ p.Product_ID }}</span>
                             </td>
                             <td>
                                 <strong class="text-white fs-6">{{ p.Product_Name }}</strong>
                             </td>
-                            <td class="text-light small">{{ p.Category }}</td>
-                            <td class="font-monospace text-white fw-bold">PHP {{ "%.2f"|format(p.Selling_Price) }}</td>
-                            <td class="font-monospace text-light">PHP {{ "%.2f"|format(p.Cost_Price) }}</td>
                             <td>
+                                <select class="inline-category-select" data-id="{{ p.Product_ID }}" data-parent="{{ p.Parent_Item }}" onchange="updateInlineCategory(this, 'product')">
+                                    {% for c in categories %}
+                                    <option value="{{ c }}" {% if p.Category == c %}selected{% endif %}>{{ c }}</option>
+                                    {% endfor %}
+                                    {% if p.Category not in categories and p.Category %}
+                                    <option value="{{ p.Category }}" selected>{{ p.Category }}</option>
+                                    {% endif %}
+                                </select>
+                            </td>
+                            <td>
+                                <div class="d-flex align-items-center">
+                                    <span class="text-secondary small font-monospace me-1">₱</span>
+                                    <input type="number" step="0.01" min="0" 
+                                           class="inline-edit-input" 
+                                           data-id="{{ p.Product_ID }}" 
+                                           data-cost="{{ p.Cost_Price }}"
+                                           value="{{ '%.2f'|format(p.Selling_Price) }}" 
+                                           onchange="updateInlinePrice(this)">
+                                </div>
+                            </td>
+                            <td class="font-monospace text-light" id="cost-{{ p.Product_ID }}">PHP {{ "%.2f"|format(p.Cost_Price) }}</td>
+                            <td id="margin-{{ p.Product_ID }}">
                                 <span class="{{ 'text-success' if p.Margin_Percentage >= 65 else ('text-warning' if p.Margin_Percentage > 0 else 'text-danger') }} font-monospace fw-bold">
                                     PHP {{ "%.2f"|format(p.Cash_Profit) }} ({{ "%.1f"|format(p.Margin_Percentage) }}%)
                                 </span>
                             </td>
-                            <td>
+                            <td id="fc-{{ p.Product_ID }}">
                                 {% if p.Selling_Price <= 0 or p.Cost_Price <= 0 %}
                                     <span class="badge bg-secondary px-2 py-1" style="font-size:10px;">No Recipe Set</span>
                                 {% elif p.Food_Cost_Pct <= 30.0 %}
@@ -570,11 +690,136 @@ function toggleParentVariants(index) {
     });
     
     if (caret) {
-        if (caret.textContent.trim() === 'v') {
-            caret.textContent = '^';
+        caret.textContent = (caret.textContent.trim() === 'v') ? '^' : 'v';
+    }
+}
+
+// INLINE SELLING PRICE QUICK-UPDATE
+async function updateInlinePrice(inputEl) {
+    const productId = inputEl.getAttribute('data-id');
+    const costPrice = parseFloat(inputEl.getAttribute('data-cost')) || 0.0;
+    const newPrice = parseFloat(inputEl.value) || 0.0;
+    const originalValue = inputEl.defaultValue;
+
+    if (newPrice < 0) {
+        alert("Selling price cannot be negative.");
+        inputEl.value = originalValue;
+        return;
+    }
+
+    inputEl.style.borderColor = '#3b82f6';
+
+    try {
+        const response = await fetch('/portal/{{ username }}/products/inline-update', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                type: 'price',
+                product_id: productId,
+                price: newPrice
+            })
+        });
+
+        const res = await response.json();
+
+        if (res.status === 'success') {
+            inputEl.style.borderColor = '#10b981';
+            inputEl.defaultValue = newPrice.toFixed(2);
+            inputEl.value = newPrice.toFixed(2);
+
+            const profit = newPrice - costPrice;
+            const marginPct = newPrice > 0 ? (profit / newPrice) * 100 : 0;
+            const foodCostPct = newPrice > 0 ? (costPrice / newPrice) * 100 : 0;
+
+            const marginCell = document.getElementById('margin-' + productId);
+            if (marginCell) {
+                const colorClass = marginPct >= 65 ? 'text-success' : (marginPct > 0 ? 'text-warning' : 'text-danger');
+                marginCell.innerHTML = `<span class="${colorClass} font-monospace fw-bold">PHP ${profit.toFixed(2)} (${marginPct.toFixed(1)}%)</span>`;
+            }
+
+            const fcCell = document.getElementById('fc-' + productId);
+            if (fcCell) {
+                if (newPrice <= 0 || costPrice <= 0) {
+                    fcCell.innerHTML = '<span class="badge bg-secondary px-2 py-1" style="font-size:10px;">No Recipe Set</span>';
+                } else if (foodCostPct <= 30.0) {
+                    fcCell.innerHTML = `<span class="badge bg-success px-2 py-1" style="font-size:10px;">${foodCostPct.toFixed(1)}% (Healthy)</span>`;
+                } else if (foodCostPct <= 35.0) {
+                    fcCell.innerHTML = `<span class="badge bg-warning text-dark px-2 py-1" style="font-size:10px;">${foodCostPct.toFixed(1)}% (Caution)</span>`;
+                } else {
+                    fcCell.innerHTML = `<span class="badge bg-danger px-2 py-1" style="font-size:10px;">${foodCostPct.toFixed(1)}% (High Risk)</span>`;
+                }
+            }
+
+            const editPriceInput = document.getElementById('editSellingPriceInput' + productId);
+            if (editPriceInput) {
+                editPriceInput.value = newPrice.toFixed(2);
+            }
+
+            setTimeout(() => {
+                inputEl.style.borderColor = '#333340';
+            }, 1200);
         } else {
-            caret.textContent = 'v';
+            inputEl.style.borderColor = '#ef4444';
+            alert('Update failed: ' + res.message);
+            inputEl.value = originalValue;
         }
+    } catch (err) {
+        inputEl.style.borderColor = '#ef4444';
+        alert('Network error updating price: ' + err.message);
+        inputEl.value = originalValue;
+    }
+}
+
+// INLINE CATEGORY QUICK-UPDATE
+async function updateInlineCategory(selectEl, targetType) {
+    const newCategory = selectEl.value;
+    const parentItem = selectEl.getAttribute('data-parent') || '';
+    const productId = selectEl.getAttribute('data-id') || '';
+    const originalValue = selectEl.getAttribute('data-current') || selectEl.value;
+
+    selectEl.style.borderColor = '#3b82f6';
+
+    try {
+        const response = await fetch('/portal/{{ username }}/products/inline-update', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                type: 'category',
+                target_type: targetType,
+                parent_item: parentItem,
+                product_id: productId,
+                category: newCategory
+            })
+        });
+
+        const res = await response.json();
+
+        if (res.status === 'success') {
+            selectEl.style.borderColor = '#10b981';
+            selectEl.setAttribute('data-current', newCategory);
+
+            if (targetType === 'parent') {
+                const parentRow = selectEl.closest('tr');
+                const parentIndex = parentRow.getAttribute('onclick').match(/\d+/)[0];
+                const childRows = document.querySelectorAll('.child-group-' + parentIndex);
+                childRows.forEach(row => {
+                    const badge = row.querySelector('.child-cat-badge');
+                    if (badge) badge.textContent = '↳ ' + newCategory;
+                });
+            }
+
+            setTimeout(() => {
+                selectEl.style.borderColor = '#333340';
+            }, 1200);
+        } else {
+            selectEl.style.borderColor = '#ef4444';
+            alert('Category update failed: ' + res.message);
+            selectEl.value = originalValue;
+        }
+    } catch (err) {
+        selectEl.style.borderColor = '#ef4444';
+        alert('Network error updating category: ' + err.message);
+        selectEl.value = originalValue;
     }
 }
 
