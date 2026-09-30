@@ -399,6 +399,13 @@ def web_products_tab(username):
         product_modifiers_map[pid_s].append(str(gid).strip())
     conn.close()
 
+    # ===== EXTRACT GET QUERY PARAMS BEFORE EMPTY-CHECK =====
+    search = request.args.get('search', '').lower()
+    status = request.args.get('status', 'Yes')
+    category = request.args.get('category', 'All')
+    sort_by = request.args.get('sort_by', 'id')
+    order = request.args.get('order', 'asc')
+
     # ===== GET DATA & APPLY FILTERS =====
     df = db.read_tab('Products')
     
@@ -449,12 +456,6 @@ def web_products_tab(username):
             df.at[idx, 'Variant_Name'] = v_str
 
         all_products_raw = df.to_dict('records')
-
-        search = request.args.get('search', '').lower()
-        status = request.args.get('status', 'Yes')
-        category = request.args.get('category', 'All')
-        sort_by = request.args.get('sort_by', 'id')
-        order = request.args.get('order', 'asc')
 
         if search:
             df = df[df['Product_Name'].astype(str).str.lower().str.contains(search) | 
