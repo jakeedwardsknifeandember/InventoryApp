@@ -1,6 +1,8 @@
-# routes/settings.py - Enterprise Settings Engine with Sub-Tab Routing, Multi-Encoding CSV Sync, Token-Sorted Key Matching, Integrity Guard & Master Security PIN
+# routes/settings.py - Enterprise Settings Engine with Sub-Tab Routing, Color-Coded Excel/CSV Sync, Token-Sorted Key Matching, Integrity Guard & Master Security PIN
 from flask import Blueprint, request, redirect, session, render_template, send_file
 from modules.database import InventoryDB
+from openpyxl.styles import PatternFill, Font, Alignment, Border, Side
+from openpyxl.utils import get_column_letter
 import sqlite3
 import pandas as pd
 from datetime import datetime
@@ -11,6 +13,110 @@ import re
 settings_bp = Blueprint('settings', __name__)
 
 USER_DB_PATH = "data/users.db"
+
+# Column classification for color-coded Excel templates & exports
+EDITABLE_COLUMNS_MAP = {
+    'ingredients': {
+        'Ingredient_Name', 'Unit', 'Category', 'Ingredient_Type',
+        'Current_Stock', 'Min_Stock', 'Purchase_Cost', 'Pack_Size',
+        'Purchase_Unit', 'Active', 'Supplier', 'Description'
+    },
+    'products': {
+        'Product_Name', 'Parent_Item', 'Variant_Name', 'Category',
+        'Selling_Price', 'Active'
+    },
+    'recipes': {
+        'Product_ID', 'Ingredient_ID', 'Quantity_Required', 'Unit'
+    },
+    'prep_recipes': {
+        'Prepped_ID', 'Raw_Ingredient_ID', 'Quantity_Required', 'Unit', 'Batch_Yield'
+    }
+}
+
+def build_styled_excel_buffer(df, data_type):
+    """Generates a color-coded .xlsx workbook in memory with Green (Editable) and Gray (Auto/System) highlights plus an Instructions tab."""
+    buffer = io.BytesIO()
+    editable_set = EDITABLE_COLUMNS_MAP.get(data_type, set())
+
+    with pd.ExcelWriter(buffer, engine='openpyxl') as writer:
+        df.to_excel(writer, sheet_name='Data', index=False)
+        ws = writer.sheets['Data']
+
+        # Styling palette
+        green_header_fill = PatternFill(start_color='166534', end_color='166534', fill_type='solid')
+        green_cell_fill = PatternFill(start_color='F0FDF4', end_color='F0FDF4', fill_type='solid')
+        gray_header_fill = PatternFill(start_color='475569', end_color='475569', fill_type='solid')
+        gray_cell_fill = PatternFill(start_color='F1F5F9', end_color='F1F5F9', fill_type='solid')
+
+        header_font = Font(name='Calibri', size=11, bold=True, color='FFFFFF')
+        cell_font = Font(name='Calibri', size=11, color='111827')
+        thin_side = Side(style='thin', color='CBD5E1')
+        cell_border = Border(left=thin_side, right=thin_side, top=thin_side, bottom=thin_side)
+
+        # Highlight at least 40 blank rows on empty templates so staff see where to type
+        max_styled_row = max(len(df) + 1, 41)
+
+        for col_idx, col_name in enumerate(df.columns, start=1):
+            is_editable = col_name in editable_set
+            h_fill = green_header_fill if is_editable else gray_header_fill
+            c_fill = green_cell_fill if is_editable else gray_cell_fill
+
+            # Style header cell
+            h_cell = ws.cell(row=1, column=col_idx)
+            h_cell.fill = h_fill
+            h_cell.font = header_font
+            h_cell.alignment = Alignment(horizontal='center', vertical='center')
+            h_cell.border = cell_border
+
+            # Style data/template cells
+            max_len = len(str(col_name))
+            for r_idx in range(2, max_styled_row + 1):
+                c = ws.cell(row=r_idx, column=col_idx)
+                c.fill = c_fill
+                c.font = cell_font
+                c.border = cell_border
+                if c.value is not None:
+                    max_len = max(max_len, len(str(c.value)))
+
+            col_letter = get_column_letter(col_idx)
+            ws.column_dimensions[col_letter].width = min(max(max_len + 4, 15), 38)
+
+        ws.row_dimensions[1].height = 24
+        ws.freeze_panes = 'A2'
+
+        # Sheet 2: Staff Instructions Legend
+        inst_rows = [
+            ['COLOR GUIDE', 'MEANING', 'WHAT TO DO'],
+            ['GREEN COLUMNS', 'Manual Entry / Editable', 'Fill out or update these columns directly.'],
+            ['GRAY COLUMNS', 'Auto-Filled / System Calculated', 'DO NOT EDIT. Leave blank for new items; the app calculates or fills these automatically on upload.'],
+            ['', '', ''],
+            ['IMPORTANT RULES', '', ''],
+            ['1. Do not rename headers', 'Keep Row 1 column names on the Data tab exactly as they are.', ''],
+            ['2. Upload directly', 'Save this Excel (.xlsx) file and upload it directly in Settings -> Bulk Excel & CSV Data Sync.', ''],
+            ['3. New vs. Existing items', 'For new Ingredients or Products, leave the ID column blank. For existing items, keep the ID intact to update them.', '']
+        ]
+        inst_df = pd.DataFrame(inst_rows[1:], columns=inst_rows[0])
+        inst_df.to_excel(writer, sheet_name='Instructions', index=False)
+        ws_inst = writer.sheets['Instructions']
+
+        for col_idx in range(1, 4):
+            hc = ws_inst.cell(row=1, column=col_idx)
+            hc.fill = PatternFill(start_color='1E293B', end_color='1E293B', fill_type='solid')
+            hc.font = header_font
+            hc.alignment = Alignment(horizontal='left', vertical='center')
+
+        ws_inst.cell(row=2, column=1).fill = green_header_fill
+        ws_inst.cell(row=2, column=1).font = header_font
+        ws_inst.cell(row=3, column=1).fill = gray_header_fill
+        ws_inst.cell(row=3, column=1).font = header_font
+        ws_inst.cell(row=5, column=1).font = Font(name='Calibri', size=11, bold=True, color='1E293B')
+
+        ws_inst.column_dimensions['A'].width = 24
+        ws_inst.column_dimensions['B'].width = 36
+        ws_inst.column_dimensions['C'].width = 65
+
+    buffer.seek(0)
+    return buffer
 
 def normalize_text_key(text):
     """Normalizes string by removing punctuation, brackets, dashes, and collapsing multiple spaces."""
@@ -367,32 +473,37 @@ def web_settings_tab(username):
                     feedback_msg = f"Restoration Fault during file overwrite sequencing: {str(e)}"
                     alert_type = "danger"
 
-        # 7. BULK CSV IMPORT (DATA TAB)
+        # 7. BULK EXCEL (.xlsx) & CSV IMPORT (DATA TAB)
         elif action == 'bulk_import':
             target_tab = "data"
             target_table = request.form.get('import_target')
             uploaded_file = request.files.get('csv_file')
             
             if not uploaded_file or uploaded_file.filename == '':
-                feedback_msg = "Error: No CSV file attached for upload."
+                feedback_msg = "Error: No Excel or CSV file attached for upload."
                 alert_type = "danger"
             else:
                 try:
                     raw_bytes = uploaded_file.stream.read()
-                    decoded_text = None
+                    fname_lower = uploaded_file.filename.lower()
 
-                    for enc in ['utf-8-sig', 'utf-8', 'cp1252', 'latin-1', 'iso-8859-1']:
-                        try:
-                            decoded_text = raw_bytes.decode(enc)
-                            break
-                        except UnicodeDecodeError:
-                            continue
-                            
-                    if decoded_text is None:
-                        decoded_text = raw_bytes.decode('utf-8', errors='replace')
+                    if fname_lower.endswith(('.xlsx', '.xls')):
+                        df = pd.read_excel(io.BytesIO(raw_bytes), sheet_name=0)
+                    else:
+                        decoded_text = None
+                        for enc in ['utf-8-sig', 'utf-8', 'cp1252', 'latin-1', 'iso-8859-1']:
+                            try:
+                                decoded_text = raw_bytes.decode(enc)
+                                break
+                            except UnicodeDecodeError:
+                                continue
+                        if decoded_text is None:
+                            decoded_text = raw_bytes.decode('utf-8', errors='replace')
+                        stream = io.StringIO(decoded_text, newline=None)
+                        df = pd.read_csv(stream)
 
-                    stream = io.StringIO(decoded_text, newline=None)
-                    df = pd.read_csv(stream)
+                    # Drop completely empty rows (e.g., styled blank rows from Excel templates)
+                    df = df.dropna(how='all')
                     conn = sqlite3.connect(client_db_path, timeout=20.0)
 
                     # SCENARIO A: PRODUCT RECIPES
@@ -495,7 +606,7 @@ def web_settings_tab(username):
                                 session['skipped_errors'] = skipped_rows
                                 feedback_msg = f"Import Notice: All {len(skipped_rows)} rows skipped because items were not found."
                             else:
-                                feedback_msg = "Error: No valid recipe rows found in CSV."
+                                feedback_msg = "Error: No valid recipe rows found in uploaded file."
                             alert_type = "danger"
 
                     # SCENARIO B: KITCHEN PREP RECIPES
@@ -611,7 +722,7 @@ def web_settings_tab(username):
                                 session['skipped_errors'] = skipped_rows
                                 feedback_msg = f"Import Notice: All {len(skipped_rows)} rows skipped because constituents were not found in Ingredients."
                             else:
-                                feedback_msg = "Error: No valid kitchen prep rows found in CSV."
+                                feedback_msg = "Error: No valid kitchen prep rows found in uploaded file."
                             alert_type = "danger"
 
                     # SCENARIO C: INGREDIENTS OR PRODUCTS SAFE UPSERT
@@ -735,10 +846,10 @@ def web_settings_tab(username):
                         alert_type = "success"
 
                 except Exception as e:
-                    feedback_msg = f"CSV Format Error: {str(e)}"
+                    feedback_msg = f"File Format Error: {str(e)}"
                     alert_type = "danger"
 
-        # 8. DOWNLOAD CSV TEMPLATES (DATA TAB)
+        # 8. DOWNLOAD COLOR-CODED EXCEL TEMPLATES (DATA TAB)
         elif action == 'download_template':
             template_type = request.form.get('template_type')
             
@@ -758,17 +869,20 @@ def web_settings_tab(username):
                     df = pd.read_sql("SELECT * FROM Products LIMIT 0", conn)
                 conn.close()
                 
-                buffer = io.BytesIO()
-                df.to_csv(buffer, index=False, encoding='utf-8')
-                buffer.seek(0)
-                filename = f"template_{template_type}_{username}.csv"
-                return send_file(buffer, as_attachment=True, download_name=filename, mimetype='text/csv')
+                buffer = build_styled_excel_buffer(df, template_type)
+                filename = f"template_{template_type}_{username}.xlsx"
+                return send_file(
+                    buffer,
+                    as_attachment=True,
+                    download_name=filename,
+                    mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+                )
             except Exception as e:
                 feedback_msg = f"Template Generation Error: {str(e)}"
                 alert_type = "danger"
                 target_tab = "data"
 
-        # 9. EXPORT CSV DATA (DATA TAB)
+        # 9. EXPORT COLOR-CODED EXCEL DATA (DATA TAB)
         elif action == 'export_csv':
             export_target = request.form.get('export_target')
             
@@ -821,11 +935,14 @@ def web_settings_tab(username):
                     df = pd.read_sql("SELECT * FROM Products", conn)
                     conn.close()
                 
-                buffer = io.BytesIO()
-                df.to_csv(buffer, index=False, encoding='utf-8')
-                buffer.seek(0)
-                filename = f"export_{export_target}_{username}_{datetime.now().strftime('%Y%m%d')}.csv"
-                return send_file(buffer, as_attachment=True, download_name=filename, mimetype='text/csv')
+                buffer = build_styled_excel_buffer(df, export_target)
+                filename = f"export_{export_target}_{username}_{datetime.now().strftime('%Y%m%d')}.xlsx"
+                return send_file(
+                    buffer,
+                    as_attachment=True,
+                    download_name=filename,
+                    mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+                )
             except Exception as e:
                 feedback_msg = f"Export Error: {str(e)}"
                 alert_type = "danger"

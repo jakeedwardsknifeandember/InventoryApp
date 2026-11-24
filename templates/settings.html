@@ -168,7 +168,7 @@
             Notice: Unmatched Line Items (Skipped to Protect Database Integrity):
         </div>
         <p style="font-size: 12px; color: #cbd5e1; margin-bottom: 10px;">
-            The following lines in your CSV could not be matched to existing registered items. No duplicate or zero-cost phantom items were created:
+            The following lines in your spreadsheet could not be matched to existing registered items. No duplicate or zero-cost phantom items were created:
         </p>
         <ul style="margin: 0; padding-left: 20px; font-size: 12.5px; max-height: 180px; overflow-y: auto; font-family: monospace;">
             {% for err in skipped_errors %}
@@ -637,29 +637,29 @@
 {% if current_tab == 'data' %}
 <div class="settings-grid">
     <div class="settings-card" style="border-color: #3b8ed0;">
-        <h3 class="card-title" style="color:#3b8ed0;">Bulk CSV Data Sync</h3>
-        <p style="font-size:13px; color:#a1a1aa; line-height:1.5; margin-bottom:15px;">Download mapped templates, export current records, or upload formatted CSV spreadsheets to onboard or mass-edit ingredients, products, menu recipes, and kitchen prep blueprints.</p>
+        <h3 class="card-title" style="color:#3b8ed0;">Bulk Excel & CSV Data Sync</h3>
+        <p style="font-size:13px; color:#a1a1aa; line-height:1.5; margin-bottom:12px;">Download color-coded Excel templates (<b style="color:#4ade80;">Green = Edit</b>, <b style="color:#94a3b8;">Gray = Auto-Filled</b>), export current records, or upload completed <b>.xlsx</b> or <b>.csv</b> spreadsheets.</p>
         
         <div style="display:grid; grid-template-columns: repeat(2, 1fr); gap:8px; margin-bottom: 12px;">
             <form method="post" action="/portal/{{ username }}/settings">
                 <input type="hidden" name="action_type" value="download_template">
                 <input type="hidden" name="template_type" value="ingredients">
-                <button type="submit" class="action-btn" style="width:100%; font-size:11px; background:#4b5563;">Ingredient Template</button>
+                <button type="submit" class="action-btn" style="width:100%; font-size:11px; background:#4b5563;">Ingredient Template (.xlsx)</button>
             </form>
             <form method="post" action="/portal/{{ username }}/settings">
                 <input type="hidden" name="action_type" value="download_template">
                 <input type="hidden" name="template_type" value="products">
-                <button type="submit" class="action-btn" style="width:100%; font-size:11px; background:#4b5563;">Product Template</button>
+                <button type="submit" class="action-btn" style="width:100%; font-size:11px; background:#4b5563;">Product Template (.xlsx)</button>
             </form>
             <form method="post" action="/portal/{{ username }}/settings">
                 <input type="hidden" name="action_type" value="download_template">
                 <input type="hidden" name="template_type" value="recipes">
-                <button type="submit" class="action-btn" style="width:100%; font-size:11px; background:#4b5563;">Menu Recipe Template</button>
+                <button type="submit" class="action-btn" style="width:100%; font-size:11px; background:#4b5563;">Menu Recipe Template (.xlsx)</button>
             </form>
             <form method="post" action="/portal/{{ username }}/settings">
                 <input type="hidden" name="action_type" value="download_template">
                 <input type="hidden" name="template_type" value="prep_recipes">
-                <button type="submit" class="action-btn" style="width:100%; font-size:11px; background:#4b5563;">Kitchen Prep Template</button>
+                <button type="submit" class="action-btn" style="width:100%; font-size:11px; background:#4b5563;">Kitchen Prep Template (.xlsx)</button>
             </form>
         </div>
         
@@ -667,22 +667,22 @@
             <form method="post" action="/portal/{{ username }}/settings">
                 <input type="hidden" name="action_type" value="export_csv">
                 <input type="hidden" name="export_target" value="ingredients">
-                <button type="submit" class="action-btn btn-blue" style="width:100%; font-size:11px;">Export Ingredients</button>
+                <button type="submit" class="action-btn btn-blue" style="width:100%; font-size:11px;">Export Ingredients (.xlsx)</button>
             </form>
             <form method="post" action="/portal/{{ username }}/settings">
                 <input type="hidden" name="action_type" value="export_csv">
                 <input type="hidden" name="export_target" value="products">
-                <button type="submit" class="action-btn btn-blue" style="width:100%; font-size:11px;">Export Products</button>
+                <button type="submit" class="action-btn btn-blue" style="width:100%; font-size:11px;">Export Products (.xlsx)</button>
             </form>
             <form method="post" action="/portal/{{ username }}/settings">
                 <input type="hidden" name="action_type" value="export_csv">
                 <input type="hidden" name="export_target" value="recipes">
-                <button type="submit" class="action-btn btn-blue" style="width:100%; font-size:11px;">Export Menu Recipes</button>
+                <button type="submit" class="action-btn btn-blue" style="width:100%; font-size:11px;">Export Menu Recipes (.xlsx)</button>
             </form>
             <form method="post" action="/portal/{{ username }}/settings">
                 <input type="hidden" name="action_type" value="export_csv">
                 <input type="hidden" name="export_target" value="prep_recipes">
-                <button type="submit" class="action-btn btn-blue" style="width:100%; font-size:11px;">Export Kitchen Prep</button>
+                <button type="submit" class="action-btn btn-blue" style="width:100%; font-size:11px;">Export Kitchen Prep (.xlsx)</button>
             </form>
         </div>
 
@@ -697,8 +697,8 @@
                 <option value="prep_recipes">Kitchen Prep Sub-Recipes (Portions → Raw Materials)</option>
             </select>
             
-            <label>Attach Completed CSV File:</label>
-            <input type="file" name="csv_file" accept=".csv" required style="background: #161622; border: 1px solid #3f3f46; color: #fff; padding: 8px; width: 100%; border-radius: 4px; margin-bottom: 15px; font-size: 12.5px;">
+            <label>Attach Completed Excel (.xlsx) or CSV File:</label>
+            <input type="file" name="csv_file" accept=".xlsx,.xls,.csv" required style="background: #161622; border: 1px solid #3f3f46; color: #fff; padding: 8px; width: 100%; border-radius: 4px; margin-bottom: 15px; font-size: 12.5px;">
             
             <button type="submit" class="action-btn btn-green" style="width:100%;">Execute Bulk Import</button>
         </form>
@@ -813,7 +813,7 @@ function togglePasswordVisibility(inputId, btnEl) {
 // REAL-TIME PHYSICAL THERMAL RECEIPT LIVE-PREVIEW ENGINE
 function updateReceiptLivePreview() {
     const headerInput = document.getElementById('cfg_header_name');
-    if (!headerInput) return; // Exit if not currently on Receipt tab
+    if (!headerInput) return;
 
     const headerName = headerInput.value.trim() || 'STORE NAME';
     const tagline = document.getElementById('cfg_tagline').value.trim();
