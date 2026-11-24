@@ -1,16 +1,36 @@
+<<<<<<< HEAD
 # routes/pos.py - Live Counter POS Terminal, Instant Ledger, Shift Lifecycle & Orders Void Engine
+=======
+# routes/pos.py - Live Counter POS Terminal & Instant Ledger Engine with Dynamic Thermal Printing, Shift Lifecycle & Xprinter XP-237B Integration
+>>>>>>> 4ee891a5f794046c285b7b4fb0a4643f0afbff6f
 from flask import Blueprint, request, jsonify, render_template, session, redirect
 from modules.database import InventoryDB
 from datetime import datetime
 import pandas as pd
 import sqlite3
 import json
+import ctypes
+from ctypes import wintypes
+import os
 
 pos_bp = Blueprint('pos', __name__)
 
+def get_db_connection(db_path, timeout=30.0):
+    """Creates a SQLite connection with WAL mode and 30s busy timeout to eliminate database locks."""
+    conn = sqlite3.connect(db_path, timeout=timeout)
+    conn.execute("PRAGMA journal_mode=WAL;")
+    conn.execute("PRAGMA busy_timeout=30000;")
+    conn.execute("PRAGMA synchronous=NORMAL;")
+    return conn
+
 def ensure_pos_tables_exist(db_path, username="STORE"):
+<<<<<<< HEAD
     """Ensures Sales, Shift_Logs, Cash_Drawer_Logs, Recipes, Ingredients, Modifiers, Modifier_Groups, Product_Modifiers, Staff_Accounts, and Store_Settings exist."""
     conn = sqlite3.connect(db_path, timeout=20.0)
+=======
+    """Ensures Sales, Shift_Logs, Cash_Drawer_Logs, Recipes, Ingredients, Modifiers, Modifier_Groups, Product_Modifiers, Staff_Accounts, and Store_Settings exist with automatic column migrations."""
+    conn = get_db_connection(db_path)
+>>>>>>> 4ee891a5f794046c285b7b4fb0a4643f0afbff6f
     cursor = conn.cursor()
     
     cursor.execute("""
@@ -33,6 +53,30 @@ def ensure_pos_tables_exist(db_path, username="STORE"):
             Notes TEXT
         )
     """)
+<<<<<<< HEAD
+=======
+    cursor.execute("PRAGMA table_info(Shift_Logs)")
+    existing_shift_cols = {row[1] for row in cursor.fetchall()}
+    needed_shift_cols = {
+        'Cashier_Close': 'TEXT',
+        'Date': 'TEXT',
+        'Time_Opened': 'TEXT',
+        'Time_Closed': 'TEXT',
+        'Starting_Float': 'REAL DEFAULT 0.0',
+        'Cash_Sales': 'REAL DEFAULT 0.0',
+        'Cash_Paid_Outs': 'REAL DEFAULT 0.0',
+        'Expected_Cash': 'REAL DEFAULT 0.0',
+        'Actual_Counted_Cash': 'REAL DEFAULT 0.0',
+        'Discrepancy_Over_Short': 'REAL DEFAULT 0.0',
+        'Total_Net_Sales': 'REAL DEFAULT 0.0',
+        'Total_Transactions': 'INTEGER DEFAULT 0',
+        'Status': "TEXT DEFAULT 'OPEN'",
+        'Notes': 'TEXT'
+    }
+    for col_name, col_type in needed_shift_cols.items():
+        if col_name not in existing_shift_cols:
+            cursor.execute(f"ALTER TABLE Shift_Logs ADD COLUMN {col_name} {col_type}")
+>>>>>>> 4ee891a5f794046c285b7b4fb0a4643f0afbff6f
 
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS Sales (
@@ -48,6 +92,22 @@ def ensure_pos_tables_exist(db_path, username="STORE"):
             Recorded_By TEXT
         )
     """)
+    cursor.execute("PRAGMA table_info(Sales)")
+    existing_sales_cols = {row[1] for row in cursor.fetchall()}
+    needed_sales_cols = {
+        'Sale_Date': 'TEXT',
+        'Sale_Time': 'TEXT',
+        'Product_ID': 'TEXT',
+        'Product_Name': 'TEXT',
+        'Quantity': 'REAL',
+        'Price': 'REAL',
+        'Total_Amount': 'REAL',
+        'Reason': 'TEXT',
+        'Recorded_By': 'TEXT'
+    }
+    for col_name, col_type in needed_sales_cols.items():
+        if col_name not in existing_sales_cols:
+            cursor.execute(f"ALTER TABLE Sales ADD COLUMN {col_name} {col_type}")
     
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS Cash_Drawer_Logs (
@@ -76,6 +136,35 @@ def ensure_pos_tables_exist(db_path, username="STORE"):
             Recorded_By TEXT
         )
     """)
+    cursor.execute("PRAGMA table_info(Cash_Drawer_Logs)")
+    existing_drawer_cols = {row[1] for row in cursor.fetchall()}
+    needed_drawer_cols = {
+        'Batch_ID': 'TEXT',
+        'Date': 'TEXT',
+        'Time': 'TEXT',
+        'Starting_Float': 'REAL DEFAULT 0.0',
+        'Cash_Sales': 'REAL DEFAULT 0.0',
+        'Cash_Paid_Outs': 'REAL DEFAULT 0.0',
+        'Expected_Cash': 'REAL DEFAULT 0.0',
+        'Actual_Counted_Cash': 'REAL DEFAULT 0.0',
+        'Discrepancy_Over_Short': 'REAL DEFAULT 0.0',
+        'GCash_Sales': 'REAL DEFAULT 0.0',
+        'Maya_Sales': 'REAL DEFAULT 0.0',
+        'Card_Sales': 'REAL DEFAULT 0.0',
+        'Grab_Gross': 'REAL DEFAULT 0.0',
+        'Grab_Commission': 'REAL DEFAULT 0.0',
+        'Grab_Net': 'REAL DEFAULT 0.0',
+        'Foodpanda_Gross': 'REAL DEFAULT 0.0',
+        'Foodpanda_Commission': 'REAL DEFAULT 0.0',
+        'Foodpanda_Net': 'REAL DEFAULT 0.0',
+        'Total_Settled_Tenders': 'REAL DEFAULT 0.0',
+        'Tender_Variance': 'REAL DEFAULT 0.0',
+        'Explanation_Notes': 'TEXT',
+        'Recorded_By': 'TEXT'
+    }
+    for col_name, col_type in needed_drawer_cols.items():
+        if col_name not in existing_drawer_cols:
+            cursor.execute(f"ALTER TABLE Cash_Drawer_Logs ADD COLUMN {col_name} {col_type}")
 
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS Inventory_Audit_Log (
@@ -88,6 +177,20 @@ def ensure_pos_tables_exist(db_path, username="STORE"):
             Notes TEXT
         )
     """)
+    cursor.execute("PRAGMA table_info(Inventory_Audit_Log)")
+    existing_audit_cols = {row[1] for row in cursor.fetchall()}
+    needed_audit_cols = {
+        'Audit_ID': 'TEXT',
+        'Date': 'TEXT',
+        'Ingredient_Name': 'TEXT',
+        'Theoretical': 'REAL',
+        'Physical': 'REAL',
+        'Variance': 'REAL',
+        'Notes': 'TEXT'
+    }
+    for col_name, col_type in needed_audit_cols.items():
+        if col_name not in existing_audit_cols:
+            cursor.execute(f"ALTER TABLE Inventory_Audit_Log ADD COLUMN {col_name} {col_type}")
 
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS Modifier_Groups (
@@ -168,7 +271,16 @@ def ensure_pos_tables_exist(db_path, username="STORE"):
         'receipt_show_tin': 'yes',
         'receipt_show_wifi': 'no',
         'receipt_show_signature': 'no',
+<<<<<<< HEAD
         'master_admin_pin': '9999'
+=======
+        'master_admin_pin': '9999',
+        'label_width_mm': '40',
+        'label_height_mm': '30',
+        'label_gap_mm': '2.25',
+        'label_printer_port': 'COM7',
+        'auto_print_labels': 'yes'
+>>>>>>> 4ee891a5f794046c285b7b4fb0a4643f0afbff6f
     }
     for k, v in default_settings.items():
         cursor.execute("INSERT OR IGNORE INTO Store_Settings (Setting_Key, Setting_Value) VALUES (?, ?)", (k, v))
@@ -200,15 +312,49 @@ def verify_supervisor_pin(conn, entered_pin):
     return False, "Invalid Master Security PIN or Manager PIN."
 
 def get_receipt_config(db_path, username="STORE"):
+<<<<<<< HEAD
     ensure_pos_tables_exist(db_path, username)
     conn = sqlite3.connect(db_path, timeout=20.0)
+=======
+    """Retrieves all customized receipt and hardware formatting options from Store_Settings."""
+    conn = get_db_connection(db_path)
+>>>>>>> 4ee891a5f794046c285b7b4fb0a4643f0afbff6f
     cursor = conn.cursor()
     cursor.execute("SELECT Setting_Key, Setting_Value FROM Store_Settings")
     settings = {row[0]: row[1] for row in cursor.fetchall()}
     conn.close()
     return settings
 
+<<<<<<< HEAD
 def get_active_shift(conn):
+=======
+def verify_supervisor_pin(conn, entered_pin):
+    """Validates entered PIN against Master Admin PIN in Store_Settings or active Store Manager PIN in Staff_Accounts."""
+    pin = str(entered_pin or '').strip()
+    if not pin:
+        return False, "PIN cannot be empty."
+
+    cur = conn.cursor()
+    cur.execute("SELECT Setting_Value FROM Store_Settings WHERE Setting_Key = 'master_admin_pin'")
+    row = cur.fetchone()
+    master_pin = row[0] if row and row[0] else '9999'
+    if pin == master_pin:
+        return True, "Master Security PIN Override"
+
+    cur.execute("""
+        SELECT Display_Name, Role FROM Staff_Accounts 
+        WHERE PIN = ? AND (Role LIKE '%Manager%' OR Role LIKE '%Owner%' OR Role LIKE '%Admin%')
+          AND (Active = 'Yes' OR Active = 'YES')
+    """, (pin,))
+    mgr = cur.fetchone()
+    if mgr:
+        return True, f"Authorized by {mgr[1]} ({mgr[0]})"
+
+    return False, "Invalid Master Security PIN or Manager PIN."
+
+def get_active_shift(conn):
+    """Returns the currently OPEN shift dictionary if active, else None."""
+>>>>>>> 4ee891a5f794046c285b7b4fb0a4643f0afbff6f
     cursor = conn.cursor()
     cursor.execute("""
         SELECT Shift_ID, Cashier_Open, Date, Time_Opened, Starting_Float, Cash_Sales, Cash_Paid_Outs, Total_Net_Sales, Total_Transactions, Status
@@ -232,6 +378,117 @@ def get_active_shift(conn):
         }
     return None
 
+<<<<<<< HEAD
+=======
+def send_tspl_to_windows_com(port_name, tspl_text):
+    """
+    Directly streams raw TSPL bytes to the Windows Bluetooth Serial Port (e.g., COM7)
+    using Win32 CreateFileW without SetCommState/baudrate handshake conflicts.
+    """
+    if os.name != 'nt':
+        return False, "Direct COM write is supported on Windows host."
+
+    kernel32 = ctypes.WinDLL('kernel32', use_last_error=True)
+    device_path = f"\\\\.\\{port_name.upper().strip()}"
+
+    handle = kernel32.CreateFileW(
+        device_path,
+        0x40000000,  # GENERIC_WRITE
+        0,           # Exclusive access
+        None,
+        3,           # OPEN_EXISTING
+        0x80,        # FILE_ATTRIBUTE_NORMAL
+        None
+    )
+
+    if handle == -1:
+        err = ctypes.get_last_error()
+        return False, f"Could not open {port_name} (WinError {err}). Verify printer is ON and paired."
+
+    try:
+        data = tspl_text.encode('utf-8')
+        written = wintypes.DWORD(0)
+        success = kernel32.WriteFile(handle, data, len(data), ctypes.byref(written), None)
+        if not success:
+            err = ctypes.get_last_error()
+            return False, f"WriteFile failed on {port_name} (WinError {err})."
+        return True, f"Successfully transmitted {written.value} bytes to {port_name}."
+    finally:
+        kernel32.CloseHandle(handle)
+
+def generate_cup_labels(items, txn_id, store_name, time_str, label_w="40", label_h="30", label_gap="2.25", tender_info=""):
+    """
+    Expands an order ticket into individual drink stickers (1 sticker per physical cup).
+    Applies calibrated 40x30mm safe margins (DIRECTION 0, 240-dot safe boundary).
+    """
+    total_cups = sum(int(it.get('qty', 1)) for it in items)
+    current_cup_idx = 1
+    cup_labels = []
+    tspl_stream = []
+
+    clean_txn = txn_id.replace("POS", "").replace("_", "")[-7:]
+
+    for it in items:
+        item_name = str(it.get('name', 'Drink'))
+        qty = int(it.get('qty', 1))
+        mods = [m.get('name') if isinstance(m, dict) else str(m) for m in it.get('modifiers', [])]
+        prep_notes = it.get('prep_notes', [])
+        special = str(it.get('special_instruction', '')).strip()
+
+        for _ in range(qty):
+            seq_label = f"[{current_cup_idx}/{total_cups}]"
+            cup_labels.append({
+                'store_name': store_name,
+                'txn_id': clean_txn,
+                'time': time_str,
+                'item_name': item_name,
+                'sequence': seq_label,
+                'modifiers': mods,
+                'prep_notes': prep_notes,
+                'special_instruction': special
+            })
+
+            # CALIBRATED TSPL LAYOUT FOR 40x30mm (36mm PRINTABLE WIDTH / 288 DOTS)
+            tspl = [
+                f"SIZE {label_w} mm, {label_h} mm",
+                f"GAP {label_gap} mm, 0 mm",
+                "DIRECTION 0",
+                "REFERENCE 0,0",
+                "CLS",
+                f'TEXT 12,12,"1",0,1,1,"{store_name[:14].upper()}"',
+                f'TEXT 200,12,"1",0,1,1,"{time_str}"',
+                "BAR 12,28,240,2",
+                f'TEXT 12,36,"3",0,1,1,"{item_name[:12]}"',
+                f'TEXT 200,38,"2",0,1,1,"{seq_label}"',
+                "BAR 12,68,240,1"
+            ]
+
+            y_pos = 78
+            if prep_notes:
+                prep_str = ", ".join(prep_notes)
+                tspl.append(f'TEXT 12,{y_pos},"2",0,1,1,"{prep_str[:19]}"')
+                y_pos += 26
+
+            for m in mods[:2]:
+                mod_str = f"+ {m}"
+                tspl.append(f'TEXT 12,{y_pos},"2",0,1,1,"{mod_str[:19]}"')
+                y_pos += 26
+
+            if special and y_pos <= 140:
+                tspl.append(f'TEXT 12,{y_pos},"1",0,1,1,"Note: {special[:26]}"')
+                y_pos += 20
+
+            tspl.append("BAR 12,168,240,1")
+            footer_text = f"#{clean_txn} {tender_info}".strip()
+            tspl.append(f'TEXT 12,178,"1",0,1,1,"{footer_text[:28]}"')
+            tspl.append("PRINT 1,1\r\n")
+
+            tspl_stream.append("\r\n".join(tspl))
+            current_cup_idx += 1
+
+    return cup_labels, "\r\n".join(tspl_stream)
+
+>>>>>>> 4ee891a5f794046c285b7b4fb0a4643f0afbff6f
 @pos_bp.route('/portal/<username>/pos/switch-staff', methods=['POST'])
 def switch_pos_staff(username):
     username = username.lower().strip()
@@ -247,7 +504,7 @@ def switch_pos_staff(username):
     if not pin:
         return jsonify({'status': 'error', 'message': 'PIN cannot be empty'}), 400
 
-    conn = sqlite3.connect(db_path, timeout=20.0)
+    conn = get_db_connection(db_path)
     cursor = conn.cursor()
     cursor.execute("""
         SELECT Staff_ID, Full_Name, Display_Name, Username, Role 
@@ -302,7 +559,11 @@ def open_pos_shift(username):
     date_str = now.strftime("%Y-%m-%d")
     time_str = now.strftime("%H:%M:%S")
 
+<<<<<<< HEAD
     conn = sqlite3.connect(db_path, timeout=20.0)
+=======
+    conn = get_db_connection(db_path)
+>>>>>>> 4ee891a5f794046c285b7b4fb0a4643f0afbff6f
     cursor = conn.cursor()
 
     existing_shift = get_active_shift(conn)
@@ -341,7 +602,11 @@ def get_current_shift_status(username):
     db_path = f"data/client_{username}.db"
     ensure_pos_tables_exist(db_path, username)
 
+<<<<<<< HEAD
     conn = sqlite3.connect(db_path, timeout=20.0)
+=======
+    conn = get_db_connection(db_path)
+>>>>>>> 4ee891a5f794046c285b7b4fb0a4643f0afbff6f
     active_shift = get_active_shift(conn)
     conn.close()
 
@@ -369,7 +634,11 @@ def close_pos_shift(username):
     now = datetime.now()
     close_time = now.strftime("%H:%M:%S")
 
+<<<<<<< HEAD
     conn = sqlite3.connect(db_path, timeout=20.0)
+=======
+    conn = get_db_connection(db_path)
+>>>>>>> 4ee891a5f794046c285b7b4fb0a4643f0afbff6f
     cursor = conn.cursor()
 
     active_shift = get_active_shift(conn)
@@ -405,7 +674,11 @@ def close_pos_shift(username):
         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0.0, ?, ?)
     """, (
         drawer_id, shift_id, active_shift['Date'], close_time, starting_float, cash_sales, cash_paid_outs,
+<<<<<<< HEAD
         expected_cash, actual_cash, over_short, actual_cash, notes, cashier
+=======
+        expected_cash, actual_counted_cash, over_short, actual_cash, notes, cashier
+>>>>>>> 4ee891a5f794046c285b7b4fb0a4643f0afbff6f
     ))
 
     conn.commit()
@@ -447,7 +720,11 @@ def get_recent_pos_orders(username):
 
     date_filter = request.args.get('date', datetime.now().strftime("%Y-%m-%d")).strip()
 
+<<<<<<< HEAD
     conn = sqlite3.connect(db_path, timeout=20.0)
+=======
+    conn = get_db_connection(db_path)
+>>>>>>> 4ee891a5f794046c285b7b4fb0a4643f0afbff6f
     cursor = conn.cursor()
 
     cursor.execute("""
@@ -464,10 +741,24 @@ def get_recent_pos_orders(username):
     for d_tx, exp_notes, act_cash, tot_settled in drawer_rows:
         base_txn = d_tx.replace('-TNDR', '').replace('-ZREAD', '')
         t_type = "Cash"
+<<<<<<< HEAD
         if "Channel:" in str(exp_notes):
             t_type = str(exp_notes).split("Channel:")[1].split("|")[0].strip()
         tender_map[base_txn] = t_type
 
+=======
+        if exp_notes and "Channel:" in str(exp_notes):
+            t_type = str(exp_notes).split("Channel:")[1].split("|")[0].strip()
+        tender_map[base_txn] = t_type
+
+    cursor.execute("SELECT Setting_Key, Setting_Value FROM Store_Settings")
+    settings = dict(cursor.fetchall())
+    store_name = settings.get('receipt_header_name', username.upper())
+    lbl_w = settings.get('label_width_mm', '40')
+    lbl_h = settings.get('label_height_mm', '30')
+    lbl_gap = settings.get('label_gap_mm', '2.25')
+
+>>>>>>> 4ee891a5f794046c285b7b4fb0a4643f0afbff6f
     conn.close()
 
     orders_grouped = {}
@@ -488,6 +779,7 @@ def get_recent_pos_orders(username):
             }
 
         orders_grouped[base_id]['total_amount'] += float(total_amt or 0.0)
+<<<<<<< HEAD
         orders_grouped[base_id]['items'].append({
             'line_id': s_id,
             'product_id': p_id,
@@ -498,6 +790,36 @@ def get_recent_pos_orders(username):
         })
 
     orders_list = sorted(list(orders_grouped.values()), key=lambda x: x['time'], reverse=True)
+=======
+
+        if not str(p_name).startswith("Discount:"):
+            prep_notes = []
+            special = ""
+            if reason and " | " in reason:
+                parts = reason.split(" | ")
+                for part in parts[1:]:
+                    if part.startswith("Note: "):
+                        special = part.replace("Note: ", "")
+                    elif not part.startswith("Shift:"):
+                        prep_notes.append(part)
+
+            orders_grouped[base_id]['items'].append({
+                'line_id': s_id,
+                'product_id': p_id,
+                'name': p_name,
+                'qty': float(qty or 0.0),
+                'price': float(price or 0.0),
+                'total': float(total_amt or 0.0),
+                'prep_notes': prep_notes,
+                'special_instruction': special
+            })
+
+    orders_list = sorted(list(orders_grouped.values()), key=lambda x: x['time'], reverse=True)
+    for o in orders_list:
+        stickers, tspl = generate_cup_labels(o['items'], o['txn_id'], store_name, o['time'], lbl_w, lbl_h, lbl_gap, o['tender_type'])
+        o['stickers'] = stickers
+        o['tspl'] = tspl
+>>>>>>> 4ee891a5f794046c285b7b4fb0a4643f0afbff6f
 
     return jsonify({
         'status': 'success',
@@ -523,7 +845,11 @@ def void_pos_order(username):
     if not txn_id or not void_reason:
         return jsonify({'status': 'error', 'message': 'Transaction ID and Mandatory Void Reason are required.'}), 400
 
+<<<<<<< HEAD
     conn = sqlite3.connect(db_path, timeout=30.0)
+=======
+    conn = get_db_connection(db_path)
+>>>>>>> 4ee891a5f794046c285b7b4fb0a4643f0afbff6f
 
     is_valid, auth_label = verify_supervisor_pin(conn, security_pin)
     if not is_valid:
@@ -639,6 +965,34 @@ def void_pos_order(username):
         'auth': auth_label
     })
 
+<<<<<<< HEAD
+=======
+@pos_bp.route('/portal/<username>/pos/print-label', methods=['POST'])
+def print_label_direct(username):
+    """Directly sends raw TSPL commands to the XP-237B over Windows Bluetooth (COM7)."""
+    username = username.lower().strip()
+    db_path = f"data/client_{username}.db"
+    ensure_pos_tables_exist(db_path, username)
+
+    try:
+        payload = request.get_json(force=True)
+    except Exception:
+        return jsonify({'status': 'error', 'message': 'Invalid payload'}), 400
+
+    tspl_data = payload.get('tspl', '')
+    if not tspl_data:
+        return jsonify({'status': 'error', 'message': 'TSPL payload cannot be empty'}), 400
+
+    settings = get_receipt_config(db_path, username)
+    port_name = settings.get('label_printer_port', 'COM7')
+
+    success, msg = send_tspl_to_windows_com(port_name, tspl_data)
+    return jsonify({
+        'status': 'success' if success else 'error',
+        'message': msg
+    })
+
+>>>>>>> 4ee891a5f794046c285b7b4fb0a4643f0afbff6f
 @pos_bp.route('/portal/<username>/pos', methods=['GET'])
 def live_pos_screen(username):
     username = username.lower().strip()
@@ -649,7 +1003,11 @@ def live_pos_screen(username):
     ensure_pos_tables_exist(db_path, username)
     db = InventoryDB(db_path)
 
+<<<<<<< HEAD
     conn = sqlite3.connect(db_path, timeout=20.0)
+=======
+    conn = get_db_connection(db_path)
+>>>>>>> 4ee891a5f794046c285b7b4fb0a4643f0afbff6f
     active_shift = get_active_shift(conn)
 
     products_df = db.read_tab('Products')
@@ -864,7 +1222,7 @@ def process_pos_checkout(username):
     
     operator = session.get('staff_username') or session.get('logged_in_user', username).title()
 
-    conn = sqlite3.connect(db_path, timeout=30.0)
+    conn = get_db_connection(db_path)
     cursor = conn.cursor()
 
     active_shift = get_active_shift(conn)
@@ -904,6 +1262,11 @@ def process_pos_checkout(username):
             sale_line_id = f"{txn_id}-P{line_counter:02d}"
             line_counter += 1
 
+<<<<<<< HEAD
+=======
+            reason_str = f"Live POS Order | {prep_str}"
+
+>>>>>>> 4ee891a5f794046c285b7b4fb0a4643f0afbff6f
             cursor.execute("""
                 INSERT INTO Sales (Sale_ID, Sale_Date, Sale_Time, Product_ID, Product_Name, Quantity, Price, Total_Amount, Reason, Recorded_By)
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
@@ -1016,8 +1379,30 @@ def process_pos_checkout(username):
                 WHERE Shift_ID = ?
             """, (cash_val, net_total, active_shift['Shift_ID']))
 
+<<<<<<< HEAD
+=======
+        # READ HARDWARE STORE SETTINGS DIRECTLY ON THE SAME ACTIVE CURSOR (ZERO DEADLOCKS)
+        cursor.execute("SELECT Setting_Key, Setting_Value FROM Store_Settings")
+        settings = dict(cursor.fetchall())
+        store_name = settings.get('receipt_header_name', username.upper())
+        lbl_w = settings.get('label_width_mm', '40')
+        lbl_h = settings.get('label_height_mm', '30')
+        lbl_gap = settings.get('label_gap_mm', '2.25')
+
+        # COMMIT AND CLOSE DATABASE IMMEDIATELY BEFORE ANY PRINTER / NETWORK IO
+>>>>>>> 4ee891a5f794046c285b7b4fb0a4643f0afbff6f
         conn.commit()
         conn.close()
+
+        # GENERATE TSPL LABELS & STREAM TO XP-237B PRINTER (OUTSIDE OF DATABASE LOCK)
+        cup_labels, tspl_data = generate_cup_labels(items, txn_id, store_name, sale_time, lbl_w, lbl_h, lbl_gap, tender_type)
+
+        if settings.get('auto_print_labels', 'yes') == 'yes':
+            bt_port = settings.get('label_printer_port', 'COM7')
+            try:
+                send_tspl_to_windows_com(bt_port, tspl_data)
+            except Exception as pe:
+                print(f"Direct label print attempt note: {pe}")
 
         receipt_data = {
             'txn_id': txn_id,
@@ -1039,7 +1424,9 @@ def process_pos_checkout(username):
         return jsonify({
             'status': 'success',
             'txn_id': txn_id,
-            'receipt': receipt_data
+            'receipt': receipt_data,
+            'cup_labels': cup_labels,
+            'tspl_data': tspl_data
         })
 
     except Exception as e:

@@ -397,17 +397,43 @@ def web_products_tab(username):
         if pid_s not in product_modifiers_map:
             product_modifiers_map[pid_s] = []
         product_modifiers_map[pid_s].append(str(gid).strip())
+
+    # Fetch all active categories from the Categories master table
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS Categories (
+            Category_ID TEXT PRIMARY KEY,
+            Category_Name TEXT,
+            Active TEXT DEFAULT 'Yes'
+        )
+    """)
+    cursor.execute("""
+        SELECT DISTINCT TRIM(Category_Name) 
+        FROM Categories 
+        WHERE (Active = 'Yes' OR Active = 'YES' OR Active = '1' OR Active IS NULL)
+          AND Category_Name IS NOT NULL 
+          AND TRIM(Category_Name) != ''
+        ORDER BY Category_Name ASC
+    """)
+    master_categories = [r[0] for r in cursor.fetchall() if r and r[0]]
     conn.close()
+
+    # ===== EXTRACT GET QUERY PARAMS BEFORE EMPTY-CHECK =====
+    search = request.args.get('search', '').lower()
+    status = request.args.get('status', 'Yes')
+    category = request.args.get('category', 'All')
+    sort_by = request.args.get('sort_by', 'id')
+    order = request.args.get('order', 'asc')
 
     # ===== GET DATA & APPLY FILTERS =====
     df = db.read_tab('Products')
     
     all_products_raw = []
-    categories = []
     grouped_products = {}
     unique_parents = []
     total_count = 0
 
+    # Combine categories from the master Categories table and any existing Product categories
+    prod_categories = []
     if not df.empty:
         df['Selling_Price'] = pd.to_numeric(df['Selling_Price'], errors='coerce').fillna(0.0)
         df['Cost_Price'] = pd.to_numeric(df['Cost_Price'], errors='coerce').fillna(0.0)
@@ -419,8 +445,18 @@ def web_products_tab(username):
         df.loc[mask, 'Food_Cost_Pct'] = (df.loc[mask, 'Cost_Price'] / df.loc[mask, 'Selling_Price']) * 100.0
 
         if 'Category' in df.columns:
-            categories = sorted([c for c in df['Category'].dropna().unique() if str(c).strip()])
+            prod_categories = [str(c).strip() for c in df['Category'].dropna().unique() if str(c).strip()]
 
+    # Case-insensitive deduplication, preserving clean display casing
+    seen_cats = set()
+    categories = []
+    for c in master_categories + prod_categories:
+        if c.lower() not in seen_cats:
+            seen_cats.add(c.lower())
+            categories.append(c)
+    categories.sort(key=lambda s: s.lower())
+
+    if not df.empty:
         if 'Parent_Item' not in df.columns:
             df['Parent_Item'] = None
         if 'Variant_Name' not in df.columns:
@@ -449,12 +485,6 @@ def web_products_tab(username):
             df.at[idx, 'Variant_Name'] = v_str
 
         all_products_raw = df.to_dict('records')
-
-        search = request.args.get('search', '').lower()
-        status = request.args.get('status', 'Yes')
-        category = request.args.get('category', 'All')
-        sort_by = request.args.get('sort_by', 'id')
-        order = request.args.get('order', 'asc')
 
         if search:
             df = df[df['Product_Name'].astype(str).str.lower().str.contains(search) | 
