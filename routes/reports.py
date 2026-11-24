@@ -1,4 +1,4 @@
-# routes/reports.py - Enterprise Operational Command Center & Financial Ledger
+# routes/reports.py - Enterprise Operational Command Center, Financial Ledger & Market List Planner
 from flask import Blueprint, request, redirect, session, render_template, url_for
 from modules.database import InventoryDB
 from datetime import datetime, timedelta
@@ -125,6 +125,94 @@ def calculate_sales_cogs(sales_slice_df, db_path):
             total_cogs += qty_sold * float(s_row['Unit_Cost'] or 0.0)
 
     return round(float(total_cogs), 2)
+
+def build_market_planner_payload(db):
+    """Compiles a read-only JSON payload of active products, recipes, prep sub-recipes, and ingredients for the Market List Planner."""
+    products_df = db.read_tab('Products')
+    recipes_df = db.read_tab('Recipes')
+    prep_recipes_df = db.read_tab('Prep_Recipes')
+    ingredients_df = db.read_tab('Ingredients')
+
+    recipes_map = defaultdict(list)
+    if recipes_df is not None and not recipes_df.empty:
+        for _, r in recipes_df.iterrows():
+            pid = str(r.get('Product_ID', '')).strip()
+            iid = str(r.get('Ingredient_ID', '')).strip()
+            qty = float(pd.to_numeric(r.get('Quantity_Required', 0.0), errors='coerce') or 0.0)
+            if pid and iid and qty > 0:
+                recipes_map[pid].append({'ing_id': iid, 'qty': qty})
+
+    prep_map = {}
+    if prep_recipes_df is not None and not prep_recipes_df.empty:
+        for _, pr in prep_recipes_df.iterrows():
+            prepped_id = str(pr.get('Prepped_Ingredient_ID', '')).strip()
+            raw_id = str(pr.get('Raw_Ingredient_ID', '')).strip()
+            qty = float(pd.to_numeric(pr.get('Quantity_Required', 0.0), errors='coerce') or 0.0)
+            b_yield = float(pd.to_numeric(pr.get('Batch_Yield', 1.0), errors='coerce') or 1.0)
+            if b_yield <= 0:
+                b_yield = 1.0
+            if prepped_id and raw_id and qty > 0:
+                if prepped_id not in prep_map:
+                    prep_map[prepped_id] = {'batch_yield': b_yield, 'items': []}
+                prep_map[prepped_id]['items'].append({'raw_id': raw_id, 'qty': qty})
+
+    ingredients_map = {}
+    if ingredients_df is not None and not ingredients_df.empty:
+        for _, ing in ingredients_df.iterrows():
+            iid = str(ing.get('Ingredient_ID', '')).strip()
+            if not iid:
+                continue
+            pack_size = float(pd.to_numeric(ing.get('Pack_Size', 0.0), errors='coerce') or 0.0) if 'Pack_Size' in ing else 0.0
+            purchase_cost = float(pd.to_numeric(ing.get('Purchase_Cost', 0.0), errors='coerce') or 0.0) if 'Purchase_Cost' in ing else 0.0
+            purchase_unit = str(ing.get('Purchase_Unit', '') or '').strip() if 'Purchase_Unit' in ing else ''
+            if purchase_unit.lower() == 'nan':
+                purchase_unit = ''
+            supplier = str(ing.get('Supplier', '') or '').strip()
+            if supplier.lower() == 'nan' or not supplier:
+                supplier = 'Unassigned'
+            cat = str(ing.get('Category', 'General') or 'General').strip()
+            if cat.lower() == 'nan' or not cat:
+                cat = 'General'
+
+            ingredients_map[iid] = {
+                'id': iid,
+                'name': str(ing.get('Ingredient_Name', iid)).strip(),
+                'category': cat,
+                'unit': str(ing.get('Unit', 'pcs') or 'pcs').strip(),
+                'current_stock': max(0.0, float(pd.to_numeric(ing.get('Current_Stock', 0.0), errors='coerce') or 0.0)),
+                'cost_per_unit': float(pd.to_numeric(ing.get('Cost_Per_Unit', 0.0), errors='coerce') or 0.0),
+                'supplier': supplier,
+                'ingredient_type': str(ing.get('Ingredient_Type', 'RAW') or 'RAW').strip().upper(),
+                'purchase_unit': purchase_unit or 'pack',
+                'pack_size': pack_size,
+                'purchase_cost': purchase_cost
+            }
+
+    products_list = []
+    if products_df is not None and not products_df.empty:
+        if 'Active' in products_df.columns:
+            products_df = products_df[products_df['Active'].astype(str).str.upper().isin(['YES', 'TRUE', '1'])]
+        for _, p in products_df.iterrows():
+            pid = str(p.get('Product_ID', '')).strip()
+            if not pid:
+                continue
+            cat = str(p.get('Category', 'General') or 'General').strip()
+            if cat.lower() == 'nan' or not cat:
+                cat = 'General'
+            products_list.append({
+                'id': pid,
+                'name': str(p.get('Product_Name', pid)).strip(),
+                'category': cat,
+                'has_recipe': len(recipes_map.get(pid, [])) > 0
+            })
+        products_list.sort(key=lambda x: (x['category'], x['name']))
+
+    return json.dumps({
+        'products': products_list,
+        'recipes': dict(recipes_map),
+        'prep_recipes': prep_map,
+        'ingredients': ingredients_map
+    })
 
 @reports_bp.route('/portal/<username>/reports', methods=['GET', 'POST'])
 def web_reports_tab(username):
@@ -441,7 +529,6 @@ def web_reports_tab(username):
                     'cost': float(pd.to_numeric(p_row.get('Cost_Price', 0.0), errors='coerce') or 0.0)
                 }
 
-        # 1. Drill-down: Sales by Item
         is_disc = sales_df['Product_Name'].astype(str).str.contains('Discount:', case=False, na=False)
         items_sales_df = sales_df[~is_disc].copy()
         
@@ -487,7 +574,6 @@ def web_reports_tab(username):
             })
         sales_by_item.sort(key=lambda x: x['gross_sales'], reverse=True)
 
-        # 2. Drill-down: Sales by Category
         cat_agg = defaultdict(lambda: {'qty': 0.0, 'gross': 0.0, 'cogs': 0.0})
         for it in sales_by_item:
             c = it['category']
@@ -510,7 +596,6 @@ def web_reports_tab(username):
             })
         sales_by_category.sort(key=lambda x: x['gross_sales'], reverse=True)
 
-        # 3. Drill-down: Sales by Employee / Cashier
         emp_agg = defaultdict(lambda: {'orders': set(), 'gross': 0.0, 'discounts': 0.0, 'net': 0.0})
         for _, row in sales_df.iterrows():
             emp = str(row.get('Recorded_By', 'Counter Terminal')).strip().title()
@@ -541,10 +626,8 @@ def web_reports_tab(username):
             })
         sales_by_employee.sort(key=lambda x: x['net_sales'], reverse=True)
 
-        # 4. Drill-down: Sales by Modifier
         sales_by_modifier = [it for it in sales_by_item if it['category'] == 'Modifiers' or it['name'].lower().startswith('modifier:')]
 
-        # 5. Drill-down: Statutory & Promotional Discounts Audit
         disc_slice = sales_df[is_disc].copy()
         disc_summary_map = defaultdict(lambda: {'count': 0, 'total': 0.0})
         if not disc_slice.empty:
@@ -573,7 +656,6 @@ def web_reports_tab(username):
             })
         discounts_summary.sort(key=lambda x: x['total'], reverse=True)
 
-        # 6. Bar Chart: Daily or Hourly Sales Volume Trend
         if 'Parsed_Date' in sales_df.columns and sales_df['Parsed_Date'].notna().any():
             trend_df = sales_df.dropna(subset=['Parsed_Date']).sort_values('Parsed_Date').copy()
             if selected_period == 'today':
@@ -904,6 +986,9 @@ def web_reports_tab(username):
     except Exception:
         pass
 
+    # Standalone Read-Only Market List Planner Payload
+    market_planner_data_json = build_market_planner_payload(db)
+
     return render_template(
         'reports.html',
         username=username,
@@ -959,5 +1044,6 @@ def web_reports_tab(username):
         discounts_summary=discounts_summary,
         total_voids=total_voids,
         sales_trend_labels_json=json.dumps(sales_trend_labels),
-        sales_trend_values_json=json.dumps(sales_trend_values)
+        sales_trend_values_json=json.dumps(sales_trend_values),
+        market_planner_data_json=market_planner_data_json
     )

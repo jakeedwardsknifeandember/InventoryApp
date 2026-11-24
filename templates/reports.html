@@ -181,6 +181,9 @@
         <li class="nav-item">
             <button class="nav-link" id="incidents-tab" data-bs-toggle="tab" data-bs-target="#incidents-panel" type="button" role="tab">HR & Operational Logs</button>
         </li>
+        <li class="nav-item">
+            <button class="nav-link" id="market-planner-tab" data-bs-toggle="tab" data-bs-target="#market-planner-panel" type="button" role="tab">Market List Planner</button>
+        </li>
     </ul>
 
     <div class="tab-content" id="commandTabsContent">
@@ -325,7 +328,6 @@
                         </div>
 
                         <div class="row g-3">
-                            <!-- Channel 1: In-Store Physical Cash Till -->
                             <div class="col-12 col-md-4">
                                 <div class="p-3 rounded h-100 tender-summary-box">
                                     <div class="channel-title text-info mb-2">1. In-Store Cash Till Balancing</div>
@@ -360,7 +362,6 @@
                                 </div>
                             </div>
 
-                            <!-- Channel 2: Digital Wallets & Cards -->
                             <div class="col-12 col-md-4">
                                 <div class="p-3 rounded h-100 tender-summary-box">
                                     <div class="channel-title text-warning mb-2">2. In-Store Digital & Card Tenders</div>
@@ -383,7 +384,6 @@
                                 </div>
                             </div>
 
-                            <!-- Channel 3: Aggregator Portals -->
                             <div class="col-12 col-md-4">
                                 <div class="p-3 rounded h-100 tender-summary-box">
                                     <div class="channel-title text-success mb-2">3. Aggregator Portals (Net Payout)</div>
@@ -409,7 +409,6 @@
                             </div>
                         </div>
 
-                        <!-- Settlement Reconciliation Strip -->
                         <div class="p-3 rounded mt-3 d-flex justify-content-between align-items-center flex-wrap gap-2" style="background: #111116; border: 1px solid #2d2d38;">
                             <div>
                                 <span class="text-muted small text-uppercase fw-bold d-block" style="font-size: 10px;">Total Settled Tenders (Cash + Digital + Net Delivery)</span>
@@ -481,8 +480,6 @@
 
         <!-- PANEL 2: LOYVERSE-STYLE SALES BREAKDOWN & ANALYTICS -->
         <div class="tab-pane fade text-white" id="sales-analytics-panel" role="tabpanel">
-            
-            <!-- LOYVERSE 5-KEY STATS BANNER -->
             <div class="row g-3 mb-4">
                 <div class="col-6 col-md">
                     <div class="p-3 h-100 rounded" style="background: #181822; border: 1px solid #2d2d3e;">
@@ -516,7 +513,6 @@
                 </div>
             </div>
 
-            <!-- SALES VOLUME TREND BAR CHART -->
             <div class="p-4 mb-4 rounded" style="background: #1e1e24; border: 1px solid #2d2d34;">
                 <div class="d-flex justify-content-between align-items-center mb-3">
                     <div>
@@ -535,7 +531,6 @@
                 </div>
             </div>
 
-            <!-- DRILL-DOWN SUB-VIEW CONTROLS (PILL SWITCHER) -->
             <div class="d-flex gap-2 mb-3 flex-wrap align-items-center">
                 <span class="text-muted small fw-bold me-2 text-uppercase">Drill-Down By:</span>
                 <button type="button" class="analytics-view-pill active" onclick="switchSalesAnalyticsView('item', this)">By Item (Menu)</button>
@@ -545,7 +540,6 @@
                 <button type="button" class="analytics-view-pill" onclick="switchSalesAnalyticsView('discounts', this)">Discounts Audit</button>
             </div>
 
-            <!-- VIEW 1: SALES BY ITEM -->
             <div id="analyticsViewItem" class="analytics-table-view">
                 <div class="content-card p-0 overflow-hidden" style="background: #1e1e24; border: 1px solid #2d2d34; border-radius: 8px;">
                     <table class="table table-hover text-white m-0">
@@ -564,9 +558,7 @@
                             {% for item in sales_by_item %}
                             <tr style="border-bottom: 1px solid #2d2d34;">
                                 <td class="align-middle ps-4 fw-bold text-white">{{ item.name }}</td>
-                                <td class="align-middle">
-                                    <span class="badge bg-dark border border-secondary text-light">{{ item.category }}</span>
-                                </td>
+                                <td class="align-middle"><span class="badge bg-dark border border-secondary text-light">{{ item.category }}</span></td>
                                 <td class="align-middle text-center font-monospace">{{ "{:,.1f}".format(item.quantity) }}</td>
                                 <td class="align-middle text-end font-monospace text-white">PHP {{ "{:,.2f}".format(item.gross_sales) }}</td>
                                 <td class="align-middle text-end font-monospace text-muted">PHP {{ "{:,.2f}".format(item.cogs) }}</td>
@@ -585,7 +577,6 @@
                 </div>
             </div>
 
-            <!-- VIEW 2: SALES BY CATEGORY -->
             <div id="analyticsViewCategory" class="analytics-table-view" style="display: none;">
                 <div class="content-card p-0 overflow-hidden" style="background: #1e1e24; border: 1px solid #2d2d34; border-radius: 8px;">
                     <table class="table table-hover text-white m-0">
@@ -613,9 +604,7 @@
                                         {{ "{:,.1f}".format(cat.margin_pct) }}%
                                     </span>
                                 </td>
-                                <td class="align-middle pe-4 text-end font-monospace text-white fw-bold">
-                                    {{ "{:,.1f}".format(cat.share_pct) }}%
-                                </td>
+                                <td class="align-middle pe-4 text-end font-monospace text-white fw-bold">{{ "{:,.1f}".format(cat.share_pct) }}%</td>
                             </tr>
                             {% else %}
                             <tr><td colspan="7" class="text-center py-5 text-muted">No category data recorded in this period.</td></tr>
@@ -625,7 +614,6 @@
                 </div>
             </div>
 
-            <!-- VIEW 3: SALES BY EMPLOYEE / CASHIER -->
             <div id="analyticsViewEmployee" class="analytics-table-view" style="display: none;">
                 <div class="content-card p-0 overflow-hidden" style="background: #1e1e24; border: 1px solid #2d2d34; border-radius: 8px;">
                     <table class="table table-hover text-white m-0">
@@ -657,7 +645,6 @@
                 </div>
             </div>
 
-            <!-- VIEW 4: SALES BY MODIFIER -->
             <div id="analyticsViewModifier" class="analytics-table-view" style="display: none;">
                 <div class="content-card p-0 overflow-hidden" style="background: #1e1e24; border: 1px solid #2d2d34; border-radius: 8px;">
                     <table class="table table-hover text-white m-0">
@@ -687,7 +674,6 @@
                 </div>
             </div>
 
-            <!-- VIEW 5: DISCOUNTS & STATUTORY AUDIT -->
             <div id="analyticsViewDiscounts" class="analytics-table-view" style="display: none;">
                 <div class="row g-3 mb-3">
                     {% for ds in discounts_summary %}
@@ -719,9 +705,7 @@
                                 <td class="align-middle ps-4 font-monospace text-info">{{ d.date }} {{ d.time }}</td>
                                 <td class="align-middle fw-bold text-white">{{ d.type }}</td>
                                 <td class="align-middle text-end font-monospace text-danger fw-bold">-PHP {{ "{:,.2f}".format(d.amount) }}</td>
-                                <td class="align-middle pe-4 text-end">
-                                    <span class="badge bg-secondary text-white">{{ d.cashier }}</span>
-                                </td>
+                                <td class="align-middle pe-4 text-end"><span class="badge bg-secondary text-white">{{ d.cashier }}</span></td>
                             </tr>
                             {% else %}
                             <tr><td colspan="4" class="text-center py-5 text-muted">No statutory discount deductions recorded in this period.</td></tr>
@@ -730,7 +714,6 @@
                     </table>
                 </div>
             </div>
-
         </div>
 
         <!-- PANEL: ACTUAL ROI & CAPEX TRACKER -->
@@ -786,11 +769,7 @@
                         <tr style="border-bottom: 1px solid #2d2d34;">
                             <td class="align-middle ps-4 font-monospace text-muted">{{ c.CapEx_ID }}</td>
                             <td class="align-middle font-monospace text-info">{{ c.Date }}</td>
-                            <td class="align-middle">
-                                <span class="badge bg-secondary text-white px-2 py-1" style="font-size:11px;">
-                                    {{ c.Category }}
-                                </span>
-                            </td>
+                            <td class="align-middle"><span class="badge bg-secondary text-white px-2 py-1" style="font-size:11px;">{{ c.Category }}</span></td>
                             <td class="align-middle text-wrap text-light small" style="line-height:1.4;">{{ c.Description }}</td>
                             <td class="align-middle pe-4 text-end">
                                 <span class="font-monospace fw-bold text-danger d-block mb-1">PHP {{ "{:,.2f}".format(c.Amount) }}</span>
@@ -814,9 +793,7 @@
             <div class="p-4 mb-4 rounded shadow-sm d-flex flex-column flex-md-row align-items-md-center justify-content-between" style="background: #1e1e24; border-left: 6px solid {{ bep_status_color }}; border-top: 1px solid #2d2d34; border-right: 1px solid #2d2d34; border-bottom: 1px solid #2d2d34;">
                 <div>
                     <span class="badge {{ bep_badge_class }} px-3 py-1 mb-2" style="font-size: 12px; font-weight: bold;">{{ bep_status_text }}</span>
-                    <h4 class="m-0 font-monospace text-white" style="font-weight: 800;">
-                        Target Progress: {{ "{:,.1f}".format(bep_progress_pct) }}%
-                    </h4>
+                    <h4 class="m-0 font-monospace text-white" style="font-weight: 800;">Target Progress: {{ "{:,.1f}".format(bep_progress_pct) }}%</h4>
                     <p class="m-0 mt-1 text-muted small">{{ bep_status_desc }}</p>
                 </div>
                 <div class="mt-3 mt-md-0 text-md-end" style="min-width: 250px;">
@@ -1010,7 +987,6 @@
                         </div>
                     </div>
                 </div>
-
             </div>
         </div>
 
@@ -1149,6 +1125,128 @@
             </div>
         </div>
 
+        <!-- PANEL 8: OPENING STOCK & MARKET LIST PLANNER (READ-ONLY) -->
+        <div class="tab-pane fade text-white" id="market-planner-panel" role="tabpanel">
+            <div class="p-4 mb-4 rounded" style="background: #1e1e24; border: 1px solid #2d2d34;">
+                <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-3 mb-3 pb-3 border-bottom border-secondary">
+                    <div>
+                        <h5 class="m-0 fw-bold text-info">Opening Stock & Market List Planner</h5>
+                        <small class="text-muted">Standalone, read-only recipe explosion calculator. Project daily sales to compute exact raw ingredients, pack quantities, and opening capital budget.</small>
+                    </div>
+                    <div class="d-flex gap-2 flex-wrap">
+                        <button type="button" class="btn btn-sm btn-outline-light fw-bold px-3" onclick="exportMarketListCSV()">Export CSV</button>
+                        <button type="button" class="btn btn-sm btn-info fw-bold px-3" onclick="printMarketList()">Print Market List</button>
+                    </div>
+                </div>
+
+                <!-- PLANNER CONTROLS BAR -->
+                <div class="row g-3 align-items-end">
+                    <div class="col-6 col-md-2">
+                        <label class="form-label text-light small fw-bold mb-1">Days of Coverage</label>
+                        <input type="number" id="mpDaysInput" class="form-control bg-dark text-white border-secondary font-monospace fw-bold" value="7" min="1" max="90" oninput="runMarketListPlanner()">
+                    </div>
+                    <div class="col-6 col-md-2">
+                        <label class="form-label text-light small fw-bold mb-1">Safety Buffer (%)</label>
+                        <input type="number" id="mpBufferInput" class="form-control bg-dark text-white border-secondary font-monospace fw-bold" value="15" min="0" max="100" oninput="runMarketListPlanner()">
+                    </div>
+                    <div class="col-12 col-md-4">
+                        <div class="p-2 rounded border border-secondary d-flex align-items-center justify-content-between" style="background: #15151a; height: 38px;">
+                            <div class="form-check form-switch m-0">
+                                <input class="form-check-input" type="checkbox" id="mpDeductStockToggle" onchange="runMarketListPlanner()" style="cursor: pointer;">
+                                <label class="form-check-label text-white small fw-bold" for="mpDeductStockToggle" style="cursor: pointer;">Deduct Current Stock</label>
+                            </div>
+                            <span id="mpModeBadge" class="badge bg-primary" style="font-size: 10px;">OPENING MODE</span>
+                        </div>
+                    </div>
+                    <div class="col-12 col-md-4">
+                        <div class="d-flex gap-2">
+                            <div class="input-group input-group-sm">
+                                <input type="number" id="mpBulkDefaultInput" class="form-control bg-dark text-white border-secondary font-monospace" value="10" min="0" placeholder="Qty">
+                                <button type="button" class="btn btn-success fw-bold" onclick="applyDefaultServings()">Apply to All</button>
+                            </div>
+                            <button type="button" class="btn btn-sm btn-outline-secondary fw-bold" onclick="clearAllServings()">Reset</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="row g-4">
+                <!-- LEFT: MENU SALES FORECAST INPUTS -->
+                <div class="col-12 col-lg-5">
+                    <div class="card bg-dark border-secondary text-white">
+                        <div class="card-header bg-secondary d-flex justify-content-between align-items-center">
+                            <span class="fw-bold small text-uppercase">1. Projected Daily Servings</span>
+                            <input type="text" id="mpProductSearch" class="form-control form-control-sm bg-dark text-white border-0" style="width: 160px;" placeholder="Filter menu..." oninput="filterMarketPlannerProducts()">
+                        </div>
+                        <div class="card-body p-0" style="max-height: 62vh; overflow-y: auto;">
+                            <table class="table table-dark table-hover m-0 align-middle">
+                                <thead style="position: sticky; top: 0; z-index: 2;">
+                                    <tr>
+                                        <th class="ps-3 py-2 small">MENU ITEM</th>
+                                        <th class="pe-3 py-2 text-end small" style="width: 110px;">SERVINGS / DAY</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="mpProductsTableBody"></tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- RIGHT: EXPLODED MARKET LIST & BUDGET -->
+                <div class="col-12 col-lg-7">
+                    <!-- SUMMARY KPI BAR -->
+                    <div class="row g-3 mb-3">
+                        <div class="col-4">
+                            <div class="p-3 rounded" style="background: #181822; border-left: 4px solid #10b981;">
+                                <small class="text-muted d-block fw-bold text-uppercase" style="font-size: 10px;">Est. Market Budget</small>
+                                <h4 id="mpTotalBudgetDisplay" class="m-0 font-monospace text-success fw-bold mt-1">PHP 0.00</h4>
+                            </div>
+                        </div>
+                        <div class="col-4">
+                            <div class="p-3 rounded" style="background: #181822; border-left: 4px solid #3b82f6;">
+                                <small class="text-muted d-block fw-bold text-uppercase" style="font-size: 10px;">Ingredients to Buy</small>
+                                <h4 id="mpTotalItemsDisplay" class="m-0 font-monospace text-info fw-bold mt-1">0 items</h4>
+                            </div>
+                        </div>
+                        <div class="col-4">
+                            <div class="p-3 rounded" style="background: #181822; border-left: 4px solid #f59e0b;">
+                                <small class="text-muted d-block fw-bold text-uppercase" style="font-size: 10px;">Total Packs / Units</small>
+                                <h4 id="mpTotalPacksDisplay" class="m-0 font-monospace text-warning fw-bold mt-1">0</h4>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="card bg-dark border-secondary text-white">
+                        <div class="card-header bg-secondary d-flex justify-content-between align-items-center">
+                            <span class="fw-bold small text-uppercase">2. Consolidated Market List (Raw & Packaging)</span>
+                            <select id="mpGroupBySelect" class="form-select form-select-sm bg-dark text-white border-0" style="width: 170px;" onchange="runMarketListPlanner()">
+                                <option value="category">Sort by Category</option>
+                                <option value="supplier">Sort by Supplier</option>
+                                <option value="cost">Sort by Highest Cost</option>
+                            </select>
+                        </div>
+                        <div class="card-body p-0" style="max-height: 55vh; overflow-y: auto;">
+                            <table class="table table-dark table-hover m-0 align-middle">
+                                <thead style="position: sticky; top: 0; z-index: 2;">
+                                    <tr>
+                                        <th class="ps-3 py-2 small">INGREDIENT</th>
+                                        <th class="py-2 text-end small">NET NEEDED</th>
+                                        <th class="py-2 text-center small">BUY QTY</th>
+                                        <th class="pe-3 py-2 text-end small">EST. COST</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="mpMarketListBody">
+                                    <tr>
+                                        <td colspan="4" class="text-center py-5 text-muted">Enter projected daily servings on the left (or click "Apply to All") to generate your market list.</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
     </div>
 </div>
 
@@ -1158,18 +1256,15 @@
         <div class="modal-content text-white border-0 shadow-lg" style="background: #1e1e24; border-radius: 12px;">
             <form method="post">
                 <input type="hidden" name="action_type" value="add_capex">
-                
                 <div class="modal-header" style="border-bottom: 1px solid #2d2d34; background: #151518; border-top-left-radius: 12px; border-top-right-radius: 12px;">
                     <h5 class="modal-title" style="font-weight: 700;">Log Capital Expenditure</h5>
                     <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
                 </div>
-                
                 <div class="modal-body p-4">
                     <div class="mb-3">
                         <label class="form-label">INVESTMENT DATE:</label>
                         <input type="date" name="capex_date" class="form-control" value="{{ now.strftime('%Y-%m-%d') }}" required>
                     </div>
-                    
                     <div class="row g-3 mb-3">
                         <div class="col-6">
                             <label class="form-label">CAPEX CATEGORY:</label>
@@ -1186,13 +1281,11 @@
                             <input type="number" step="0.01" min="0.01" name="amount" class="form-control font-monospace text-end" placeholder="0.00" required>
                         </div>
                     </div>
-
                     <div class="mb-3">
                         <label class="form-label">INVESTMENT DESCRIPTION:</label>
                         <textarea name="description" class="form-control p-3" rows="3" placeholder="e.g., Mahlkonig Grinder, Espresso Machine, Storefront Signage..." required></textarea>
                     </div>
                 </div>
-                
                 <div class="modal-footer p-3" style="border-top: 1px solid #2d2d34; background: #151518; border-bottom-left-radius: 12px; border-bottom-right-radius: 12px;">
                     <button type="submit" class="btn btn-success w-100 py-2.5" style="font-weight: 700; border-radius: 6px;">Commit Investment to Ledger</button>
                 </div>
@@ -1207,18 +1300,15 @@
         <div class="modal-content text-white border-0 shadow-lg" style="background: #1e1e24; border-radius: 12px;">
             <form method="post">
                 <input type="hidden" name="action_type" value="add_incident">
-                
                 <div class="modal-header" style="border-bottom: 1px solid #2d2d34; background: #151518; border-top-left-radius: 12px; border-top-right-radius: 12px;">
                     <h5 class="modal-title" style="font-weight: 700;">Record Operational Event Entry</h5>
                     <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
                 </div>
-                
                 <div class="modal-body p-4">
                     <div class="mb-3">
                         <label class="form-label">EVENT RECORD DATE:</label>
                         <input type="date" name="incident_date" class="form-control" value="{{ now.strftime('%Y-%m-%d') }}" required>
                     </div>
-                    
                     <div class="row g-3 mb-3">
                         <div class="col-6">
                             <label class="form-label">CLASSIFICATION CATEGORY:</label>
@@ -1234,12 +1324,10 @@
                             <input type="text" name="staff_involved" class="form-control" placeholder="e.g., Cashier Jane, Kitchen Crew" required>
                         </div>
                     </div>
-
                     <div class="mb-3">
                         <label class="form-label">INCIDENT OBSERVED / DETAILS SUMMARY:</label>
                         <textarea name="description" class="form-control p-3" rows="3" placeholder="Provide accurate, comprehensive event detail observations..." required></textarea>
                     </div>
-
                     <div>
                         <label class="form-label">INITIAL RECONCILIATION STATUS:</label>
                         <select name="status" class="form-select">
@@ -1248,7 +1336,6 @@
                         </select>
                     </div>
                 </div>
-                
                 <div class="modal-footer p-3" style="border-top: 1px solid #2d2d34; background: #151518; border-bottom-left-radius: 12px; border-bottom-right-radius: 12px;">
                     <button type="submit" class="btn btn-success w-100 py-2.5" style="font-weight: 700; border-radius: 6px;">Commit Incident Report Entry to Ledger</button>
                 </div>
@@ -1258,6 +1345,291 @@
 </div>
 
 <script>
+    const MARKET_PLANNER_DATA = {{ market_planner_data_json|safe }};
+    let latestMarketListRows = [];
+
+    function initMarketPlannerProducts() {
+        const tbody = document.getElementById('mpProductsTableBody');
+        if (!tbody || !MARKET_PLANNER_DATA || !MARKET_PLANNER_DATA.products) return;
+
+        if (MARKET_PLANNER_DATA.products.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="2" class="text-center py-4 text-muted">No active products found.</td></tr>';
+            return;
+        }
+
+        let html = '';
+        MARKET_PLANNER_DATA.products.forEach(p => {
+            const badge = p.has_recipe
+                ? `<small class="text-info d-block" style="font-size: 10.5px;">${p.category}</small>`
+                : `<small class="text-danger d-block" style="font-size: 10.5px;">${p.category} • No Recipe</small>`;
+
+            html += `
+                <tr class="mp-prod-row" data-search="${(p.name + ' ' + p.category).toLowerCase()}">
+                    <td class="ps-3 py-2">
+                        <div class="fw-bold text-white" style="font-size: 12.5px;">${p.name}</div>
+                        ${badge}
+                    </td>
+                    <td class="pe-3 py-2 text-end">
+                        <input type="number" min="0" step="1" class="form-control form-control-sm bg-secondary text-white border-0 text-end font-monospace mp-serving-input"
+                               data-product-id="${p.id}"
+                               value="0"
+                               ${p.has_recipe ? '' : 'disabled title="No recipe mapped yet"'}
+                               oninput="runMarketListPlanner()">
+                    </td>
+                </tr>
+            `;
+        });
+        tbody.innerHTML = html;
+    }
+
+    function filterMarketPlannerProducts() {
+        const q = (document.getElementById('mpProductSearch').value || '').toLowerCase().trim();
+        document.querySelectorAll('.mp-prod-row').forEach(tr => {
+            const hay = tr.getAttribute('data-search') || '';
+            tr.style.display = hay.includes(q) ? '' : 'none';
+        });
+    }
+
+    function applyDefaultServings() {
+        const defaultQty = parseFloat(document.getElementById('mpBulkDefaultInput').value) || 0;
+        document.querySelectorAll('.mp-serving-input:not(:disabled)').forEach(inp => {
+            inp.value = defaultQty;
+        });
+        runMarketListPlanner();
+    }
+
+    function clearAllServings() {
+        document.querySelectorAll('.mp-serving-input').forEach(inp => {
+            inp.value = 0;
+        });
+        runMarketListPlanner();
+    }
+
+    function runMarketListPlanner() {
+        const days = Math.max(1, parseFloat(document.getElementById('mpDaysInput').value) || 1);
+        const bufferPct = Math.max(0, parseFloat(document.getElementById('mpBufferInput').value) || 0);
+        const deductStock = document.getElementById('mpDeductStockToggle').checked;
+        const sortBy = document.getElementById('mpGroupBySelect').value;
+
+        const modeBadge = document.getElementById('mpModeBadge');
+        if (deductStock) {
+            modeBadge.className = 'badge bg-warning text-dark';
+            modeBadge.innerText = 'RESTOCK / PO MODE';
+        } else {
+            modeBadge.className = 'badge bg-primary';
+            modeBadge.innerText = 'OPENING MODE';
+        }
+
+        const rawTotals = {};
+        const multiplier = days * (1 + bufferPct / 100.0);
+
+        document.querySelectorAll('.mp-serving-input').forEach(inp => {
+            const dailyServings = parseFloat(inp.value) || 0;
+            if (dailyServings <= 0) return;
+
+            const pid = inp.getAttribute('data-product-id');
+            const totalServings = dailyServings * multiplier;
+            const prodRecipe = MARKET_PLANNER_DATA.recipes[pid] || [];
+
+            prodRecipe.forEach(line => {
+                const ingId = line.ing_id;
+                const reqTotal = line.qty * totalServings;
+                const ingMeta = MARKET_PLANNER_DATA.ingredients[ingId];
+
+                // Explode PREPPED sub-recipes into raw materials automatically
+                if (ingMeta && ingMeta.ingredient_type === 'PREPPED' && MARKET_PLANNER_DATA.prep_recipes[ingId]) {
+                    const prepDef = MARKET_PLANNER_DATA.prep_recipes[ingId];
+                    const batchRatio = reqTotal / (prepDef.batch_yield || 1.0);
+                    prepDef.items.forEach(sub => {
+                        rawTotals[sub.raw_id] = (rawTotals[sub.raw_id] || 0) + (sub.qty * batchRatio);
+                    });
+                } else {
+                    rawTotals[ingId] = (rawTotals[ingId] || 0) + reqTotal;
+                }
+            });
+        });
+
+        const rows = [];
+        let totalBudget = 0;
+        let totalPacksCount = 0;
+
+        Object.keys(rawTotals).forEach(ingId => {
+            const grossNeeded = rawTotals[ingId];
+            const meta = MARKET_PLANNER_DATA.ingredients[ingId] || {
+                id: ingId, name: ingId, category: 'General', unit: 'pcs',
+                current_stock: 0, cost_per_unit: 0, supplier: 'Unassigned',
+                purchase_unit: 'pack', pack_size: 0, purchase_cost: 0
+            };
+
+            const netNeeded = deductStock ? Math.max(0, grossNeeded - meta.current_stock) : grossNeeded;
+            if (netNeeded <= 0.0001) return;
+
+            let buyQty = 0;
+            let buyLabel = '';
+            let estCost = 0;
+
+            if (meta.pack_size > 0) {
+                buyQty = Math.ceil(netNeeded / meta.pack_size);
+                buyLabel = `${buyQty} ${meta.purchase_unit}${buyQty > 1 ? 's' : ''} (${meta.pack_size}${meta.unit})`;
+                estCost = meta.purchase_cost > 0 ? (buyQty * meta.purchase_cost) : (buyQty * meta.pack_size * meta.cost_per_unit);
+            } else {
+                buyQty = Math.ceil(netNeeded);
+                buyLabel = `${buyQty.toLocaleString()} ${meta.unit}`;
+                estCost = netNeeded * meta.cost_per_unit;
+            }
+
+            totalBudget += estCost;
+            totalPacksCount += buyQty;
+
+            rows.push({
+                id: ingId,
+                name: meta.name,
+                category: meta.category,
+                supplier: meta.supplier,
+                unit: meta.unit,
+                grossNeeded: grossNeeded,
+                currentStock: meta.current_stock,
+                netNeeded: netNeeded,
+                buyQty: buyQty,
+                buyLabel: buyLabel,
+                estCost: estCost
+            });
+        });
+
+        if (sortBy === 'category') {
+            rows.sort((a, b) => a.category.localeCompare(b.category) || a.name.localeCompare(b.name));
+        } else if (sortBy === 'supplier') {
+            rows.sort((a, b) => a.supplier.localeCompare(b.supplier) || a.name.localeCompare(b.name));
+        } else {
+            rows.sort((a, b) => b.estCost - a.estCost);
+        }
+
+        latestMarketListRows = rows;
+
+        document.getElementById('mpTotalBudgetDisplay').innerText = 'PHP ' + totalBudget.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+        document.getElementById('mpTotalItemsDisplay').innerText = `${rows.length} item${rows.length === 1 ? '' : 's'}`;
+        document.getElementById('mpTotalPacksDisplay').innerText = totalPacksCount.toLocaleString();
+
+        const tbody = document.getElementById('mpMarketListBody');
+        if (rows.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="4" class="text-center py-5 text-muted">No purchases required for the current forecast and stock settings.</td></tr>';
+            return;
+        }
+
+        let html = '';
+        rows.forEach(r => {
+            const stockNote = deductStock ? `<small class="text-muted d-block" style="font-size: 10px;">In Stock: ${Number(r.currentStock.toFixed(1)).toLocaleString()} ${r.unit}</small>` : '';
+            html += `
+                <tr>
+                    <td class="ps-3 py-2">
+                        <div class="fw-bold text-white" style="font-size: 13px;">${r.name}</div>
+                        <small class="text-info" style="font-size: 10.5px;">${r.category}</small>
+                        <small class="text-muted ms-1" style="font-size: 10.5px;">• ${r.supplier}</small>
+                    </td>
+                    <td class="py-2 text-end font-monospace" style="font-size: 12.5px;">
+                        ${Number(r.netNeeded.toFixed(1)).toLocaleString()} ${r.unit}
+                        ${stockNote}
+                    </td>
+                    <td class="py-2 text-center">
+                        <span class="badge bg-primary font-monospace px-2 py-1" style="font-size: 11.5px;">${r.buyLabel}</span>
+                    </td>
+                    <td class="pe-3 py-2 text-end font-monospace text-warning fw-bold" style="font-size: 13px;">
+                        PHP ${r.estCost.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    </td>
+                </tr>
+            `;
+        });
+        tbody.innerHTML = html;
+    }
+
+    function exportMarketListCSV() {
+        if (!latestMarketListRows || latestMarketListRows.length === 0) {
+            alert('Please generate a market list first before exporting.');
+            return;
+        }
+        const headers = ['Category', 'Supplier', 'Ingredient', 'Net Needed', 'Unit', 'Buy Qty', 'Est. Cost (PHP)'];
+        const csvLines = [headers.join(',')];
+        latestMarketListRows.forEach(r => {
+            const line = [
+                `"${r.category.replace(/"/g, '""')}"`,
+                `"${r.supplier.replace(/"/g, '""')}"`,
+                `"${r.name.replace(/"/g, '""')}"`,
+                r.netNeeded.toFixed(2),
+                `"${r.unit}"`,
+                `"${r.buyLabel}"`,
+                r.estCost.toFixed(2)
+            ];
+            csvLines.push(line.join(','));
+        });
+
+        const blob = new Blob([csvLines.join('\n')], { type: 'text/csv;charset=utf-8;' });
+        const link = document.createElement('a');
+        link.href = URL.createObjectURL(blob);
+        link.download = `market_list_{{ username }}_${new Date().toISOString().slice(0,10)}.csv`;
+        link.click();
+    }
+
+    function printMarketList() {
+        if (!latestMarketListRows || latestMarketListRows.length === 0) {
+            alert('Please generate a market list first before printing.');
+            return;
+        }
+        const days = document.getElementById('mpDaysInput').value || 7;
+        const buffer = document.getElementById('mpBufferInput').value || 0;
+        const modeText = document.getElementById('mpDeductStockToggle').checked ? 'Restock / PO Mode (Current Stock Deducted)' : 'Opening Stock Mode (From Scratch)';
+        const totalBudget = document.getElementById('mpTotalBudgetDisplay').innerText;
+
+        let rowsHtml = '';
+        latestMarketListRows.forEach(r => {
+            rowsHtml += `
+                <tr>
+                    <td style="text-align:center;">&#9744;</td>
+                    <td><strong>${r.name}</strong><br><small style="color:#555;">${r.category} | ${r.supplier}</small></td>
+                    <td style="text-align:right; font-family:monospace;">${Number(r.netNeeded.toFixed(1)).toLocaleString()} ${r.unit}</td>
+                    <td style="text-align:center; font-weight:bold;">${r.buyLabel}</td>
+                    <td style="text-align:right; font-family:monospace;">PHP ${r.estCost.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+                </tr>
+            `;
+        });
+
+        const win = window.open('', '_blank');
+        win.document.write(`
+            <html>
+            <head>
+                <title>Market List - {{ username|upper }}</title>
+                <style>
+                    body { font-family: 'Segoe UI', Arial, sans-serif; padding: 24px; color: #111; }
+                    h2 { margin: 0 0 4px; text-transform: uppercase; letter-spacing: 1px; }
+                    .meta { font-size: 12px; color: #555; margin-bottom: 18px; }
+                    table { width: 100%; border-collapse: collapse; margin-bottom: 18px; }
+                    th, td { border: 1.5px solid #222; padding: 8px 10px; font-size: 13px; }
+                    th { background: #1f2937; color: #fff; text-transform: uppercase; font-size: 11px; }
+                    .total-box { text-align: right; font-size: 16px; font-weight: 800; }
+                </style>
+            </head>
+            <body>
+                <h2>{{ username|upper }} — Market & Purchasing List</h2>
+                <div class="meta">Coverage: ${days} Days | Safety Buffer: +${buffer}% | Mode: ${modeText}</div>
+                <table>
+                    <thead>
+                        <tr>
+                            <th style="width:36px;">Done</th>
+                            <th style="text-align:left;">Ingredient</th>
+                            <th style="text-align:right;">Net Needed</th>
+                            <th>Purchase Qty</th>
+                            <th style="text-align:right;">Est. Cost</th>
+                        </tr>
+                    </thead>
+                    <tbody>${rowsHtml}</tbody>
+                </table>
+                <div class="total-box">Estimated Total Budget: ${totalBudget}</div>
+                <script>window.onload = function(){ window.print(); };<\/script>
+            </body>
+            </html>
+        `);
+        win.document.close();
+    }
+
     function switchSalesAnalyticsView(viewType, btnEl) {
         document.querySelectorAll('.analytics-view-pill').forEach(b => b.classList.remove('active'));
         if (btnEl) btnEl.classList.add('active');
@@ -1278,6 +1650,8 @@
     }
 
     document.addEventListener("DOMContentLoaded", function () {
+        initMarketPlannerProducts();
+
         const activeTabId = localStorage.getItem('reportsActiveTab');
         if (activeTabId) {
             const tabTrigger = document.querySelector(activeTabId);
