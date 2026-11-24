@@ -4,9 +4,11 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>{{ store_info.name }} - Live Counter POS</title>
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
     
-    <!-- SAFE JINJA2 RECEIPT CONFIGURATION EXTRACTOR: PREVENTS ANY UNDEFINEDERROR -->
+    <!-- CLEAN CDN IMPORTS -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+    
     {% set rc = receipt_config if (receipt_config is defined and receipt_config) else {} %}
     
     <style>
@@ -37,9 +39,87 @@
             user-select: none;
         }
 
+        /* NATIVE STANDALONE MODAL ENGINE (OFFLINE & BACKDROP SAFE) */
+        .pos-modal-backdrop {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            background: rgba(0, 0, 0, 0.82);
+            z-index: 99990;
+            align-items: center;
+            justify-content: center;
+            padding: 15px;
+            box-sizing: border-box;
+            user-select: auto;
+        }
+        .pos-modal-backdrop.modal-active {
+            display: flex !important;
+        }
+        .pos-modal-box {
+            background: #181824;
+            color: #ffffff;
+            border: 1px solid #38384e;
+            border-radius: 12px;
+            width: 100%;
+            max-width: 500px;
+            box-shadow: 0 12px 35px rgba(0, 0, 0, 0.8);
+            overflow: hidden;
+            user-select: auto;
+            animation: modalFadeIn 0.15s ease-out;
+        }
+        .pos-modal-box.modal-lg { max-width: 800px; }
+        .pos-modal-box.modal-sm { max-width: 380px; }
+
+        @keyframes modalFadeIn {
+            from { transform: scale(0.96); opacity: 0; }
+            to { transform: scale(1); opacity: 1; }
+        }
+
+        .pos-modal-header {
+            padding: 14px 18px;
+            background: #14141c;
+            border-bottom: 1px solid #2d2d3c;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .pos-modal-body {
+            padding: 18px;
+            max-height: 70vh;
+            overflow-y: auto;
+            color: #ffffff;
+        }
+        .pos-modal-footer {
+            padding: 12px 18px;
+            background: #14141c;
+            border-top: 1px solid #2d2d3c;
+            display: flex;
+            justify-content: flex-end;
+            gap: 10px;
+        }
+
+        /* High-Contrast Info Rows */
+        .info-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 8px;
+            font-size: 13.5px;
+        }
+        .info-label {
+            color: #94a3b8 !important;
+            font-weight: 600;
+        }
+        .info-value {
+            color: #ffffff !important;
+            font-weight: 700;
+        }
+
         .pos-container { display: flex; height: 100vh; width: 100vw; }
 
-        /* Catalog Column */
         .catalog-pane {
             flex: 1;
             display: flex;
@@ -50,20 +130,21 @@
         }
 
         .catalog-header {
-            padding: 14px 20px;
+            padding: 12px 18px;
             background: #14141c;
             border-bottom: 1px solid var(--pos-border);
             display: flex;
             justify-content: space-between;
             align-items: center;
-            gap: 15px;
+            gap: 12px;
+            flex-wrap: wrap;
         }
 
         .category-scroll {
             display: flex;
             gap: 8px;
             overflow-x: auto;
-            padding: 10px 20px;
+            padding: 10px 18px;
             background: #111117;
             border-bottom: 1px solid var(--pos-border);
             scrollbar-width: none;
@@ -79,6 +160,7 @@
             font-size: 13px;
             font-weight: 700;
             white-space: nowrap;
+            cursor: pointer;
             transition: all 0.15s ease;
         }
         .cat-btn.active, .cat-btn:hover {
@@ -90,7 +172,7 @@
         .product-grid {
             flex: 1;
             overflow-y: auto;
-            padding: 20px;
+            padding: 18px;
             display: grid;
             grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
             gap: 14px;
@@ -192,7 +274,7 @@
         .product-card .p-price {
             font-size: 15px;
             font-weight: 800;
-            font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+            font-family: ui-monospace, monospace;
             color: var(--pos-accent);
             white-space: nowrap;
         }
@@ -207,7 +289,6 @@
             padding: 2px 5px;
         }
 
-        /* Cart Column */
         .cart-pane {
             width: 420px;
             background: var(--pos-sidebar-bg);
@@ -436,12 +517,13 @@
             padding: 14px;
             border-radius: 8px;
             margin-top: 14px;
+            cursor: pointer;
             transition: background 0.15s ease;
         }
         .pay-btn:hover { background: var(--pos-accent-hover); }
         .pay-btn:disabled { background: #222230; color: #94a3b8; border: 1px solid #333346; cursor: not-allowed; }
 
-        /* Dynamic Customization Modal Styles */
+        /* Customization Modals */
         .mod-section-title {
             font-size: 11px;
             font-weight: 800;
@@ -455,11 +537,7 @@
             align-items: center;
         }
 
-        .mod-pill-grid {
-            display: flex;
-            flex-wrap: wrap;
-            gap: 8px;
-        }
+        .mod-pill-grid { display: flex; flex-wrap: wrap; gap: 8px; }
 
         .mod-option-pill {
             background: #1c1c28;
@@ -487,12 +565,8 @@
             border-color: #f59e0b;
             color: #fde047;
         }
-        .mod-option-pill.depleted {
-            border-color: #dc2626 !important;
-            opacity: 0.65;
-        }
+        .mod-option-pill.depleted { border-color: #dc2626 !important; opacity: 0.65; }
 
-        /* PIN Keypad */
         .pin-keypad-grid {
             display: grid;
             grid-template-columns: repeat(3, 1fr);
@@ -521,7 +595,6 @@
             justify-content: center;
         }
 
-        /* Tender Keypad Modal */
         .tender-grid {
             display: grid;
             grid-template-columns: repeat(3, 1fr);
@@ -555,12 +628,13 @@
             cursor: pointer;
         }
 
-        /* DYNAMIC ESC/POS THERMAL RECEIPT PRINT MEDIA */
-        #printableReceipt { display: none; }
+        /* PRINT STYLES */
+        #printableReceipt, #printableZSlip { display: none; }
         @media print {
             body * { visibility: hidden; }
-            #printableReceipt, #printableReceipt * { visibility: visible; }
-            #printableReceipt {
+            #printableReceipt.print-active, #printableReceipt.print-active * { visibility: visible; }
+            #printableZSlip.print-active, #printableZSlip.print-active * { visibility: visible; }
+            .print-active {
                 display: block !important;
                 position: absolute;
                 left: 0;
@@ -588,12 +662,37 @@
     <!-- LEFT: PRODUCT CATALOG -->
     <div class="catalog-pane">
         <div class="catalog-header">
-            <div class="d-flex align-items-center gap-3">
+            <div class="d-flex align-items-center gap-2 flex-wrap">
                 <a href="/portal/{{ username }}/sales" class="btn btn-sm btn-outline-secondary font-monospace" style="font-size: 11px;">Back to Office</a>
-                <h5 class="m-0 fw-bold font-monospace text-success">{{ store_info.name }} LIVE TERMINAL</h5>
+                <h6 class="m-0 fw-bold font-monospace text-success me-1">{{ store_info.name }} LIVE TERMINAL</h6>
+                
+                <!-- SHIFT STATUS / OPEN BUTTON -->
+                {% if active_shift %}
+                <button type="button" class="btn btn-sm btn-outline-info font-monospace fw-bold" onclick="openPosModal('activeShiftModal')">
+                    <span id="posShiftHeaderBadge">Shift: {{ active_shift.Shift_ID }} (OPEN)</span>
+                </button>
+                {% else %}
+                <button type="button" class="btn btn-sm btn-warning text-dark font-monospace fw-bold" onclick="openPosModal('openShiftModal')">
+                    <span id="posShiftHeaderBadge">🔴 Open Register Shift</span>
+                </button>
+                {% endif %}
+
+                <!-- RECENT RECEIPTS BUTTON -->
+                <button type="button" class="btn btn-sm btn-outline-warning font-monospace fw-bold" onclick="openRecentOrdersModal()">
+                    📜 Orders / Receipts
+                </button>
             </div>
-            <div style="width: 240px;">
-                <input type="text" id="posSearchInput" class="form-control form-control-sm bg-dark text-white border-secondary" placeholder="Search product or scan..." oninput="filterCatalog()">
+            
+            <!-- PRODUCT LIVE SEARCH BAR WITH PERMANENT AUTOFILL IMMUNITY -->
+            <div style="width: 220px;" class="position-relative">
+                <input type="text" 
+                       id="posSearchInput" 
+                       class="form-control form-control-sm bg-dark text-white border-secondary" 
+                       placeholder="🔍 Search product name..." 
+                       autocomplete="off"
+                       readonly
+                       onfocus="this.removeAttribute('readonly');"
+                       oninput="filterCatalog()">
             </div>
         </div>
 
@@ -714,168 +813,304 @@
 
 </div>
 
-<!-- PRODUCT-SPECIFIC CUSTOMIZATION MODAL -->
-<div class="modal fade" id="dynamicModifierModal" tabindex="-1" aria-hidden="true">
-    <div class="modal-dialog modal-dialog-centered modal-lg">
-        <div class="modal-content bg-dark text-white border border-secondary shadow-lg" style="background: #161622 !important;">
-            <div class="modal-header border-secondary p-3" style="background: #12121a;">
-                <div>
-                    <h5 class="modal-title fw-bold text-white m-0" id="dynModalTitle">Customize Item</h5>
-                    <small class="text-secondary" id="dynModalCategory">Category</small>
+<!-- MODAL 1: OPEN SHIFT FORM MODAL -->
+<div class="pos-modal-backdrop" id="openShiftModal">
+    <div class="pos-modal-box modal-sm" style="border-color: #10b981;">
+        <div class="pos-modal-header" style="background: #112218;">
+            <h6 class="m-0 fw-bold text-success">Open Cash Register Shift</h6>
+            <button type="button" class="btn-close btn-close-white" onclick="closePosModal('openShiftModal')"></button>
+        </div>
+        <form method="post" action="/portal/{{ username }}/pos/shift/open">
+            <div class="pos-modal-body p-3">
+                <p class="small text-muted mb-2">Count your starting drawer cash before taking orders:</p>
+                <label class="info-label small mb-1">STARTING CASH FLOAT (PHP):</label>
+                <div class="input-group mb-3">
+                    <span class="input-group-text bg-secondary text-white font-monospace">₱</span>
+                    <input type="number" step="0.01" min="0" name="starting_float" id="openShiftFloatInput" class="form-control bg-dark text-white font-monospace fs-5 text-end fw-bold" value="2000.00" required>
                 </div>
-                <div class="d-flex align-items-center gap-3">
-                    <span class="badge bg-dark border border-secondary text-success font-monospace fs-6 px-3 py-1.5" id="dynModalRunningPrice">PHP 0.00</span>
-                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                <label class="info-label small mb-1">OPENING NOTES (OPTIONAL):</label>
+                <input type="text" name="notes" id="openShiftNotesInput" class="form-control form-control-sm bg-dark text-white border-secondary mb-2" placeholder="e.g. Morning Shift Till">
+            </div>
+            <div class="pos-modal-footer p-2">
+                <button type="submit" class="btn btn-success fw-bold w-100 py-2">
+                    Open Shift & Begin Orders
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- MODAL 2: ACTIVE SHIFT MANAGEMENT MODAL (HIGH CONTRAST & CLEAR CLOSE BUTTON) -->
+<div class="pos-modal-backdrop" id="activeShiftModal">
+    <div class="pos-modal-box" style="border-color: #38384e;">
+        <div class="pos-modal-header">
+            <h5 class="m-0 fw-bold text-white">Active Shift Terminal Oversight</h5>
+            <button type="button" class="btn-close btn-close-white" onclick="closePosModal('activeShiftModal')"></button>
+        </div>
+        <div class="pos-modal-body p-4">
+            <div class="p-3 mb-3 rounded" style="background: #111118; border: 1px solid #38384e;">
+                <div class="info-row">
+                    <span class="info-label">Shift Reference:</span>
+                    <strong class="font-monospace text-info fs-6" id="activeShiftIdLabel">{{ active_shift.Shift_ID if active_shift else '---' }}</strong>
+                </div>
+                <div class="info-row">
+                    <span class="info-label">Opened At:</span>
+                    <span class="info-value font-monospace" id="activeShiftTimeLabel">{{ active_shift.Date ~ ' ' ~ active_shift.Time_Opened if active_shift else '---' }}</span>
+                </div>
+                <div class="info-row">
+                    <span class="info-label">Opening Cashier:</span>
+                    <strong class="info-value" id="activeShiftCashierLabel">{{ active_shift.Cashier_Open if active_shift else '---' }}</strong>
+                </div>
+                <div class="info-row">
+                    <span class="info-label">Starting Float:</span>
+                    <strong class="font-monospace text-white fs-6" id="activeShiftFloatLabel">₱{{ '%.2f'|format(active_shift.Starting_Float) if active_shift else '0.00' }}</strong>
+                </div>
+                <div class="info-row">
+                    <span class="info-label">Cash Sales (Live):</span>
+                    <strong class="font-monospace text-success fs-6" id="activeShiftCashSalesLabel">₱{{ '%.2f'|format(active_shift.Cash_Sales) if active_shift else '0.00' }}</strong>
+                </div>
+                <div class="info-row pt-2 border-top border-secondary">
+                    <span style="color: #cbd5e1; font-weight: 700; font-size: 14px;">Total Net Sales:</span>
+                    <strong class="font-monospace text-success fs-5" id="activeShiftNetLabel">₱{{ '%.2f'|format(active_shift.Total_Net_Sales) if active_shift else '0.00' }}</strong>
                 </div>
             </div>
 
-            <div class="modal-body p-4" style="max-height: 65vh; overflow-y: auto;">
-                <div id="dynamicModifierGroupsContainer"></div>
-
-                <!-- Free Text Special Instructions -->
-                <div class="mod-section-title mt-4">
-                    <span>Kitchen & Counter Notes</span>
-                    <small class="text-muted font-monospace" style="font-size: 10px;">Free Text Instruction</small>
-                </div>
-                <input type="text" id="dynSpecialInstructionInput" class="form-control bg-dark text-white border-secondary" placeholder="Type counter notes (e.g. split in 2 cups, serve after 5 mins)..." autocomplete="off">
+            <div class="d-flex gap-2 mb-3">
+                <button type="button" class="btn btn-outline-info fw-bold w-50 py-2" onclick="printXReading()">
+                    Print X-Reading
+                </button>
+                <button type="button" class="btn btn-danger fw-bold w-50 py-2" onclick="openCloseShiftModal()">
+                    Close Shift & Z-Reading
+                </button>
             </div>
 
-            <div class="modal-footer border-secondary p-3 justify-content-between" style="background: #12121a;">
-                <button type="button" class="btn btn-secondary px-3" data-bs-dismiss="modal">Cancel</button>
-                <div class="d-flex gap-2">
-                    <button type="button" class="btn btn-outline-info fw-bold" onclick="commitDynamicCustomization(true)">
-                        Quick Add (Default)
-                    </button>
-                    <button type="button" class="btn btn-success fw-bold px-4" id="commitCustomizationBtn" onclick="commitDynamicCustomization(false)">
-                        Add to Order • PHP 0.00
-                    </button>
+            <button type="button" class="btn btn-secondary w-100 fw-bold py-2" onclick="closePosModal('activeShiftModal')">
+                &larr; Return to Register (Continue Taking Orders)
+            </button>
+        </div>
+    </div>
+</div>
+
+<!-- MODAL 3: CLOSE SHIFT FORM MODAL -->
+<div class="pos-modal-backdrop" id="closeShiftModal">
+    <div class="pos-modal-box modal-sm" style="border-color: #ef4444;">
+        <div class="pos-modal-header" style="background: #251216;">
+            <h6 class="m-0 fw-bold text-danger">End-of-Day Shift Closeout</h6>
+            <button type="button" class="btn-close btn-close-white" onclick="closePosModal('closeShiftModal')"></button>
+        </div>
+        <form method="post" action="/portal/{{ username }}/pos/shift/close">
+            <div class="pos-modal-body p-3">
+                <p class="small text-muted mb-2">Count all physical cash in the drawer (blind count):</p>
+                <label class="info-label small mb-1">ACTUAL COUNTED CASH (PHP):</label>
+                <div class="input-group mb-3">
+                    <span class="input-group-text bg-secondary text-white font-monospace">₱</span>
+                    <input type="number" step="0.01" min="0" name="actual_counted_cash" id="closeShiftActualCashInput" class="form-control bg-dark text-warning font-monospace fs-5 text-end fw-bold" placeholder="0.00" required>
                 </div>
+                <label class="info-label small mb-1">CLOSING MEMO (OPTIONAL):</label>
+                <input type="text" name="notes" id="closeShiftNotesInput" class="form-control form-control-sm bg-dark text-white border-secondary mb-2" placeholder="e.g. Closing cash verified">
+            </div>
+            <div class="pos-modal-footer p-2">
+                <button type="submit" class="btn btn-danger fw-bold w-100 py-2">
+                    Lock Shift & Print Z-Reading
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- MODAL 4: RECENT ORDERS & RECEIPTS MODAL -->
+<div class="pos-modal-backdrop" id="recentOrdersModal">
+    <div class="pos-modal-box modal-lg">
+        <div class="pos-modal-header">
+            <h5 class="m-0 fw-bold text-white">Recent Receipts & Closed Tickets</h5>
+            <button type="button" class="btn-close btn-close-white" onclick="closePosModal('recentOrdersModal')"></button>
+        </div>
+        <div class="pos-modal-body p-3" style="max-height: 65vh; overflow-y: auto;">
+            <div id="recentOrdersListContainer">
+                <div class="text-center text-muted py-4">Loading today's transactions...</div>
             </div>
         </div>
     </div>
 </div>
 
-<!-- INGREDIENT DEFICIT ALERT MODAL -->
-<div class="modal fade" id="stockOverrideModal" tabindex="-1" aria-hidden="true">
-    <div class="modal-dialog modal-dialog-centered">
-        <div class="modal-content bg-dark text-white border border-warning shadow-lg">
-            <div class="modal-header border-warning" style="background: #1e1b13;">
-                <h5 class="modal-title fw-bold text-warning">Ingredient Deficit Alert</h5>
-                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+<!-- MODAL 5: VOID TICKET MODAL -->
+<div class="pos-modal-backdrop" id="voidTicketModal">
+    <div class="pos-modal-box modal-sm" style="border-color: #ef4444;">
+        <div class="pos-modal-header" style="background: #251216;">
+            <h6 class="m-0 fw-bold text-danger">Authorize Ticket Void</h6>
+            <button type="button" class="btn-close btn-close-white" onclick="closePosModal('voidTicketModal')"></button>
+        </div>
+        <div class="pos-modal-body p-3">
+            <div class="p-2 mb-2 rounded font-monospace" style="background: #111118; border: 1px solid #2d2d3c;">
+                <div class="small text-muted">Ticket ID:</div>
+                <strong class="text-white" id="voidModalTxnIdLabel">POS000</strong>
+                <div class="text-danger fw-bold fs-6 mt-1" id="voidModalAmountLabel">PHP 0.00</div>
             </div>
-            <div class="modal-body p-4" style="background: #151520;">
-                <div class="d-flex justify-content-between align-items-center mb-3">
-                    <h4 id="overrideItemName" class="fw-bold text-white mb-0"></h4>
-                    <span class="font-monospace fw-bold text-success" id="overrideItemPrice" style="font-size: 18px;"></span>
-                </div>
-                <p style="color: #cbd5e1; font-size: 13.5px; line-height: 1.5;" class="mb-3">
-                    The following ingredient(s) have zero recorded stock in the system. Check physical availability with the kitchen before continuing:
-                </p>
-                <div id="overrideIngredientsList" class="d-flex flex-column gap-2 mb-3"></div>
-                <div class="alert alert-dark border-secondary p-2.5 mb-0" style="background: #101018; font-size: 12px; color: #94a3b8; border-radius: 6px;">
-                    <strong style="color: #cbd5e1;">Operational Policy:</strong> Proceeding will complete the sale normally. Stock will buffer into negative until replenishment is entered.
-                </div>
-            </div>
-            <div class="modal-footer border-secondary p-3 justify-content-between" style="background: #14141c;">
-                <button type="button" class="btn btn-secondary px-4 fw-bold" data-bs-dismiss="modal">Cancel</button>
-                <button type="button" class="btn btn-warning fw-bold text-dark px-4" onclick="confirmStockOverride()">Proceed with Customization</button>
-            </div>
+            
+            <label class="info-label small mb-1">MANDATORY VOID REASON:</label>
+            <select id="voidReasonSelect" class="form-select form-select-sm bg-dark text-white border-secondary mb-2">
+                <option value="Customer Change of Mind / Walkout" selected>Customer Change of Mind / Walkout</option>
+                <option value="Wrong Item Punched on Counter">Wrong Item Punched on Counter</option>
+                <option value="Kitchen Spilled / Defective Prep">Kitchen Spilled / Defective Prep</option>
+                <option value="Cashier Input Mistake">Cashier Input Mistake</option>
+            </select>
+
+            <label class="info-label small text-warning mb-1">SUPERVISOR / MASTER PIN:</label>
+            <input type="password" id="voidSupervisorPinInput" maxlength="6" class="form-control bg-dark text-warning border-warning font-monospace text-center fs-4 fw-bold mb-1" placeholder="••••">
+            <small class="text-muted d-block mb-2" style="font-size: 10.5px;">Master Security PIN or Manager PIN required.</small>
+            <div id="voidModalErrorLabel" class="text-danger small fw-bold" style="display: none;"></div>
+        </div>
+        <div class="pos-modal-footer p-2">
+            <button type="button" class="btn btn-sm btn-secondary" onclick="closePosModal('voidTicketModal')">Cancel</button>
+            <button type="button" class="btn btn-sm btn-danger fw-bold px-3" onclick="submitVoidOrder()">Confirm Void & Restore Stock</button>
         </div>
     </div>
 </div>
 
-<!-- 4-DIGIT PIN STAFF SWITCH MODAL -->
-<div class="modal fade" id="staffSwitchModal" tabindex="-1" aria-hidden="true">
-    <div class="modal-dialog modal-dialog-centered modal-sm">
-        <div class="modal-content bg-dark text-white border border-secondary shadow-lg">
-            <div class="modal-header border-secondary p-3" style="background: #14141c;">
-                <h6 class="modal-title fw-bold text-white">Switch Terminal Cashier</h6>
-                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+<!-- MODAL 6: PRODUCT CUSTOMIZATION MODAL -->
+<div class="pos-modal-backdrop" id="dynamicModifierModal">
+    <div class="pos-modal-box modal-lg">
+        <div class="pos-modal-header">
+            <div>
+                <h5 class="m-0 fw-bold text-white" id="dynModalTitle">Customize Item</h5>
+                <small class="text-secondary" id="dynModalCategory">Category</small>
             </div>
-            <div class="modal-body p-3 text-center" style="background: #181822;">
-                <small class="text-muted d-block mb-2">Enter your 4-digit security PIN to unlock:</small>
-                <input type="password" id="pinDisplayInput" maxlength="4" class="form-control bg-dark text-warning border-secondary text-center font-monospace fw-bold fs-3 mb-2" readonly placeholder="••••">
-                <div id="pinErrorLabel" class="text-danger small fw-bold mb-2" style="display: none;"></div>
-
-                <div class="pin-keypad-grid">
-                    <div class="pin-key" onclick="pressPinKey('1')">1</div>
-                    <div class="pin-key" onclick="pressPinKey('2')">2</div>
-                    <div class="pin-key" onclick="pressPinKey('3')">3</div>
-                    <div class="pin-key" onclick="pressPinKey('4')">4</div>
-                    <div class="pin-key" onclick="pressPinKey('5')">5</div>
-                    <div class="pin-key" onclick="pressPinKey('6')">6</div>
-                    <div class="pin-key" onclick="pressPinKey('7')">7</div>
-                    <div class="pin-key" onclick="pressPinKey('8')">8</div>
-                    <div class="pin-key" onclick="pressPinKey('9')">9</div>
-                    <div class="pin-key key-action" onclick="clearPin()">CLEAR</div>
-                    <div class="pin-key" onclick="pressPinKey('0')">0</div>
-                    <div class="pin-key key-action" onclick="backspacePin()">⌫</div>
-                </div>
-            </div>
-            <div class="modal-footer border-secondary p-2" style="background: #14141c;">
-                <button type="button" class="btn btn-sm btn-secondary w-100" data-bs-dismiss="modal">Cancel</button>
+            <div class="d-flex align-items-center gap-3">
+                <span class="badge bg-dark border border-secondary text-success font-monospace fs-6 px-3 py-1.5" id="dynModalRunningPrice">PHP 0.00</span>
+                <button type="button" class="btn-close btn-close-white" onclick="closePosModal('dynamicModifierModal')"></button>
             </div>
         </div>
-    </div>
-</div>
-
-<!-- PAYMENT TENDER MODAL -->
-<div class="modal fade" id="paymentModal" tabindex="-1" aria-hidden="true">
-    <div class="modal-dialog modal-dialog-centered">
-        <div class="modal-content bg-dark text-white border border-secondary shadow-lg">
-            <div class="modal-header border-secondary" style="background: #14141c;">
-                <h5 class="modal-title fw-bold">Select Settlement Channel</h5>
-                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+        <div class="pos-modal-body p-4" style="max-height: 65vh; overflow-y: auto;">
+            <div id="dynamicModifierGroupsContainer"></div>
+            <div class="mod-section-title mt-4">
+                <span>Kitchen & Counter Notes</span>
+                <small class="text-muted font-monospace" style="font-size: 10px;">Free Text Instruction</small>
             </div>
-            <div class="modal-body p-4" style="background: #181822;">
-                <div class="d-flex justify-content-between align-items-center mb-3 p-3 rounded" style="background: #111118; border: 1px solid var(--pos-border);">
-                    <span class="text-muted fw-bold">TOTAL AMOUNT PAYABLE:</span>
-                    <h3 class="m-0 font-monospace text-success fw-bold" id="modalPayableTotal">PHP 0.00</h3>
-                </div>
-
-                <div class="tender-grid">
-                    <div class="tender-method-btn active" onclick="selectTenderMethod('Cash', this)">Cash</div>
-                    <div class="tender-method-btn" onclick="selectTenderMethod('GCash', this)">GCash</div>
-                    <div class="tender-method-btn" onclick="selectTenderMethod('Maya', this)">Maya</div>
-                    <div class="tender-method-btn" onclick="selectTenderMethod('Card', this)">Card (EDC)</div>
-                    <div class="tender-method-btn" onclick="selectTenderMethod('GrabFood', this)">GrabFood</div>
-                    <div class="tender-method-btn" onclick="selectTenderMethod('Foodpanda', this)">Foodpanda</div>
-                </div>
-
-                <div id="cashInputSection" class="mt-3">
-                    <label class="form-label text-muted small fw-bold mb-1">CASH AMOUNT RECEIVED:</label>
-                    <input type="number" step="1" id="cashReceivedInput" class="form-control form-control-lg bg-dark text-white font-monospace border-secondary text-end fw-bold" placeholder="0.00" oninput="calculateChange()">
-
-                    <div class="quick-cash-row">
-                        <button type="button" class="quick-cash-btn" onclick="fillExactCash()">Exact</button>
-                        <button type="button" class="quick-cash-btn" onclick="addQuickCash(100)">+100</button>
-                        <button type="button" class="quick-cash-btn" onclick="addQuickCash(200)">+200</button>
-                        <button type="button" class="quick-cash-btn" onclick="addQuickCash(500)">+500</button>
-                        <button type="button" class="quick-cash-btn" onclick="addQuickCash(1000)">+1,000</button>
-                    </div>
-
-                    <div class="d-flex justify-content-between align-items-center mt-3 p-2 rounded" style="background: #14141c;">
-                        <span class="text-muted fw-bold">CHANGE DUE:</span>
-                        <h4 class="m-0 font-monospace text-warning fw-bold" id="changeDueLabel">PHP 0.00</h4>
-                    </div>
-                </div>
-
-                <div id="referenceInputSection" class="mt-3" style="display: none;">
-                    <label class="form-label text-muted small fw-bold mb-1">TRANSACTION REF / APPROVAL CODE (OPTIONAL):</label>
-                    <input type="text" id="digitalReferenceInput" class="form-control bg-dark text-white border-secondary font-monospace" placeholder="e.g., GCash Ref #, Trace #">
-                </div>
-            </div>
-            <div class="modal-footer border-secondary justify-content-between" style="background: #14141c;">
-                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-                <button type="button" class="btn btn-success fw-bold px-4" id="submitCheckoutBtn" onclick="commitOrderCheckout()">
-                    Confirm & Print Receipt
+            <input type="text" id="dynSpecialInstructionInput" class="form-control bg-dark text-white border-secondary" placeholder="Type counter notes (e.g. split in 2 cups, serve after 5 mins)..." autocomplete="off">
+        </div>
+        <div class="pos-modal-footer justify-content-between">
+            <button type="button" class="btn btn-secondary px-3" onclick="closePosModal('dynamicModifierModal')">Cancel</button>
+            <div class="d-flex gap-2">
+                <button type="button" class="btn btn-outline-info fw-bold" onclick="commitDynamicCustomization(true)">
+                    Quick Add (Default)
+                </button>
+                <button type="button" class="btn btn-success fw-bold px-4" id="commitCustomizationBtn" onclick="commitDynamicCustomization(false)">
+                    Add to Order • PHP 0.00
                 </button>
             </div>
         </div>
     </div>
 </div>
 
-<!-- DYNAMIC BACK-OFFICE FORMATTED ESC/POS THERMAL RECEIPT PRINT SHELL -->
+<!-- MODAL 7: STOCK DEFICIT MODAL -->
+<div class="pos-modal-backdrop" id="stockOverrideModal">
+    <div class="pos-modal-box" style="border-color: #f59e0b;">
+        <div class="pos-modal-header" style="background: #1e1b13;">
+            <h5 class="m-0 fw-bold text-warning">Ingredient Deficit Alert</h5>
+            <button type="button" class="btn-close btn-close-white" onclick="closePosModal('stockOverrideModal')"></button>
+        </div>
+        <div class="pos-modal-body p-4">
+            <div class="d-flex justify-content-between align-items-center mb-3">
+                <h4 id="overrideItemName" class="fw-bold text-white mb-0"></h4>
+                <span class="font-monospace fw-bold text-success fs-5" id="overrideItemPrice"></span>
+            </div>
+            <p style="color: #cbd5e1; font-size: 13.5px;" class="mb-3">
+                The following ingredient(s) have zero recorded stock in the system. Check physical availability with the kitchen before continuing:
+            </p>
+            <div id="overrideIngredientsList" class="d-flex flex-column gap-2 mb-3"></div>
+        </div>
+        <div class="pos-modal-footer justify-content-between">
+            <button type="button" class="btn btn-secondary px-4 fw-bold" onclick="closePosModal('stockOverrideModal')">Cancel</button>
+            <button type="button" class="btn btn-warning fw-bold text-dark px-4" onclick="confirmStockOverride()">Proceed with Customization</button>
+        </div>
+    </div>
+</div>
+
+<!-- MODAL 8: CASHIER PIN SWITCH MODAL -->
+<div class="pos-modal-backdrop" id="staffSwitchModal">
+    <div class="pos-modal-box modal-sm">
+        <div class="pos-modal-header">
+            <h6 class="m-0 fw-bold text-white">Switch Terminal Cashier</h6>
+            <button type="button" class="btn-close btn-close-white" onclick="closePosModal('staffSwitchModal')"></button>
+        </div>
+        <div class="pos-modal-body p-3 text-center">
+            <small class="text-muted d-block mb-2">Enter your 4-digit security PIN to unlock:</small>
+            <input type="password" id="pinDisplayInput" maxlength="4" class="form-control bg-dark text-warning border-secondary text-center font-monospace fw-bold fs-3 mb-2" readonly placeholder="••••">
+            <div id="pinErrorLabel" class="text-danger small fw-bold mb-2" style="display: none;"></div>
+
+            <div class="pin-keypad-grid">
+                <div class="pin-key" onclick="pressPinKey('1')">1</div>
+                <div class="pin-key" onclick="pressPinKey('2')">2</div>
+                <div class="pin-key" onclick="pressPinKey('3')">3</div>
+                <div class="pin-key" onclick="pressPinKey('4')">4</div>
+                <div class="pin-key" onclick="pressPinKey('5')">5</div>
+                <div class="pin-key" onclick="pressPinKey('6')">6</div>
+                <div class="pin-key" onclick="pressPinKey('7')">7</div>
+                <div class="pin-key" onclick="pressPinKey('8')">8</div>
+                <div class="pin-key" onclick="pressPinKey('9')">9</div>
+                <div class="pin-key key-action" onclick="clearPin()">CLEAR</div>
+                <div class="pin-key" onclick="pressPinKey('0')">0</div>
+                <div class="pin-key key-action" onclick="backspacePin()">⌫</div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- MODAL 9: PAYMENT MODAL -->
+<div class="pos-modal-backdrop" id="paymentModal">
+    <div class="pos-modal-box">
+        <div class="pos-modal-header">
+            <h5 class="m-0 fw-bold text-white">Select Settlement Channel</h5>
+            <button type="button" class="btn-close btn-close-white" onclick="closePosModal('paymentModal')"></button>
+        </div>
+        <div class="pos-modal-body p-4">
+            <div class="d-flex justify-content-between align-items-center mb-3 p-3 rounded" style="background: #111118; border: 1px solid var(--pos-border);">
+                <span class="text-muted fw-bold">TOTAL AMOUNT PAYABLE:</span>
+                <h3 class="m-0 font-monospace text-success fw-bold" id="modalPayableTotal">PHP 0.00</h3>
+            </div>
+
+            <div class="tender-grid">
+                <div class="tender-method-btn active" onclick="selectTenderMethod('Cash', this)">Cash</div>
+                <div class="tender-method-btn" onclick="selectTenderMethod('GCash', this)">GCash</div>
+                <div class="tender-method-btn" onclick="selectTenderMethod('Maya', this)">Maya</div>
+                <div class="tender-method-btn" onclick="selectTenderMethod('Card', this)">Card (EDC)</div>
+                <div class="tender-method-btn" onclick="selectTenderMethod('GrabFood', this)">GrabFood</div>
+                <div class="tender-method-btn" onclick="selectTenderMethod('Foodpanda', this)">Foodpanda</div>
+            </div>
+
+            <div id="cashInputSection" class="mt-3">
+                <label class="info-label small mb-1">CASH AMOUNT RECEIVED:</label>
+                <input type="number" step="1" id="cashReceivedInput" class="form-control form-control-lg bg-dark text-white font-monospace border-secondary text-end fw-bold" placeholder="0.00" oninput="calculateChange()">
+
+                <div class="quick-cash-row">
+                    <button type="button" class="quick-cash-btn" onclick="fillExactCash()">Exact</button>
+                    <button type="button" class="quick-cash-btn" onclick="addQuickCash(100)">+100</button>
+                    <button type="button" class="quick-cash-btn" onclick="addQuickCash(200)">+200</button>
+                    <button type="button" class="quick-cash-btn" onclick="addQuickCash(500)">+500</button>
+                    <button type="button" class="quick-cash-btn" onclick="addQuickCash(1000)">+1,000</button>
+                </div>
+
+                <div class="d-flex justify-content-between align-items-center mt-3 p-2 rounded" style="background: #14141c;">
+                    <span class="info-label">CHANGE DUE:</span>
+                    <h4 class="m-0 font-monospace text-warning fw-bold" id="changeDueLabel">PHP 0.00</h4>
+                </div>
+            </div>
+
+            <div id="referenceInputSection" class="mt-3" style="display: none;">
+                <label class="info-label small mb-1">TRANSACTION REF / APPROVAL CODE (OPTIONAL):</label>
+                <input type="text" id="digitalReferenceInput" class="form-control bg-dark text-white border-secondary font-monospace" placeholder="e.g. GCash Ref #, Trace #">
+            </div>
+        </div>
+        <div class="pos-modal-footer justify-content-between">
+            <button type="button" class="btn btn-secondary" onclick="closePosModal('paymentModal')">Cancel</button>
+            <button type="button" class="btn btn-success fw-bold px-4" id="submitCheckoutBtn" onclick="commitOrderCheckout()">
+                Confirm & Print Receipt
+            </button>
+        </div>
+    </div>
+</div>
+
+<!-- DYNAMIC THERMAL PRINT SHELL FOR CUSTOMER RECEIPT -->
 <div id="printableReceipt">
     <div class="thermal-center">
         <strong style="font-size: 14.5px;">{{ rc.get('receipt_header_name', store_info.name) }}</strong><br>
@@ -938,7 +1173,6 @@
 
     <div class="thermal-divider"></div>
 
-    <!-- DYNAMIC FOOTER & POLICIES -->
     <div class="thermal-center">
         {% if rc.get('receipt_footer') %}
             {{ rc.get('receipt_footer') }}<br>
@@ -951,37 +1185,311 @@
         {% endif %}
     </div>
 
-    <!-- MECHANICAL AUTO-CUT FEED LINE CLEARANCE BUFFER -->
     {% set feed_lines = (rc.get('receipt_feed_lines', '4')|string)|int if rc.get('receipt_feed_lines') else 4 %}
     {% for _ in range(feed_lines) %}
     <div>&nbsp;</div>
     {% endfor %}
 </div>
 
-<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+<!-- DYNAMIC THERMAL PRINT SHELL FOR SHIFT X/Z-READING REPORT -->
+<div id="printableZSlip">
+    <div class="thermal-center">
+        <strong style="font-size: 14.5px;">{{ rc.get('receipt_header_name', store_info.name) }}</strong><br>
+        <strong style="font-size: 12px; margin-top: 3px; display: inline-block;" id="zReportSlipTitle">OFFICIAL Z-READING REPORT</strong><br>
+        <span style="font-size: 10px;">SHIFT RECONCILIATION SUMMARY</span>
+    </div>
+
+    <div class="thermal-divider"></div>
+
+    <div class="thermal-row">
+        <span>SHIFT: <span id="zSlipShiftId">SHF000</span></span>
+        <span id="zSlipDate">2026-09-17</span>
+    </div>
+    <div class="thermal-row">
+        <span>OPENED: <span id="zSlipOpened">00:00</span></span>
+        <span>CLOSED: <span id="zSlipClosed">00:00</span></span>
+    </div>
+    <div class="thermal-row">
+        <span>OPEN CASHIER:</span>
+        <span id="zSlipCashierOpen">---</span>
+    </div>
+    <div class="thermal-row">
+        <span>CLOSE CASHIER:</span>
+        <span id="zSlipCashierClose">---</span>
+    </div>
+
+    <div class="thermal-divider"></div>
+
+    <div class="thermal-row">
+        <span>TOTAL TRANSACTIONS:</span>
+        <span id="zSlipTxnCount">0</span>
+    </div>
+    <div class="thermal-row" style="font-weight: bold;">
+        <span>TOTAL NET SALES:</span>
+        <span id="zSlipNetSales">PHP 0.00</span>
+    </div>
+
+    <div class="thermal-divider"></div>
+
+    <div class="thermal-row">
+        <span>STARTING FLOAT:</span>
+        <span id="zSlipStartingFloat">0.00</span>
+    </div>
+    <div class="thermal-row">
+        <span>CASH SALES:</span>
+        <span id="zSlipCashSales">0.00</span>
+    </div>
+    <div class="thermal-row">
+        <span>CASH PAID-OUTS:</span>
+        <span id="zSlipPaidOuts">0.00</span>
+    </div>
+    <div class="thermal-divider"></div>
+    <div class="thermal-row" style="font-weight: bold;">
+        <span>EXPECTED DRAWER CASH:</span>
+        <span id="zSlipExpectedCash">0.00</span>
+    </div>
+    <div class="thermal-row" style="font-weight: bold;">
+        <span>ACTUAL COUNTED CASH:</span>
+        <span id="zSlipActualCash">0.00</span>
+    </div>
+    <div class="thermal-row" style="font-weight: bold; font-size: 13px; margin-top: 4px;">
+        <span>OVER / SHORT:</span>
+        <span id="zSlipOverShort">0.00</span>
+    </div>
+
+    <div class="thermal-divider"></div>
+    <div style="margin-top:20px; border-bottom:1px solid #000; width:75%; margin-left:auto; margin-right:auto;"></div>
+    <div class="thermal-center" style="font-size:9.5px; margin-top:2px;">MANAGER / AUDITOR SIGNATURE</div>
+
+    {% for _ in range(feed_lines) %}
+    <div>&nbsp;</div>
+    {% endfor %}
+</div>
+
 <script>
+    // NATIVE ZERO-DEPENDENCY MODAL ENGINE
+    function openPosModal(modalId) {
+        const el = document.getElementById(modalId);
+        if (el) {
+            el.classList.add('modal-active');
+        }
+    }
+
+    function closePosModal(modalId) {
+        const el = document.getElementById(modalId);
+        if (el) {
+            el.classList.remove('modal-active');
+        }
+    }
+
     let cart = [];
     let currentDiscountType = 'None';
     let currentDiscountRate = 0.0;
     let selectedTender = 'Cash';
     let pendingProductOverride = null;
     let currentPinBuffer = '';
+    let pendingVoidTxnId = '';
+    let pendingVoidAmount = 0.0;
 
-    // Active Customization State
+    let activeShift = {% if active_shift %}{{ active_shift|tojson|safe }}{% else %}null{% endif %};
+
     let activeCustomization = {
-        cartIndex: null, // null = adding new item, number = editing existing cart item
+        cartIndex: null,
         productId: '',
         name: '',
         basePrice: 0.0,
         category: '',
         modifierGroups: [],
-        selectedModifiers: {}, // { modId: { id, name, price, qty, group_id } }
-        singlePicks: {},      // { groupId: modId }
+        selectedModifiers: {},
+        singlePicks: {},
         specialInstruction: ''
     };
 
-    // PRODUCT CARD CLICK HANDLER: 1-TAP QUICK ADD OR DYNAMIC MODIFIERS
+    function openCloseShiftModal() {
+        closePosModal('activeShiftModal');
+        document.getElementById('closeShiftActualCashInput').value = '';
+        document.getElementById('closeShiftNotesInput').value = '';
+        openPosModal('closeShiftModal');
+    }
+
+    function printXReading() {
+        if (!activeShift) return;
+        const xReport = {
+            shift_id: activeShift.Shift_ID,
+            date: activeShift.Date,
+            time_opened: activeShift.Time_Opened,
+            time_closed: "IN PROGRESS",
+            cashier_open: activeShift.Cashier_Open,
+            cashier_close: "MID-SHIFT AUDIT",
+            starting_float: activeShift.Starting_Float,
+            cash_sales: activeShift.Cash_Sales,
+            cash_paid_outs: activeShift.Cash_Paid_Outs,
+            expected_cash: activeShift.Starting_Float + activeShift.Cash_Sales - activeShift.Cash_Paid_Outs,
+            actual_cash: activeShift.Starting_Float + activeShift.Cash_Sales - activeShift.Cash_Paid_Outs,
+            over_short: 0.0,
+            total_net: activeShift.Total_Net_Sales,
+            transactions: activeShift.Total_Transactions
+        };
+        closePosModal('activeShiftModal');
+        triggerPrintZReport(xReport, 'X');
+    }
+
+    function triggerPrintZReport(r, type) {
+        document.getElementById('zReportSlipTitle').textContent = `OFFICIAL ${type}-READING REPORT`;
+        document.getElementById('zSlipShiftId').textContent = r.shift_id;
+        document.getElementById('zSlipDate').textContent = r.date;
+        document.getElementById('zSlipOpened').textContent = r.time_opened;
+        document.getElementById('zSlipClosed').textContent = r.time_closed;
+        document.getElementById('zSlipCashierOpen').textContent = r.cashier_open;
+        document.getElementById('zSlipCashierClose').textContent = r.cashier_close;
+        document.getElementById('zSlipTxnCount').textContent = r.transactions;
+        document.getElementById('zSlipNetSales').textContent = 'PHP ' + r.total_net.toFixed(2);
+        document.getElementById('zSlipStartingFloat').textContent = r.starting_float.toFixed(2);
+        document.getElementById('zSlipCashSales').textContent = r.cash_sales.toFixed(2);
+        document.getElementById('zSlipPaidOuts').textContent = r.cash_paid_outs.toFixed(2);
+        document.getElementById('zSlipExpectedCash').textContent = r.expected_cash.toFixed(2);
+        document.getElementById('zSlipActualCash').textContent = r.actual_cash.toFixed(2);
+        document.getElementById('zSlipOverShort').textContent = (r.over_short >= 0 ? '+' : '') + r.over_short.toFixed(2);
+
+        document.getElementById('printableReceipt').classList.remove('print-active');
+        document.getElementById('printableZSlip').classList.add('print-active');
+        window.print();
+    }
+
+    async function openRecentOrdersModal() {
+        openPosModal('recentOrdersModal');
+        const container = document.getElementById('recentOrdersListContainer');
+        container.innerHTML = '<div class="text-center text-muted py-4">Loading today\'s transactions...</div>';
+
+        try {
+            const res = await fetch('/portal/{{ username }}/pos/orders');
+            const data = await res.json();
+            if (data.status === 'success' && data.orders.length > 0) {
+                let html = '<div class="d-flex flex-column gap-2">';
+                data.orders.forEach(o => {
+                    const isVoid = o.is_voided;
+                    const itemsDesc = o.items.map(i => `${i.qty}x ${i.name}`).join(', ');
+                    html += `
+                        <div class="p-3 rounded d-flex justify-content-between align-items-center" style="background: #111118; border: 1px solid ${isVoid ? '#7f1d1d' : '#2d2d3c'}; opacity: ${isVoid ? '0.5' : '1'};">
+                            <div>
+                                <div class="d-flex align-items-center gap-2">
+                                    <strong class="font-monospace text-white">${o.txn_id}</strong>
+                                    <span class="badge bg-secondary font-monospace" style="font-size: 10px;">${o.tender_type}</span>
+                                    <span class="text-muted small">${o.time}</span>
+                                    ${isVoid ? '<span class="badge bg-danger font-monospace">VOIDED</span>' : ''}
+                                </div>
+                                <div class="small text-secondary mt-1">${itemsDesc}</div>
+                                <div class="small text-info font-monospace">Cashier: ${o.cashier}</div>
+                            </div>
+                            <div class="text-end">
+                                <h5 class="m-0 font-monospace ${isVoid ? 'text-decoration-line-through text-danger' : 'text-success'} fw-bold">
+                                    ₱${o.total_amount.toFixed(2)}
+                                </h5>
+                                <div class="d-flex gap-1 mt-2 justify-content-end">
+                                    <button class="btn btn-sm btn-outline-info py-0 px-2 fw-bold" style="font-size: 11px;" onclick="reprintPastOrder('${o.txn_id}')">
+                                        Reprint
+                                    </button>
+                                    ${!isVoid ? `
+                                        <button class="btn btn-sm btn-outline-danger py-0 px-2 fw-bold" style="font-size: 11px;" onclick="promptVoidTicket('${o.txn_id}', ${o.total_amount})">
+                                            Void
+                                        </button>
+                                    ` : ''}
+                                </div>
+                            </div>
+                        </div>
+                    `;
+                });
+                html += '</div>';
+                container.innerHTML = html;
+            } else {
+                container.innerHTML = '<div class="text-center text-muted py-4">No completed orders recorded today yet.</div>';
+            }
+        } catch (e) {
+            container.innerHTML = `<div class="text-center text-danger py-4">Error loading orders: ${e.message}</div>`;
+        }
+    }
+
+    async function reprintPastOrder(txnId) {
+        try {
+            const res = await fetch('/portal/{{ username }}/pos/orders');
+            const data = await res.json();
+            const order = data.orders.find(o => o.txn_id === txnId);
+            if (order) {
+                const receiptPayload = {
+                    txn_id: order.txn_id,
+                    date: order.date,
+                    time: order.time,
+                    items: order.items,
+                    subtotal: order.total_amount,
+                    net_total: order.total_amount,
+                    tender_type: order.tender_type,
+                    amount_tendered: order.total_amount,
+                    change_due: 0.0,
+                    cashier: order.cashier,
+                    discount_amount: 0.0,
+                    reference_no: ''
+                };
+                populateReceipt(receiptPayload);
+                document.getElementById('printableZSlip').classList.remove('print-active');
+                document.getElementById('printableReceipt').classList.add('print-active');
+                window.print();
+            }
+        } catch (e) {
+            alert("Reprint error: " + e.message);
+        }
+    }
+
+    function promptVoidTicket(txnId, amount) {
+        pendingVoidTxnId = txnId;
+        pendingVoidAmount = amount;
+        document.getElementById('voidModalTxnIdLabel').textContent = txnId;
+        document.getElementById('voidModalAmountLabel').textContent = 'PHP ' + amount.toFixed(2);
+        document.getElementById('voidSupervisorPinInput').value = '';
+        document.getElementById('voidModalErrorLabel').style.display = 'none';
+        
+        closePosModal('recentOrdersModal');
+        openPosModal('voidTicketModal');
+    }
+
+    async function submitVoidOrder() {
+        const pin = document.getElementById('voidSupervisorPinInput').value.trim();
+        const reason = document.getElementById('voidReasonSelect').value;
+
+        if (!pin) {
+            const err = document.getElementById('voidModalErrorLabel');
+            err.textContent = "Supervisor PIN is required.";
+            err.style.display = 'block';
+            return;
+        }
+
+        try {
+            const res = await fetch('/portal/{{ username }}/pos/order/void', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ txn_id: pendingVoidTxnId, reason: reason, security_pin: pin })
+            });
+            const data = await res.json();
+            if (data.status === 'success') {
+                closePosModal('voidTicketModal');
+                alert(data.message);
+                openRecentOrdersModal();
+            } else {
+                const err = document.getElementById('voidModalErrorLabel');
+                err.textContent = data.message;
+                err.style.display = 'block';
+            }
+        } catch (e) {
+            alert("Void error: " + e.message);
+        }
+    }
+
     function handleProductCardClick(cardElement) {
+        if (!activeShift) {
+            alert("Shift Required: Please open a register shift and enter starting cash float before taking orders.");
+            openPosModal('openShiftModal');
+            return;
+        }
+
         const productId = cardElement.getAttribute('data-id');
         const name = cardElement.getAttribute('data-name');
         const price = parseFloat(cardElement.getAttribute('data-price') || 0.0);
@@ -991,7 +1499,6 @@
         const deficitData = JSON.parse(cardElement.getAttribute('data-deficits') || '[]');
         const modifierGroups = JSON.parse(cardElement.getAttribute('data-modifier-groups') || '[]');
 
-        // Check stock depletion first
         if (portionsLeft !== null && portionsLeft <= 0) {
             pendingProductOverride = { productId, name, price, category, modifierGroups };
             document.getElementById('overrideItemName').textContent = name;
@@ -1027,11 +1534,10 @@
                 });
             }
 
-            new bootstrap.Modal(document.getElementById('stockOverrideModal')).show();
+            openPosModal('stockOverrideModal');
             return;
         }
 
-        // Fast-Casual Counter Rule: If product has NO modifiers attached, add in 1 TAP!
         if (!modifierGroups || modifierGroups.length === 0) {
             addConfiguredItemToCart({
                 product_id: productId,
@@ -1046,7 +1552,6 @@
             return;
         }
 
-        // Product HAS modifier sets attached: Open modal showing ONLY its assigned sets
         openDynamicModifierModal(productId, name, price, category, modifierGroups, null);
     }
 
@@ -1054,9 +1559,7 @@
         if (pendingProductOverride) {
             const { productId, name, price, category, modifierGroups } = pendingProductOverride;
             pendingProductOverride = null;
-            const modalEl = document.getElementById('stockOverrideModal');
-            const modalInstance = bootstrap.Modal.getInstance(modalEl);
-            if (modalInstance) modalInstance.hide();
+            closePosModal('stockOverrideModal');
 
             if (!modifierGroups || modifierGroups.length === 0) {
                 addConfiguredItemToCart({
@@ -1075,7 +1578,6 @@
         }
     }
 
-    // DYNAMIC MODIFIERS MODAL BUILDER
     function openDynamicModifierModal(productId, name, basePrice, category, modifierGroups, existingCartIndex) {
         activeCustomization.cartIndex = existingCartIndex;
         activeCustomization.productId = productId;
@@ -1166,7 +1668,7 @@
         });
 
         updateDynamicModalPrice();
-        new bootstrap.Modal(document.getElementById('dynamicModifierModal')).show();
+        openPosModal('dynamicModifierModal');
     }
 
     function handleDynamicModifierClick(pillElement) {
@@ -1261,10 +1763,7 @@
             addConfiguredItemToCart(configuredItem);
         }
 
-        const modalEl = document.getElementById('dynamicModifierModal');
-        const modalInstance = bootstrap.Modal.getInstance(modalEl);
-        if (modalInstance) modalInstance.hide();
-
+        closePosModal('dynamicModifierModal');
         renderCart();
     }
 
@@ -1408,10 +1907,18 @@
     }
 
     function filterCatalog() {
-        const query = document.getElementById('posSearchInput').value.toLowerCase();
+        const input = document.getElementById('posSearchInput');
+        if (!input) return;
+        let query = input.value.toLowerCase().trim();
+        
+        if (query === 'bakery' || query === '{{ username|lower }}' || query === 'admin') {
+            input.value = '';
+            query = '';
+        }
+
         document.querySelectorAll('.product-card').forEach(card => {
-            const name = card.getAttribute('data-name');
-            card.style.display = name.includes(query) ? 'flex' : 'none';
+            const name = (card.getAttribute('data-name') || '').toLowerCase();
+            card.style.display = (query === '' || name.includes(query)) ? 'flex' : 'none';
         });
     }
 
@@ -1425,12 +1932,11 @@
         });
     }
 
-    // CASHIER PIN FAST SWITCH LOGIC
     function openStaffSwitchModal() {
         currentPinBuffer = '';
         document.getElementById('pinDisplayInput').value = '';
         document.getElementById('pinErrorLabel').style.display = 'none';
-        new bootstrap.Modal(document.getElementById('staffSwitchModal')).show();
+        openPosModal('staffSwitchModal');
     }
 
     function pressPinKey(digit) {
@@ -1469,7 +1975,7 @@
             if (res.status === 'success') {
                 document.getElementById('activeCashierLabel').textContent = res.cashier_name;
                 document.getElementById('rCashier').textContent = res.cashier_name;
-                bootstrap.Modal.getInstance(document.getElementById('staffSwitchModal')).hide();
+                closePosModal('staffSwitchModal');
                 clearPin();
             } else {
                 const errLabel = document.getElementById('pinErrorLabel');
@@ -1483,14 +1989,19 @@
         }
     }
 
-    // PAYMENT & SETTLEMENT ENGINE
     function openPaymentModal() {
+        if (!activeShift) {
+            alert("Shift Required: Please open a register shift and enter starting cash float before taking orders.");
+            openPosModal('openShiftModal');
+            return;
+        }
+
         const totals = calculateTotals();
         document.getElementById('modalPayableTotal').innerText = "PHP " + totals.total.toFixed(2);
         document.getElementById('cashReceivedInput').value = '';
         document.getElementById('changeDueLabel').innerText = "PHP 0.00";
         selectTenderMethod('Cash', document.querySelector('.tender-method-btn'));
-        new bootstrap.Modal(document.getElementById('paymentModal')).show();
+        openPosModal('paymentModal');
     }
 
     function selectTenderMethod(method, element) {
@@ -1566,7 +2077,10 @@
 
             if (result.status === 'success') {
                 populateReceipt(result.receipt);
-                bootstrap.Modal.getInstance(document.getElementById('paymentModal')).hide();
+                closePosModal('paymentModal');
+                
+                document.getElementById('printableZSlip').classList.remove('print-active');
+                document.getElementById('printableReceipt').classList.add('print-active');
                 window.print();
                 clearCart();
             } else {
@@ -1655,6 +2169,18 @@
             refRow.style.display = 'none';
         }
     }
+
+    document.addEventListener("DOMContentLoaded", function() {
+        const searchInput = document.getElementById('posSearchInput');
+        if (searchInput) {
+            searchInput.value = '';
+            filterCatalog();
+        }
+
+        {% if print_z_data %}
+            triggerPrintZReport({{ print_z_data|tojson|safe }}, 'Z');
+        {% endif %}
+    });
 </script>
 
 </body>

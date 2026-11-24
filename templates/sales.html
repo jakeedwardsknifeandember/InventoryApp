@@ -1,16 +1,35 @@
 {% extends 'base.html' %}
 {% block content %}
 <style>
+    /* CRITICAL HIGH-CONTRAST READABILITY PALETTE */
+    ::placeholder, .form-control::placeholder, input::placeholder {
+        color: #94a3b8 !important;
+        opacity: 1 !important;
+    }
+    
+    .tender-hub-card input.form-control, .tender-hub-card textarea.form-control {
+        background-color: #121218 !important;
+        color: #ffffff !important;
+        border: 1px solid #4b5563 !important;
+    }
+    .tender-hub-card input.form-control:focus {
+        border-color: #3b82f6 !important;
+        background-color: #1a1a24 !important;
+        box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.25) !important;
+    }
+
     .alert-warning { color: #664d03 !important; background-color: #fff3cd !important; border: 1px solid #ffecb5 !important; }
     .alert-warning small, .alert-warning span { color: #664d03 !important; }
     .alert-success { color: #0f5132 !important; background-color: #d1e7dd !important; }
     .alert-danger { color: #842029 !important; background-color: #f8d7da !important; }
+    
     .high-contrast-subtext { color: #cbd5e1 !important; font-weight: 500; }
     .ledger-accordion-btn::after {
-        background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='%23ffffff'%3e%3cpath fill-rule='evenodd' d='M1.646 4.646a.5.5 0 0 1 .708 0L8 10.293l5.646-5.647a.5.5 0 0 1 .708.708l-6 6a.5.5 0 0 1-.708 0l-6-6a.5.5 0 0 1 0-.708z'/%3e%3c/svg%3e") !important;
+        background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='%23ffffff'%3e%3cpath fill-rule='evenodd' d='M1.646 4.646a.5.5 0 0 1 .708 0L8 10.293l5.646-5.647a.5.5 0 0 1 .708.708l-6 6a.5.5 0 0 1 0-.708z'/%3e%3c/svg%3e") !important;
     }
     .neon-mint-green { color: #2dfc8a !important; text-shadow: 0 0 2px rgba(45, 252, 138, 0.2); }
     .neon-coral-red { color: #ff5555 !important; text-shadow: 0 0 2px rgba(255, 85, 85, 0.2); }
+    
     .eod-parent-row { background-color: #1e1e24 !important; transition: background-color 0.15s ease; }
     .eod-parent-row:hover { background-color: #262630 !important; }
     .eod-variant-row { background-color: #18181c !important; transition: background-color 0.15s ease; }
@@ -22,14 +41,11 @@
     .badge-staff { background: #581c8733; color: #c084fc; border: 1px solid #a855f744; }
     .badge-comp { background: #88133733; color: #fb7185; border: 1px solid #f43f5e44; }
 
-    /* High-Contrast Tender & Settlement Hub */
     .tender-hub-card { background: #1e1e24; border: 1px solid #2d2d38; border-radius: 8px; }
     .tender-hub-card label {
-        color: #f1f5f9 !important; font-weight: 700 !important; font-size: 11px !important; letter-spacing: 0.3px; margin-bottom: 3px; display: block;
+        color: #e2e8f0 !important; font-weight: 700 !important; font-size: 11.5px !important; letter-spacing: 0.3px; margin-bottom: 4px; display: block;
     }
-    .tender-hub-card .form-control { background-color: #15151c !important; color: #ffffff !important; border: 1px solid #3d3d4e !important; }
-    .tender-hub-card .form-control:focus { border-color: #3b82f6 !important; box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.25) !important; }
-    .tender-channel-header { font-size: 11.5px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.5px; }
+    .tender-channel-header { font-size: 12px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.5px; }
 </style>
 
 <div class="d-flex justify-content-between align-items-center mb-3">
@@ -41,7 +57,7 @@
 </div>
 
 {% if msg %}
-<div class="alert {% if alert_type == 'success' %}alert-success{% elif alert_type == 'warning' %}alert-warning{% else %}alert-danger{% endif %} border-0 fw-bold mb-3 shadow-sm" style="border-radius: 6px; font-size: 14px;">
+<div class="alert alert-{{ alert_type if alert_type else 'success' }} border-0 fw-bold mb-3 shadow-sm" style="border-radius: 6px; font-size: 14px;">
     {{ msg }}
 </div>
 {% endif %}
@@ -51,7 +67,7 @@
     <div class="row gx-2 gy-2 align-items-center">
         <div class="col-md-3">
             <label class="text-light me-1 mb-1 small d-block">Live Search:</label>
-            <input type="text" id="liveSearchInput" name="filter_query_no_autofill" class="form-control bg-dark text-white border-secondary" placeholder="ID or Product Name" autocomplete="new-password" data-lpignore="true" data-form-type="other">
+            <input type="text" id="liveSearchInput" name="filter_query_no_autofill" class="form-control bg-dark text-white border-secondary" placeholder="ID or Product Name" autocomplete="off" readonly onfocus="this.removeAttribute('readonly');">
         </div>
         <div class="col-md-3">
             <label class="text-light me-1 mb-1 small d-block">Filter Category:</label>
@@ -83,7 +99,7 @@
 
 <div class="row g-3">
     
-    <!-- LEFT: CLOSING WORKSHEET WITH BLIND TILL & LIVE POS AUTO-POPULATION -->
+    <!-- LEFT: CLOSING WORKSHEET -->
     <div class="col-md-6">
         <div class="card border-secondary bg-dark text-white shadow-sm">
             <div class="card-header bg-secondary text-white fw-bold d-flex justify-content-between align-items-center">
@@ -106,6 +122,25 @@
                         </div>
                     </div>
 
+                    <!-- ACTIVE REGISTER SHIFT LINKED BANNER (HIGH CONTRAST) -->
+                    {% if active_shift_info %}
+                    <div class="p-2 px-3 border-bottom border-secondary d-flex justify-content-between align-items-center flex-wrap gap-2" style="background: #0f172a; font-size: 12px;">
+                        <div>
+                            <span class="text-info fw-bold">🔑 Register Shift Linked:</span>
+                            <strong class="font-monospace text-white ms-1">{{ active_shift_info.shift_id }}</strong>
+                            <span class="text-light ms-1">(Opened by <strong class="text-white">{{ active_shift_info.cashier }}</strong> at {{ active_shift_info.time }})</span>
+                        </div>
+                        <div class="d-flex align-items-center gap-1">
+                            <span class="badge bg-dark border border-success font-monospace" style="color: #34d399 !important; border-color: #059669 !important; font-size: 11px;">
+                                Float: ₱{{ "%.2f"|format(active_shift_info.starting_float) }}
+                            </span>
+                            <span class="badge {% if active_shift_info.status == 'OPEN' %}bg-success text-white{% else %}bg-secondary text-white{% endif %} font-monospace" style="font-size: 11px;">
+                                {{ active_shift_info.status }}
+                            </span>
+                        </div>
+                    </div>
+                    {% endif %}
+
                     <!-- LIVE COUNTER POS SUMMARY CALLOUT -->
                     {% if live_pos_summary.total_items > 0 %}
                     <div class="p-2 px-3 border-bottom border-secondary d-flex justify-content-between align-items-center" style="background: #101c18; font-size: 11.5px;">
@@ -120,7 +155,7 @@
                     </div>
                     {% endif %}
 
-                    <!-- PRODUCTS WORKSHEET WITH UNEDITABLE LIVE POS AUTO-COUNT & MANUAL ADD INPUT -->
+                    <!-- PRODUCTS WORKSHEET WITH HIGH CONTRAST BADGES -->
                     <div style="max-height: 25vh; overflow-y: auto;">
                         <table class="table table-dark table-hover align-middle mb-0">
                             <thead>
@@ -179,13 +214,14 @@
                                             <td><span class="badge bg-secondary" style="font-size: 11px;">{{ prod.Category or 'General' }}</span></td>
                                             <td class="text-light font-monospace">₱{{ "%.2f"|format(prod.Selling_Price) }}</td>
                                             
+                                            <!-- HIGH-CONTRAST LIVE POS BADGE -->
                                             <td class="text-center">
                                                 {% if p_pos_sold > 0 %}
-                                                    <span class="badge bg-success font-monospace px-2 py-1" style="font-size: 12px;" title="Sold on Live POS (Inventory already depleted)">
+                                                    <span class="badge font-monospace px-2 py-1 text-white fw-bold" style="font-size: 12px; background-color: #059669 !important; border: 1px solid #10b981;">
                                                         {{ p_pos_sold|int if p_pos_sold % 1 == 0 else p_pos_sold }}
                                                     </span>
                                                 {% else %}
-                                                    <span class="text-muted font-monospace small">0</span>
+                                                    <span class="badge bg-dark border border-secondary font-monospace" style="color: #cbd5e1 !important; font-size: 11px;">0</span>
                                                 {% endif %}
                                             </td>
 
@@ -199,8 +235,7 @@
                                                        style="max-width: 80px; font-size: 14px; border-radius: 4px;"
                                                        onfocus="if(this.value=='0') this.value='';" 
                                                        onblur="if(this.value=='') this.value='0';"
-                                                       oninput="recalculateRunningTotals()"
-                                                       title="Add extra offline/catering quantity if not rung up at Counter POS">
+                                                       oninput="recalculateRunningTotals()">
                                             </td>
                                         </tr>
                                         {% endfor %}
@@ -223,13 +258,14 @@
                                             <td><span class="badge bg-secondary" style="font-size: 11px;">{{ prod.Category or 'General' }}</span></td>
                                             <td class="text-light font-monospace">₱{{ "%.2f"|format(prod.Selling_Price) }}</td>
                                             
+                                            <!-- HIGH-CONTRAST LIVE POS BADGE -->
                                             <td class="text-center">
                                                 {% if p_pos_sold > 0 %}
-                                                    <span class="badge bg-success font-monospace px-2 py-1" style="font-size: 12px;" title="Sold on Live POS (Inventory already depleted)">
+                                                    <span class="badge font-monospace px-2 py-1 text-white fw-bold" style="font-size: 12px; background-color: #059669 !important; border: 1px solid #10b981;">
                                                         {{ p_pos_sold|int if p_pos_sold % 1 == 0 else p_pos_sold }}
                                                     </span>
                                                 {% else %}
-                                                    <span class="text-muted font-monospace small">0</span>
+                                                    <span class="badge bg-dark border border-secondary font-monospace" style="color: #cbd5e1 !important; font-size: 11px;">0</span>
                                                 {% endif %}
                                             </td>
 
@@ -243,8 +279,7 @@
                                                        style="max-width: 80px; font-size: 14px; border-radius: 4px;"
                                                        onfocus="if(this.value=='0') this.value='';" 
                                                        onblur="if(this.value=='') this.value='0';"
-                                                       oninput="recalculateRunningTotals()"
-                                                       title="Add extra offline/catering quantity if not rung up at Counter POS">
+                                                       oninput="recalculateRunningTotals()">
                                             </td>
                                         </tr>
                                     {% endif %}
@@ -256,11 +291,11 @@
                         </table>
                     </div>
 
-                    <!-- MODIFIERS WORKSHEET WITH LIVE POS AUTO-POPULATION -->
+                    <!-- MODIFIERS WORKSHEET WITH HIGH CONTRAST -->
                     <div class="p-2 bg-dark border-top border-secondary">
                         <div class="d-flex justify-content-between align-items-center mb-1 px-2">
                             <span class="fw-bold text-info" style="font-size: 12px; letter-spacing: 0.5px;">MODIFIERS & ADD-ONS WORKSHEET</span>
-                            <small class="text-muted" style="font-size: 10px;">Live POS modifiers auto-tallied; manual additions deduct ingredients on sync</small>
+                            <small class="text-light opacity-75" style="font-size: 10px;">Live POS modifiers auto-tallied; manual additions deduct on sync</small>
                         </div>
                         <div style="max-height: 14vh; overflow-y: auto;">
                             <table class="table table-dark table-hover align-middle mb-0">
@@ -283,13 +318,14 @@
                                         </td>
                                         <td class="text-light font-monospace">₱{{ "%.2f"|format(mod.Price) }}</td>
                                         
+                                        <!-- HIGH CONTRAST ZERO / SOLD VALUE -->
                                         <td class="text-center">
                                             {% if m_pos_sold > 0 %}
-                                                <span class="badge bg-success font-monospace px-2 py-1" style="font-size: 11.5px;">
+                                                <span class="badge font-monospace px-2 py-1 text-white fw-bold" style="font-size: 12px; background-color: #059669 !important; border: 1px solid #10b981;">
                                                     {{ m_pos_sold|int if m_pos_sold % 1 == 0 else m_pos_sold }}
                                                 </span>
                                             {% else %}
-                                                <span class="text-muted font-monospace small">0</span>
+                                                <span class="badge bg-dark border border-secondary font-monospace" style="color: #cbd5e1 !important; font-size: 11px;">0</span>
                                             {% endif %}
                                         </td>
 
@@ -316,11 +352,11 @@
                         </div>
                     </div>
 
-                    <!-- EOD SHIFT DISCOUNTS -->
+                    <!-- EOD SHIFT DISCOUNTS (HIGH CONTRAST) -->
                     <div class="p-2 bg-dark border-top border-secondary">
                         <div class="d-flex justify-content-between align-items-center mb-1 px-2">
                             <span class="fw-bold text-warning" style="font-size: 12px; letter-spacing: 0.5px;">EOD DISCOUNTS & ALLOWANCES</span>
-                            <small class="text-muted" style="font-size: 10px;">Live discounts displayed; enter manual discounts if unrecorded</small>
+                            <small class="text-light opacity-75" style="font-size: 10px;">Live discounts displayed; enter manual discounts if unrecorded</small>
                         </div>
                         <div style="max-height: 15vh; overflow-y: auto;">
                             <table class="table table-dark table-hover align-middle mb-0">
@@ -349,13 +385,13 @@
                                             </span>
                                         </td>
                                         <td>
-                                            <input type="text" name="discount_notes[]" class="form-control bg-dark text-white border-secondary small" placeholder="Booklet #..." style="font-size: 11px;">
+                                            <input type="text" name="discount_notes[]" class="form-control text-white border-secondary small" placeholder="Booklet #..." style="font-size: 11px; background-color: #121218; border: 1px solid #4b5563 !important;">
                                         </td>
                                         <td class="text-center">
                                             {% if d_pos_amt > 0 %}
-                                                <span class="badge bg-dark border border-warning text-warning font-monospace" style="font-size: 11px;">-₱{{ "%.2f"|format(d_pos_amt) }}</span>
+                                                <span class="badge bg-dark border border-warning text-warning font-monospace px-2 py-1" style="font-size: 11.5px; color: #facc15 !important; border-color: #f59e0b !important;">-₱{{ "%.2f"|format(d_pos_amt) }}</span>
                                             {% else %}
-                                                <span class="text-muted font-monospace small">₱0.00</span>
+                                                <span class="badge bg-dark border border-secondary font-monospace" style="color: #cbd5e1 !important; font-size: 11px;">₱0.00</span>
                                             {% endif %}
                                         </td>
                                         <td class="text-end pe-3">
@@ -395,7 +431,7 @@
                             </div>
                         </div>
 
-                        <!-- SECTION 1: IN-STORE PHYSICAL CASH TILL BALANCING WITH ANTI-THEFT BLIND ENFORCEMENT -->
+                        <!-- SECTION 1: IN-STORE PHYSICAL CASH TILL BALANCING -->
                         <div class="p-3 mb-3 tender-hub-card">
                             <div class="d-flex justify-content-between align-items-center mb-2 pb-1 border-bottom border-secondary">
                                 <div>
@@ -415,19 +451,31 @@
                             </div>
 
                             <div class="row g-2 mb-2">
+                                <!-- STARTING FLOAT PRE-FILLED FROM ACTIVE REGISTER SHIFT -->
                                 <div class="col-md-4">
                                     <label>Starting Float (Opening Bank):</label>
                                     <div class="input-group">
                                         <span class="input-group-text bg-secondary border-0 text-white font-monospace py-0 px-2">₱</span>
-                                        <input type="number" step="0.01" min="0" name="starting_float" id="startingFloatInput" value="0.00" class="form-control font-monospace fw-bold" oninput="recalculateRunningTotals()" onfocus="if(this.value=='0.00' || this.value=='0') this.value='';" onblur="if(this.value=='') this.value='0.00';">
+                                        <input type="number" step="0.01" min="0" name="starting_float" id="startingFloatInput" 
+                                               value="{{ '%.2f'|format(pos_starting_float|default(0.0)) }}" 
+                                               class="form-control font-monospace fw-bold text-white" 
+                                               oninput="recalculateRunningTotals()" 
+                                               onfocus="if(this.value=='0.00' || this.value=='0') this.value='';" 
+                                               onblur="if(this.value=='') this.value='{{ '%.2f'|format(pos_starting_float|default(0.0)) }}';">
                                     </div>
+                                    {% if pos_starting_float > 0 %}
+                                    <div class="mt-1">
+                                        <span class="badge bg-dark border border-success font-monospace" style="color: #34d399 !important; border-color: #059669 !important; font-size: 11px; padding: 4px 8px;">
+                                            ✓ Synced from Register Shift: ₱{{ '%.2f'|format(pos_starting_float) }}
+                                        </span>
+                                    </div>
+                                    {% endif %}
                                 </div>
 
                                 <div class="col-md-4">
                                     <label>In-Store Cash Sales (POS Z-Tape):</label>
                                     <div class="input-group">
                                         <span class="input-group-text bg-secondary border-0 text-white font-monospace py-0 px-2">₱</span>
-                                        <!-- BLIND TILL MASKED INPUT -->
                                         <input type="text" name="cash_sales" id="cashSalesInput" 
                                                value="{{ '%.2f'|format(pos_tenders.cash) }}" 
                                                data-real-val="{{ '%.2f'|format(pos_tenders.cash) }}"
@@ -436,6 +484,9 @@
                                                readonly
                                                oninput="recalculateRunningTotals()">
                                     </div>
+                                    {% if pos_tenders.cash > 0 and not is_blind %}
+                                    <small class="text-info font-monospace" style="font-size: 10px;">Live POS Cash: ₱{{ '%.2f'|format(pos_tenders.cash) }}</small>
+                                    {% endif %}
                                 </div>
 
                                 <div class="col-md-4">
@@ -465,11 +516,11 @@
                                 </div>
                             </div>
 
-                            <!-- BLIND TILL SHIELDED LABELS -->
-                            <div class="p-2 rounded d-flex justify-content-between align-items-center flex-wrap" style="background: #111118; font-size: 12px;">
+                            <!-- BLIND TILL SHIELDED LABELS WITH CRISP CONTRAST -->
+                            <div class="p-2 rounded d-flex justify-content-between align-items-center flex-wrap" style="background: #111118; border: 1px solid #28283a; font-size: 12.5px;">
                                 <div>
                                     <span class="text-light">Expected Cash in Till:</span>
-                                    <span class="font-monospace text-white fw-bold ms-1" id="liveExpectedCashLabel">
+                                    <span class="font-monospace fw-bold ms-1" style="color: #facc15;" id="liveExpectedCashLabel">
                                         {% if is_blind %}•••••• (Blind Till Protected){% else %}₱0.00{% endif %}
                                     </span>
                                 </div>
@@ -492,21 +543,21 @@
                                     <label>GCash Merchant Settlement:</label>
                                     <div class="input-group">
                                         <span class="input-group-text bg-secondary border-0 text-white font-monospace py-0 px-2">₱</span>
-                                        <input type="number" step="0.01" min="0" name="gcash_sales" id="gcashSalesInput" value="{{ '%.2f'|format(pos_tenders.gcash) }}" class="form-control font-monospace fw-bold" oninput="recalculateRunningTotals()" onfocus="if(this.value=='0.00' || this.value=='0') this.value='';" onblur="if(this.value=='') this.value='0.00';">
+                                        <input type="number" step="0.01" min="0" name="gcash_sales" id="gcashSalesInput" value="{{ '%.2f'|format(pos_tenders.gcash) }}" class="form-control font-monospace fw-bold text-white" oninput="recalculateRunningTotals()" onfocus="if(this.value=='0.00' || this.value=='0') this.value='';" onblur="if(this.value=='') this.value='0.00';">
                                     </div>
                                 </div>
                                 <div class="col-md-4">
                                     <label>Maya / QRPH Settlement:</label>
                                     <div class="input-group">
                                         <span class="input-group-text bg-secondary border-0 text-white font-monospace py-0 px-2">₱</span>
-                                        <input type="number" step="0.01" min="0" name="maya_sales" id="mayaSalesInput" value="{{ '%.2f'|format(pos_tenders.maya) }}" class="form-control font-monospace fw-bold" oninput="recalculateRunningTotals()" onfocus="if(this.value=='0.00' || this.value=='0') this.value='';" onblur="if(this.value=='') this.value='0.00';">
+                                        <input type="number" step="0.01" min="0" name="maya_sales" id="mayaSalesInput" value="{{ '%.2f'|format(pos_tenders.maya) }}" class="form-control font-monospace fw-bold text-white" oninput="recalculateRunningTotals()" onfocus="if(this.value=='0.00' || this.value=='0') this.value='';" onblur="if(this.value=='') this.value='0.00';">
                                     </div>
                                 </div>
                                 <div class="col-md-4">
                                     <label>Debit / Credit Card / Bank:</label>
                                     <div class="input-group">
                                         <span class="input-group-text bg-secondary border-0 text-white font-monospace py-0 px-2">₱</span>
-                                        <input type="number" step="0.01" min="0" name="card_sales" id="cardSalesInput" value="{{ '%.2f'|format(pos_tenders.card) }}" class="form-control font-monospace fw-bold" oninput="recalculateRunningTotals()" onfocus="if(this.value=='0.00' || this.value=='0') this.value='';" onblur="if(this.value=='') this.value='0.00';">
+                                        <input type="number" step="0.01" min="0" name="card_sales" id="cardSalesInput" value="{{ '%.2f'|format(pos_tenders.card) }}" class="form-control font-monospace fw-bold text-white" oninput="recalculateRunningTotals()" onfocus="if(this.value=='0.00' || this.value=='0') this.value='';" onblur="if(this.value=='') this.value='0.00';">
                                     </div>
                                 </div>
                             </div>
@@ -524,7 +575,7 @@
                                     <label>GrabFood Gross Orders:</label>
                                     <div class="input-group">
                                         <span class="input-group-text bg-secondary border-0 text-white font-monospace py-0 px-2">₱</span>
-                                        <input type="number" step="0.01" min="0" name="grab_gross" id="grabGrossInput" value="0.00" class="form-control font-monospace fw-bold" oninput="recalculateRunningTotals()" onfocus="if(this.value=='0.00' || this.value=='0') this.value='';" onblur="if(this.value=='') this.value='0.00';">
+                                        <input type="number" step="0.01" min="0" name="grab_gross" id="grabGrossInput" value="0.00" class="form-control font-monospace fw-bold text-white" oninput="recalculateRunningTotals()" onfocus="if(this.value=='0.00' || this.value=='0') this.value='';" onblur="if(this.value=='') this.value='0.00';">
                                     </div>
                                 </div>
                                 <div class="col-md-4">
@@ -547,7 +598,7 @@
                                     <label>Foodpanda Gross Orders:</label>
                                     <div class="input-group">
                                         <span class="input-group-text bg-secondary border-0 text-white font-monospace py-0 px-2">₱</span>
-                                        <input type="number" step="0.01" min="0" name="foodpanda_gross" id="pandaGrossInput" value="0.00" class="form-control font-monospace fw-bold" oninput="recalculateRunningTotals()" onfocus="if(this.value=='0.00' || this.value=='0') this.value='';" onblur="if(this.value=='') this.value='0.00';">
+                                        <input type="number" step="0.01" min="0" name="foodpanda_gross" id="pandaGrossInput" value="0.00" class="form-control font-monospace fw-bold text-white" oninput="recalculateRunningTotals()" onfocus="if(this.value=='0.00' || this.value=='0') this.value='';" onblur="if(this.value=='') this.value='0.00';">
                                     </div>
                                 </div>
                                 <div class="col-md-4">
@@ -899,6 +950,7 @@ const livePosData = {
     discounts: {{ live_pos_summary.discounts|default(0.0) }},
     net: {{ live_pos_summary.net|default(0.0) }},
     posCash: {{ pos_tenders.cash|default(0.0) }},
+    posFloat: {{ pos_starting_float|default(0.0) }},
     posGcash: {{ pos_tenders.gcash|default(0.0) }},
     posMaya: {{ pos_tenders.maya|default(0.0) }},
     posCard: {{ pos_tenders.card|default(0.0) }},
@@ -999,7 +1051,7 @@ function resetClosingFormMatrixFields() {
     const auditInput = document.getElementById('eodAuditNoteInput');
     if (auditInput) auditInput.style.border = "1px solid #3d3d3d";
     
-    document.getElementById('startingFloatInput').value = '0.00';
+    document.getElementById('startingFloatInput').value = livePosData.posFloat.toFixed(2);
     document.getElementById('actualCashInput').value = '0.00';
     document.getElementById('cashPaidOutsInput').value = '0.00';
     document.getElementById('grabGrossInput').value = '0.00';
@@ -1029,32 +1081,9 @@ function toggleParentVariants(index) {
     }
 }
 
-function copyNetSalesToCashSales() {
-    let manualGross = 0.0;
-    document.querySelectorAll('.product-row').forEach(row => {
-        const p = parseFloat(row.getAttribute('data-price')) || 0.0;
-        const q = parseFloat(row.querySelector('.ingredient-qty-input')?.value || 0) || 0.0;
-        manualGross += (p * q);
-    });
-    document.querySelectorAll('.modifier-data-row').forEach(row => {
-        const p = parseFloat(row.getAttribute('data-price')) || 0.0;
-        const q = parseFloat(row.querySelector('.modifier-qty-input')?.value || 0) || 0.0;
-        manualGross += (p * q);
-    });
-    let manualDiscounts = 0.0;
-    document.querySelectorAll('.discount-amount-input').forEach(input => {
-        manualDiscounts += (parseFloat(input.value) || 0.0);
-    });
-
-    const totalNet = Math.max(0.0, (livePosData.gross + manualGross) - (livePosData.discounts + manualDiscounts));
-    document.getElementById('cashSalesInput').value = totalNet.toFixed(2);
-    recalculateRunningTotals();
-}
-
 function recalculateRunningTotals() {
     let manualGross = 0.0;
     
-    // Sum Manual Products
     const prodRows = document.querySelectorAll('.product-row');
     prodRows.forEach(row => {
         const price = parseFloat(row.getAttribute('data-price')) || 0.0;
@@ -1063,7 +1092,6 @@ function recalculateRunningTotals() {
         manualGross += (price * qty);
     });
 
-    // Sum Manual Modifiers
     const modRows = document.querySelectorAll('.modifier-data-row');
     modRows.forEach(row => {
         const price = parseFloat(row.getAttribute('data-price')) || 0.0;
@@ -1072,7 +1100,6 @@ function recalculateRunningTotals() {
         manualGross += (price * qty);
     });
 
-    // Sum Manual Discounts
     let manualDiscounts = 0.0;
     const discInputs = document.querySelectorAll('.discount-amount-input');
     discInputs.forEach(input => {
@@ -1097,12 +1124,10 @@ function recalculateRunningTotals() {
     const expectedCash = startingFloat + cashSales - cashPaidOuts;
     const diff = actualCash - expectedCash;
 
-    // Blind Till Shielding Engine
     const expLabel = document.getElementById('liveExpectedCashLabel');
     const varBadge = document.getElementById('liveOverShortBadge');
     const tenderBadge = document.getElementById('liveTenderVarianceBadge');
 
-    // 2. Digital & Delivery Tenders
     const gcash = parseFloat(document.getElementById('gcashSalesInput')?.value || 0) || 0.0;
     const maya = parseFloat(document.getElementById('mayaSalesInput')?.value || 0) || 0.0;
     const card = parseFloat(document.getElementById('cardSalesInput')?.value || 0) || 0.0;
@@ -1121,7 +1146,6 @@ function recalculateRunningTotals() {
     const tenderDiff = totalSettledTenders - netSales;
 
     if (!isTillUnlocked) {
-        // MASK VALUES IN BLIND TILL MODE
         expLabel.textContent = '•••••• (Blind Till Protected)';
         varBadge.className = "badge bg-dark border border-warning text-warning font-monospace ms-1";
         varBadge.textContent = "Calculated on Shift Close";
@@ -1129,7 +1153,6 @@ function recalculateRunningTotals() {
         tenderBadge.className = "badge bg-dark border border-warning text-warning font-monospace";
         tenderBadge.textContent = "Reconciliation: Protected on Shift Close";
     } else {
-        // UNMASKED AUDIT MODE
         expLabel.innerText = '₱' + expectedCash.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2});
         
         if (actualCash === 0 && cashSales === 0 && startingFloat === 0) {
@@ -1158,7 +1181,6 @@ function recalculateRunningTotals() {
         }
     }
 
-    // Modal Labels
     const confirmNet = document.getElementById('modalConfirmNetLabel');
     if (confirmNet) {
         confirmNet.innerText = '₱' + netSales.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2});
@@ -1197,7 +1219,6 @@ function triggerSecurityModalCheck() {
     const todayStr = getLocalTodayString();
     const isBackdated = (datePicker.value !== todayStr);
     
-    // 1. Mandatory Paid-Out Voucher Check
     const cashPaidOuts = parseFloat(paidOutsInput?.value || 0) || 0.0;
     if (cashPaidOuts > 0 && paidOutsReasonInput.value.trim().length < 3) {
         paidOutsReasonInput.style.border = "2px solid #ff4d4d";
@@ -1207,8 +1228,6 @@ function triggerSecurityModalCheck() {
     }
     paidOutsReasonInput.style.border = "1px solid #3d3d4e";
 
-    // 2. Anti-Theft Blind Till Handling:
-    // When Blind Till is active, DO NOT pop up or reveal shortages to cashiers!
     if (isTillUnlocked) {
         const startingFloat = parseFloat(document.getElementById('startingFloatInput')?.value || 0) || 0.0;
         const cashSales = parseFloat(document.getElementById('cashSalesInput')?.value || 0) || 0.0;
@@ -1249,13 +1268,11 @@ function triggerSecurityModalCheck() {
     confirmModal.show();
 }
 
-// LIVE FILTER AND SORT ENGINE WITH AUTO-WIPE OF BROWSER AUTOFILL USERNAME
 document.addEventListener("DOMContentLoaded", function() {
     const searchInput = document.getElementById('liveSearchInput');
     const tenantUsername = "{{ username|lower }}";
 
-    // Immediate cleanup of browser-injected tenant username
-    if (searchInput && searchInput.value.toLowerCase().trim() === tenantUsername) {
+    if (searchInput && (searchInput.value.toLowerCase().trim() === tenantUsername || searchInput.value.toLowerCase().trim() === 'bakery')) {
         searchInput.value = '';
     }
 
@@ -1464,7 +1481,6 @@ document.addEventListener("DOMContentLoaded", function() {
     sortSelect.addEventListener('change', applyFiltersAndSort);
     orderSelect.addEventListener('change', applyFiltersAndSort);
 
-    // Initial filter execution to ensure products show up immediately
     applyFiltersAndSort();
     recalculateRunningTotals();
 });

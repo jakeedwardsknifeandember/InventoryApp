@@ -51,6 +51,30 @@
         color: #fff; 
         border-color: #2fa572; 
     }
+
+    /* PIN INPUT WITH EYE BUTTON */
+    .pin-input-wrap {
+        position: relative;
+        width: 100%;
+    }
+    .pin-input-wrap input {
+        padding-right: 42px !important;
+    }
+    .pin-toggle-btn {
+        position: absolute;
+        right: 10px;
+        top: 50%;
+        transform: translateY(-50%);
+        background: transparent;
+        border: none;
+        color: #94a3b8;
+        cursor: pointer;
+        padding: 4px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+    .pin-toggle-btn:hover { color: #ffffff; }
 </style>
 
 <div class="expenses-workspace">
@@ -66,14 +90,25 @@
     {% endif %}
 
     <!-- HEADER ACTIONS SECTION -->
-    <div class="d-flex justify-content-between align-items-center mb-4">
+    <div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
         <div>
             <h3 class="m-0" style="font-weight: 800; letter-spacing: -0.5px; text-transform: uppercase; color: #ffffff;">Store Operating Expenses</h3>
             <p class="text-muted m-0 small">Track overhead outflows, monitor operational burn rates, and manage cash positions.</p>
         </div>
-        <button class="btn btn-primary d-flex align-items-center gap-2 px-4 py-2" data-bs-toggle="modal" data-bs-target="#addExpenseModal" style="font-weight: 600; border-radius: 8px;">
-            + Log New Expense
-        </button>
+        <div class="d-flex align-items-center gap-2">
+            {% if is_crew %}
+                <span class="badge bg-dark border border-secondary text-warning font-monospace px-3 py-2" style="font-size: 11px;">
+                    Role: Crew (PIN Authorization Required for Edits/Voids)
+                </span>
+            {% else %}
+                <span class="badge bg-dark border border-success text-success font-monospace px-3 py-2" style="font-size: 11px;">
+                    Clearance: {{ active_role }} (Direct Override)
+                </span>
+            {% endif %}
+            <button class="btn btn-primary d-flex align-items-center gap-2 px-4 py-2" data-bs-toggle="modal" data-bs-target="#addExpenseModal" style="font-weight: 600; border-radius: 8px;">
+                + Log New Expense
+            </button>
+        </div>
     </div>
 
     <!-- INTEL TRIPLE METRIC KPI CARDS -->
@@ -314,7 +349,7 @@
         </div>
     </div>
 
-    <!-- EDIT EXPENSE MODAL CONTAINER (SHARED DYNAMIC MODAL) -->
+    <!-- EDIT EXPENSE MODAL CONTAINER WITH SUPERVISOR PIN GATING -->
     <div class="modal fade" id="editExpenseModal" tabindex="-1" aria-hidden="true">
         <div class="modal-dialog modal-dialog-centered">
             <div class="modal-content text-white border-secondary shadow-lg" style="background: #1e1e24; border-radius: 12px;">
@@ -329,6 +364,27 @@
                     </div>
                     
                     <div class="modal-body p-4">
+                        {% if is_crew %}
+                        <div class="p-3 mb-3 rounded" style="background: #272111; border: 1px solid #f59e0b;">
+                            <span class="text-warning fw-bold d-block small mb-1">SUPERVISOR PIN REQUIRED:</span>
+                            <span class="text-white-50" style="font-size: 12px;">Crew members require Master Security PIN or Manager authorization to edit expenses.</span>
+                            <div class="pin-input-wrap mt-2">
+                                <input type="password" name="security_pin" id="editExpensePin" maxlength="6" class="form-control text-warning bg-dark border-warning font-monospace text-center fs-5" placeholder="••••" required autocomplete="off">
+                                <button type="button" class="pin-toggle-btn" onclick="toggleModalPinVisibility('editExpensePin', this)" title="Show / Hide PIN">
+                                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                        <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
+                                        <circle cx="12" cy="12" r="3"></circle>
+                                    </svg>
+                                </button>
+                            </div>
+                        </div>
+                        {% else %}
+                        <div class="p-2 mb-3 rounded d-flex align-items-center gap-2" style="background: #101c18; border: 1px solid #10b981; font-size: 11.5px;">
+                            <span class="text-success fw-bold">Authenticated as:</span>
+                            <span class="text-white">{{ active_role }} (Direct Override Permitted)</span>
+                        </div>
+                        {% endif %}
+
                         <div class="mb-3">
                             <label class="form-label text-muted small fw-bold">ACCOUNTING DATE:</label>
                             <input type="date" name="expense_date" id="editExpenseDate" class="form-control text-white bg-dark border-secondary" style="height: 44px; border-radius: 6px; color-scheme: dark;" required>
@@ -384,7 +440,7 @@
         </div>
     </div>
 
-    <!-- VOID EXPENSE MODAL CONTAINER -->
+    <!-- VOID EXPENSE MODAL CONTAINER WITH ANTI-THEFT PIN GATING -->
     <div class="modal fade" id="voidExpenseModal" tabindex="-1" aria-hidden="true">
         <div class="modal-dialog modal-dialog-centered">
             <div class="modal-content text-white border-danger shadow-lg" style="background: #1e1e24; border-radius: 12px;">
@@ -405,6 +461,28 @@
                             <div class="fw-bold text-white fs-6" id="voidExpenseDisplayDesc"></div>
                             <div class="text-danger fw-bold fs-5 mt-1" id="voidExpenseDisplayAmount"></div>
                         </div>
+
+                        {% if is_crew %}
+                        <div class="p-3 mb-3 rounded" style="background: #271418; border: 1px solid #ef4444;">
+                            <span class="text-danger fw-bold d-block small mb-1">SUPERVISOR PIN REQUIRED:</span>
+                            <span class="text-white-50" style="font-size: 12px;">Crew members cannot neutralize expenses without Master Security PIN or Manager authorization.</span>
+                            <div class="pin-input-wrap mt-2">
+                                <input type="password" name="security_pin" id="voidExpensePin" maxlength="6" class="form-control text-warning bg-dark border-warning font-monospace text-center fs-5" placeholder="••••" required autocomplete="off">
+                                <button type="button" class="pin-toggle-btn" onclick="toggleModalPinVisibility('voidExpensePin', this)" title="Show / Hide PIN">
+                                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                        <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
+                                        <circle cx="12" cy="12" r="3"></circle>
+                                    </svg>
+                                </button>
+                            </div>
+                        </div>
+                        {% else %}
+                        <div class="p-2 mb-3 rounded d-flex align-items-center gap-2" style="background: #101c18; border: 1px solid #10b981; font-size: 11.5px;">
+                            <span class="text-success fw-bold">Authenticated as:</span>
+                            <span class="text-white">{{ active_role }} (Direct Override Permitted)</span>
+                        </div>
+                        {% endif %}
+
                         <p class="small text-muted mb-3">
                             The amount will be neutralized to PHP 0.00 to keep the general ledger and financial reports reconciled.
                         </p>
@@ -442,6 +520,9 @@ function openEditExpenseModal(btn) {
 
     document.getElementById('editExpenseNotes').value = btn.getAttribute('data-notes') || '';
     
+    const pinField = document.getElementById('editExpensePin');
+    if (pinField) pinField.value = '';
+
     new bootstrap.Modal(document.getElementById('editExpenseModal')).show();
 }
 
@@ -451,7 +532,32 @@ function openVoidExpenseModal(btn) {
     const amt = parseFloat(btn.getAttribute('data-amount') || 0).toFixed(2);
     document.getElementById('voidExpenseDisplayAmount').innerText = 'PHP ' + amt;
     
+    const pinField = document.getElementById('voidExpensePin');
+    if (pinField) pinField.value = '';
+
     new bootstrap.Modal(document.getElementById('voidExpenseModal')).show();
+}
+
+function toggleModalPinVisibility(inputId, btnEl) {
+    const input = document.getElementById(inputId);
+    if (!input) return;
+    const isPass = input.type === 'password';
+    input.type = isPass ? 'text' : 'password';
+    if (isPass) {
+        btnEl.innerHTML = `
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#60a5fa" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"></path>
+                <line x1="1" y1="1" x2="23" y2="23"></line>
+            </svg>
+        `;
+    } else {
+        btnEl.innerHTML = `
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
+                <circle cx="12" cy="12" r="3"></circle>
+            </svg>
+        `;
+    }
 }
 </script>
 

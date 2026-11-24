@@ -1,4 +1,4 @@
-# routes/sales.py - End-of-Day (EOD) Sales Entry, Live POS Integration, Recipe Deduction & Multi-Channel Tender Balancing Engine
+# routes/sales.py - End-of-Day (EOD) Sales Entry, Shift Starting Float Sync & Multi-Channel Tender Balancing Engine
 from flask import Blueprint, request, redirect, session, render_template
 from modules.database import InventoryDB
 import sqlite3
@@ -49,10 +49,52 @@ def resolve_parent_and_variant(p):
 
 def ensure_sales_database_schema(conn):
     """
-    Auto-migrates Sales, Inventory_Audit_Log, Sales_Discounts, and Cash_Drawer_Logs tables.
-    Safely adds missing multi-channel tender columns without data loss.
+    Auto-migrates Sales, Shift_Logs, Inventory_Audit_Log, Sales_Discounts, and Cash_Drawer_Logs tables.
+    Safely adds missing columns without data loss.
     """
     cursor = conn.cursor()
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS Shift_Logs (
+            Shift_ID TEXT PRIMARY KEY,
+            Cashier_Open TEXT,
+            Cashier_Close TEXT,
+            Date TEXT,
+            Time_Opened TEXT,
+            Time_Closed TEXT,
+            Starting_Float REAL DEFAULT 0.0,
+            Cash_Sales REAL DEFAULT 0.0,
+            Cash_Paid_Outs REAL DEFAULT 0.0,
+            Expected_Cash REAL DEFAULT 0.0,
+            Actual_Counted_Cash REAL DEFAULT 0.0,
+            Discrepancy_Over_Short REAL DEFAULT 0.0,
+            Total_Net_Sales REAL DEFAULT 0.0,
+            Total_Transactions INTEGER DEFAULT 0,
+            Status TEXT DEFAULT 'OPEN',
+            Notes TEXT
+        )
+    """)
+    cursor.execute("PRAGMA table_info(Shift_Logs)")
+    existing_shift_cols = {row[1] for row in cursor.fetchall()}
+    needed_shift_cols = {
+        'Cashier_Close': 'TEXT',
+        'Date': 'TEXT',
+        'Time_Opened': 'TEXT',
+        'Time_Closed': 'TEXT',
+        'Starting_Float': 'REAL DEFAULT 0.0',
+        'Cash_Sales': 'REAL DEFAULT 0.0',
+        'Cash_Paid_Outs': 'REAL DEFAULT 0.0',
+        'Expected_Cash': 'REAL DEFAULT 0.0',
+        'Actual_Counted_Cash': 'REAL DEFAULT 0.0',
+        'Discrepancy_Over_Short': 'REAL DEFAULT 0.0',
+        'Total_Net_Sales': 'REAL DEFAULT 0.0',
+        'Total_Transactions': 'INTEGER DEFAULT 0',
+        'Status': "TEXT DEFAULT 'OPEN'",
+        'Notes': 'TEXT'
+    }
+    for col_name, col_type in needed_shift_cols.items():
+        if col_name not in existing_shift_cols:
+            cursor.execute(f"ALTER TABLE Shift_Logs ADD COLUMN {col_name} {col_type}")
+
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS Sales (
             Sale_ID TEXT PRIMARY KEY,
@@ -187,13 +229,11 @@ def ensure_sales_database_schema(conn):
 @sales_bp.route('/portal/<username>/sales', methods=['GET', 'POST'])
 def web_sales_tab(username):
     username = username.lower().strip()
-    
     if session.get('logged_in_user') != username:
         return redirect('/login')
         
     client_db_path = f"data/client_{username}.db"
     client_db = InventoryDB(client_db_path)
-    
     feedback_msg = None
     alert_type = "success"
 
@@ -219,7 +259,6 @@ def web_sales_tab(username):
         disc_amts = request.form.getlist('discount_amount[]')
         disc_notes = request.form.getlist('discount_notes[]')
 
-        # Tender Breakdown Inputs
         starting_float_str = request.form.get('starting_float', '0').strip()
         cash_sales_str = request.form.get('cash_sales', '0').strip()
         cash_paid_outs_str = request.form.get('cash_paid_outs', '0').strip()
@@ -227,12 +266,10 @@ def web_sales_tab(username):
         actual_counted_cash_str = request.form.get('actual_counted_cash', '0').strip()
         drawer_notes = request.form.get('drawer_notes', '').strip()
 
-        # In-Store Digital & Card Tenders
         gcash_sales_str = request.form.get('gcash_sales', '0').strip()
         maya_sales_str = request.form.get('maya_sales', '0').strip()
         card_sales_str = request.form.get('card_sales', '0').strip()
 
-        # Delivery Aggregators (GrabFood & Foodpanda)
         grab_gross_str = request.form.get('grab_gross', '0').strip()
         grab_comm_str = request.form.get('grab_comm', '0').strip()
         foodpanda_gross_str = request.form.get('foodpanda_gross', '0').strip()
@@ -264,11 +301,9 @@ def web_sales_tab(username):
         expected_cash = starting_float + cash_sales - cash_paid_outs
         has_drawer_entry = (actual_counted_cash > 0 or cash_sales > 0 or starting_float > 0 or cash_paid_outs > 0)
         over_short = (actual_counted_cash - expected_cash) if has_drawer_entry else 0.0
-
         total_settled_tenders = cash_sales + gcash_sales + maya_sales + card_sales + grab_net + foodpanda_net
         
         conn = sqlite3.connect(client_db_path, timeout=20.0)
-        ensure_sales_database_schema(conn)
         cursor = conn.cursor()
 
         date_slug = sale_date.replace('-', '')
@@ -276,16 +311,13 @@ def web_sales_tab(username):
         batch_id = f"EOD{date_slug}_{time_slug}"
         sale_time_str = datetime.now().strftime("%H:%M:%S")
 
-        # =================================================================
-        # PROCESS MANUAL SALES, MODIFIERS & RECIPE DEPLETION
-        # =================================================================
         total_required_ingredients = defaultdict(float)
         sold_summary_list = []
         valid_sales_payload = []
         valid_modifiers_payload = []
         valid_discounts_payload = []
 
-        # 1. Process Product Requirements (Manual Additions only)
+        # Process Product Requirements
         for p_id, q_str in zip(prod_ids, prod_qtys):
             p_qty = parse_float_safe(q_str)
             if p_qty == 0:
@@ -297,11 +329,7 @@ def web_sales_tab(username):
             p_price = float(prod_match[1] or 0.0) if prod_match else 0.0
             
             valid_sales_payload.append({
-                'id': p_id,
-                'name': p_name,
-                'qty': p_qty,
-                'price': p_price,
-                'total': p_qty * p_price
+                'id': p_id, 'name': p_name, 'qty': p_qty, 'price': p_price, 'total': p_qty * p_price
             })
             sold_summary_list.append(f"{p_qty:g}x {p_name}")
 
@@ -311,7 +339,7 @@ def web_sales_tab(username):
                 for ing_id, req_qty in cursor.fetchall():
                     total_required_ingredients[str(ing_id)] += float(req_qty or 0.0) * p_qty
 
-        # 2. Process Modifier Requirements (Manual Additions only)
+        # Process Modifier Requirements
         for m_id, mq_str in zip(mod_ids, mod_qtys):
             m_qty = parse_float_safe(mq_str)
             if m_qty == 0:
@@ -328,11 +356,7 @@ def web_sales_tab(username):
                     m_price = float(mod_match[1] or 0.0)
 
             valid_modifiers_payload.append({
-                'id': m_id,
-                'name': m_name,
-                'qty': m_qty,
-                'price': m_price,
-                'total': m_qty * m_price
+                'id': m_id, 'name': m_name, 'qty': m_qty, 'price': m_price, 'total': m_qty * m_price
             })
             sold_summary_list.append(f"{m_qty:g}x {m_name}")
 
@@ -342,7 +366,7 @@ def web_sales_tab(username):
                 for ing_id, req_qty in cursor.fetchall():
                     total_required_ingredients[str(ing_id)] += float(req_qty or 0.0) * m_qty
 
-        # 3. Process Manual Discounts
+        # Process Discounts
         discounts_total_amount = 0.0
         for d_id, d_amt_str, d_note in zip(disc_ids, disc_amts, disc_notes):
             d_amt = parse_float_safe(d_amt_str)
@@ -360,23 +384,18 @@ def web_sales_tab(username):
                     d_cat = disc_match[1] or "Promotional / Marketing"
 
             valid_discounts_payload.append({
-                'id': d_id,
-                'name': d_name,
-                'category': d_cat,
-                'amount': d_amt,
-                'notes': (d_note or '').strip()
+                'id': d_id, 'name': d_name, 'category': d_cat, 'amount': d_amt, 'notes': (d_note or '').strip()
             })
             discounts_total_amount += d_amt
 
-        # Check existing Live POS sales count for this date
         cursor.execute("SELECT COUNT(*) FROM Sales WHERE Sale_Date = ?", (sale_date,))
         existing_sales_count_today = cursor.fetchone()[0]
 
         if not valid_sales_payload and not valid_modifiers_payload and not has_drawer_entry and existing_sales_count_today == 0:
             conn.close()
-            return redirect(f"/portal/{username}/sales?target_date={sale_date}&msg=Input Notice: No sales activity or drawer balances were entered for this date.&alert_type=warning")
+            return redirect(f"/portal/{username}/sales?target_date={sale_date}&msg=Input Notice: No activity or drawer counts were entered.&alert_type=warning")
 
-        # 4. Check Against On-Hand Inventory Balances for manual additions
+        # Check Stock Sufficiency for Manual Items
         insufficient_ingredients = []
         for ing_id, needed_qty in total_required_ingredients.items():
             if needed_qty <= 0:
@@ -402,73 +421,36 @@ def web_sales_tab(username):
                 error_details.append(f"{item['name']} (Stock: {item['available']:g} {item['unit']}, Needs: {item['needed']:g} {item['unit']})")
             if len(insufficient_ingredients) > 3:
                 error_details.append(f"and {len(insufficient_ingredients) - 3} more items")
-            
-            err_msg = f"Inventory Depletion Block: Manual closing sales cannot be recorded. Insufficient stock for: {'; '.join(error_details)}."
+            err_msg = f"Inventory Depletion Block: Insufficient stock for: {'; '.join(error_details)}."
             return redirect(f"/portal/{username}/sales?target_date={sale_date}&msg={err_msg}&alert_type=danger")
 
-        # =================================================================
-        # COMMIT TRANSACTION (MANUAL SALES + DISCOUNTS + MULTI-TENDER + DEPLETION)
-        # =================================================================
-        if len(sold_summary_list) <= 4:
-            summary_text = ", ".join(sold_summary_list)
-        else:
-            summary_text = ", ".join(sold_summary_list[:4]) + f" (+{len(sold_summary_list) - 4} more)"
-
-        # 1. Insert Itemized Manual Products Sold into Sales Ledger
-        manual_gross_amount = 0.0
+        # Commit Sales
         for idx, item in enumerate(valid_sales_payload, start=1):
             sale_line_id = f"{batch_id}-P{idx:02d}"
-            manual_gross_amount += item['total']
             cursor.execute("""
-                INSERT INTO Sales (
-                    Sale_ID, Sale_Date, Sale_Time, Product_ID, Product_Name,
-                    Quantity, Price, Total_Amount, Reason, Recorded_By
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            """, (
-                sale_line_id, sale_date, sale_time_str, item['id'], item['name'],
-                item['qty'], item['price'], item['total'], audit_note or f"Manual EOD Entry {batch_id}", recorded_by
-            ))
+                INSERT INTO Sales (Sale_ID, Sale_Date, Sale_Time, Product_ID, Product_Name, Quantity, Price, Total_Amount, Reason, Recorded_By)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """, (sale_line_id, sale_date, sale_time_str, item['id'], item['name'], item['qty'], item['price'], item['total'], audit_note or f"Manual EOD Entry {batch_id}", recorded_by))
 
-        # 2. Insert Itemized Manual Modifiers Sold into Sales Ledger
         for idx, item in enumerate(valid_modifiers_payload, start=1):
             mod_line_id = f"{batch_id}-M{idx:02d}"
-            manual_gross_amount += item['total']
             cursor.execute("""
-                INSERT INTO Sales (
-                    Sale_ID, Sale_Date, Sale_Time, Product_ID, Product_Name,
-                    Quantity, Price, Total_Amount, Reason, Recorded_By
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            """, (
-                mod_line_id, sale_date, sale_time_str, item['id'], f"Modifier: {item['name']}",
-                item['qty'], item['price'], item['total'], audit_note or f"Manual EOD Entry {batch_id}", recorded_by
-            ))
+                INSERT INTO Sales (Sale_ID, Sale_Date, Sale_Time, Product_ID, Product_Name, Quantity, Price, Total_Amount, Reason, Recorded_By)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """, (mod_line_id, sale_date, sale_time_str, item['id'], f"Modifier: {item['name']}", item['qty'], item['price'], item['total'], audit_note or f"Manual EOD Entry {batch_id}", recorded_by))
 
-        # 3. Insert Applied Manual Discounts
         for idx, disc in enumerate(valid_discounts_payload, start=1):
             disc_line_id = f"{batch_id}-D{idx:02d}"
-            
             cursor.execute("""
-                INSERT INTO Sales_Discounts (
-                    Discount_Tx_ID, Batch_ID, Sale_Date, Sale_Time,
-                    Discount_ID, Discount_Name, Category, Amount, Notes, Recorded_By
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            """, (
-                disc_line_id, batch_id, sale_date, sale_time_str,
-                disc['id'], disc['name'], disc['category'], disc['amount'], disc['notes'], recorded_by
-            ))
+                INSERT INTO Sales_Discounts (Discount_Tx_ID, Batch_ID, Sale_Date, Sale_Time, Discount_ID, Discount_Name, Category, Amount, Notes, Recorded_By)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """, (disc_line_id, batch_id, sale_date, sale_time_str, disc['id'], disc['name'], disc['category'], disc['amount'], disc['notes'], recorded_by))
 
-            reason_str = f"[{disc['category']}] {disc['notes']}".strip()
             cursor.execute("""
-                INSERT INTO Sales (
-                    Sale_ID, Sale_Date, Sale_Time, Product_ID, Product_Name,
-                    Quantity, Price, Total_Amount, Reason, Recorded_By
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            """, (
-                disc_line_id, sale_date, sale_time_str, disc['id'], f"Discount: {disc['name']}",
-                1, -disc['amount'], -disc['amount'], reason_str or f"EOD Discount {disc['id']}", recorded_by
-            ))
+                INSERT INTO Sales (Sale_ID, Sale_Date, Sale_Time, Product_ID, Product_Name, Quantity, Price, Total_Amount, Reason, Recorded_By)
+                VALUES (?, ?, ?, ?, ?, 1, ?, ?, ?, ?)
+            """, (disc_line_id, sale_date, sale_time_str, disc['id'], f"Discount: {disc['name']}", -disc['amount'], -disc['amount'], f"[{disc['category']}] {disc['notes']}", recorded_by))
 
-        # 4. Insert Multi-Channel Tender & Cash Drawer Balancing Record
         cursor.execute("SELECT COALESCE(SUM(Total_Amount), 0.0) FROM Sales WHERE Sale_Date = ?", (sale_date,))
         net_sales_day_total = float(cursor.fetchone()[0] or 0.0)
         tender_variance = total_settled_tenders - net_sales_day_total
@@ -492,116 +474,59 @@ def web_sales_tab(username):
             tender_variance, full_drawer_notes, recorded_by
         ))
 
-        # 5. Automatically Book Operational Overhead Expenses
-        cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='Expenses'")
-        has_expenses_table = cursor.fetchone()
+        # CLOSE REGISTER SHIFT IN SHIFT_LOGS ON EOD COMMIT
+        cursor.execute("""
+            UPDATE Shift_Logs 
+            SET Cashier_Close = ?, Time_Closed = ?, Expected_Cash = ?, Actual_Counted_Cash = ?,
+                Discrepancy_Over_Short = ?, Status = 'CLOSED', Notes = COALESCE(Notes || ' | ', '') || 'Closed via EOD Sales Worksheet'
+            WHERE Date = ? AND Status = 'OPEN'
+        """, (recorded_by, sale_time_str, expected_cash, actual_counted_cash, over_short, sale_date))
 
-        if has_expenses_table:
-            if cash_paid_outs > 0:
-                exp_desc = f"Till Paid-Out: {cash_paid_outs_reason}" if cash_paid_outs_reason else f"Till Cash Paid-Out (Batch {batch_id})"
-                exp_tx_id = f"EXP{batch_id.replace('EOD', '')}_PO"
-                cursor.execute("""
-                    INSERT INTO Expenses (Expense_ID, Expense_Date, Expense_Type, Description, Amount, Category, Payment_Method, Notes)
-                    VALUES (?, ?, 'Operational', ?, ?, 'Misc Overhead', 'Petty Cash', ?)
-                """, (exp_tx_id, sale_date, exp_desc, cash_paid_outs, f"Automatic till paid-out booked via EOD Batch {batch_id}"))
-
-            if grab_comm > 0:
-                grab_exp_id = f"EXP{batch_id.replace('EOD', '')}_GRAB"
-                cursor.execute("""
-                    INSERT INTO Expenses (Expense_ID, Expense_Date, Expense_Type, Description, Amount, Category, Payment_Method, Notes)
-                    VALUES (?, ?, 'Operational', ?, ?, 'Logistics & Delivery', 'Bank Transfer', ?)
-                """, (grab_exp_id, sale_date, f"GrabFood Merchant Commission (Batch {batch_id})", grab_comm, f"Auto-booked commission from Grab gross sales of PHP {grab_gross:,.2f}"))
-
-            if foodpanda_comm > 0:
-                panda_exp_id = f"EXP{batch_id.replace('EOD', '')}_PANDA"
-                cursor.execute("""
-                    INSERT INTO Expenses (Expense_ID, Expense_Date, Expense_Type, Description, Amount, Category, Payment_Method, Notes)
-                    VALUES (?, ?, 'Operational', ?, ?, 'Logistics & Delivery', 'Bank Transfer', ?)
-                """, (panda_exp_id, sale_date, f"Foodpanda Merchant Commission (Batch {batch_id})", foodpanda_comm, f"Auto-booked commission from Foodpanda gross sales of PHP {foodpanda_gross:,.2f}"))
-
-        # 6. Consolidated Recipe Inventory Deductions (ONLY for manual additions)
-        depleted_ingredients_count = 0
-        batch_audit_note = f"Manual EOD Depletion: {summary_text} | {audit_note}".strip(" | ")
-
+        # Deduct Ingredients
         for ing_id, tot_deduct in total_required_ingredients.items():
             if tot_deduct <= 0:
                 continue
-
-            cursor.execute("SELECT Current_Stock, Ingredient_Name, Unit FROM Ingredients WHERE Ingredient_ID = ?", (ing_id,))
+            cursor.execute("SELECT Current_Stock, Ingredient_Name FROM Ingredients WHERE Ingredient_ID = ?", (ing_id,))
             ing_match = cursor.fetchone()
-
             if ing_match:
-                current_stock, ing_name, base_unit = ing_match
-                current_stock = float(current_stock or 0.0)
-                new_stock = current_stock - tot_deduct
-
+                cur_stock, ing_name = ing_match
+                new_stock = float(cur_stock or 0.0) - tot_deduct
                 cursor.execute("UPDATE Ingredients SET Current_Stock = ? WHERE Ingredient_ID = ?", (new_stock, ing_id))
-                
                 cursor.execute("""
-                    INSERT INTO Inventory_Audit_Log (
-                        Audit_ID, Date, Ingredient_Name, Theoretical, Physical, Variance, Notes
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?)
-                """, (
-                    batch_id, 
-                    sale_date, 
-                    ing_name, 
-                    current_stock, 
-                    new_stock, 
-                    -tot_deduct, 
-                    batch_audit_note
-                ))
-                depleted_ingredients_count += 1
+                    INSERT INTO Inventory_Audit_Log (Audit_ID, Date, Ingredient_Name, Theoretical, Physical, Variance, Notes)
+                    VALUES (?, ?, ?, ?, ?, ?, ?)
+                """, (batch_id, sale_date, ing_name, cur_stock, new_stock, -tot_deduct, f"Manual EOD Depletion: {batch_id}"))
 
         conn.commit()
         conn.close()
         client_db.update_all_product_costs()
 
-        total_manual_units = sum(i['qty'] for i in valid_sales_payload) + sum(i['qty'] for i in valid_modifiers_payload)
-
-        if total_manual_units > 0:
-            feedback_msg = (
-                f"EOD Shift Closeout Logged: Successfully reconciled shift for {sale_date}. Added {total_manual_units:g} offline sales and saved Cash Till audit (Over/Short: ₱{over_short:+,.2f}). "
-                f"Deductions applied across {depleted_ingredients_count} manual ingredients."
-            )
-        else:
-            feedback_msg = (
-                f"EOD Shift Closeout Logged: Successfully reconciled Cash Drawer & Multi-Channel Tenders for {sale_date}. "
-                f"Total Settled: ₱{total_settled_tenders:,.2f} (Cash Over/Short: ₱{over_short:+,.2f}). "
-                f"Live POS inventory records remained safely preserved with zero duplicate deductions."
-            )
+        feedback_msg = f"Shift Closeout Saved: Reconciled tenders for {sale_date}. Settled: ₱{total_settled_tenders:,.2f} (Over/Short: ₱{over_short:+,.2f})."
         return redirect(f"/portal/{username}/sales?target_date={sale_date}&msg={feedback_msg}&alert_type=success")
 
     # =================================================================
-    # 2. GET METHOD: RENDER GROUPED WORKSHEET WITH LIVE POS AUTO-POPULATION
+    # 2. GET METHOD: RENDER GROUPED WORKSHEET & SHIFT HOOKS
     # =================================================================
     target_date = request.args.get('target_date', datetime.now().strftime("%Y-%m-%d")).strip()
-
     conn = sqlite3.connect(client_db_path, timeout=20.0)
     cursor = conn.cursor()
-    
-    # 1. Read active products and build parent-variant dictionary
+
     products_df = pd.read_sql("SELECT * FROM Products WHERE Active = 'Yes' OR Active = 'yes'", conn)
-    
     grouped_products = defaultdict(list)
     categories = []
-    
     if not products_df.empty:
         categories = sorted(list(set(str(c).strip() for c in products_df['Category'].dropna() if str(c).strip())))
-        
         for _, p in products_df.iterrows():
             parent_name, variant_name = resolve_parent_and_variant(p)
-            
-            p_obj = {
+            grouped_products[parent_name].append({
                 'Product_ID': str(p['Product_ID']),
                 'Product_Name': str(p['Product_Name']),
                 'Parent_Item': parent_name,
                 'Variant_Name': variant_name,
                 'Category': str(p.get('Category') or 'General'),
                 'Selling_Price': float(pd.to_numeric(p.get('Selling_Price', 0.0), errors='coerce') or 0.0)
-            }
-            grouped_products[parent_name].append(p_obj)
+            })
 
-    # 2. Read active modifiers
     active_modifiers = []
     cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='Modifiers'")
     if cursor.fetchone():
@@ -609,7 +534,6 @@ def web_sales_tab(username):
         if not mods_df.empty:
             active_modifiers = mods_df.to_dict('records')
 
-    # 3. Read active discount policies from Discounts module
     active_discounts = []
     cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='Discounts'")
     if cursor.fetchone():
@@ -622,9 +546,7 @@ def web_sales_tab(username):
             d_dict['Category'] = str(d_dict.get('Category') or 'Promotional / Marketing')
             active_discounts.append(d_dict)
 
-    # =================================================================
-    # 4. QUERY LIVE POS ACTIVITY FOR TARGET DATE (NET OF VOIDS/REFUNDS)
-    # =================================================================
+    # 4. Live POS Products sold count (net of voids)
     cursor.execute("""
         SELECT Product_ID, SUM(Quantity)
         FROM Sales
@@ -688,7 +610,43 @@ def web_sales_tab(username):
         'total_items': sum(pos_prod_qty.values()) + sum(pos_mod_qty.values())
     }
 
-    # 5. Query Store Settings for Blind Till & Master Security PIN
+    # 5. QUERY ACTIVE OPEN SHIFT FIRST, FALLING BACK TO MOST RECENT SHIFT
+    cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='Shift_Logs'")
+    pos_starting_float = 0.0
+    active_shift_info = None
+    if cursor.fetchone():
+        shift_param = request.args.get('shift_id', '').strip()
+        if shift_param:
+            cursor.execute("""
+                SELECT Shift_ID, Cashier_Open, Starting_Float, Cash_Sales, Total_Net_Sales, Status, Time_Opened
+                FROM Shift_Logs
+                WHERE Shift_ID = ?
+                LIMIT 1
+            """, (shift_param,))
+        else:
+            cursor.execute("""
+                SELECT Shift_ID, Cashier_Open, Starting_Float, Cash_Sales, Total_Net_Sales, Status, Time_Opened
+                FROM Shift_Logs
+                WHERE Date = ?
+                ORDER BY CASE WHEN Status = 'OPEN' THEN 0 ELSE 1 END, Shift_ID DESC
+                LIMIT 1
+            """, (target_date,))
+        s_row = cursor.fetchone()
+        if s_row:
+            pos_starting_float = float(s_row[2] or 0.0)
+            active_shift_info = {
+                'shift_id': s_row[0],
+                'cashier': s_row[1],
+                'starting_float': pos_starting_float,
+                'cash_sales': float(s_row[3] or 0.0),
+                'net_sales': float(s_row[4] or 0.0),
+                'status': s_row[5],
+                'time': s_row[6]
+            }
+            if pos_tenders['cash'] == 0.0 and float(s_row[3] or 0.0) > 0.0:
+                pos_tenders['cash'] = float(s_row[3] or 0.0)
+
+    # 6. Store Settings
     cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='Store_Settings'")
     store_settings = {}
     if cursor.fetchone():
@@ -697,12 +655,11 @@ def web_sales_tab(username):
     store_settings.setdefault('enforce_blind_till', 'yes')
     store_settings.setdefault('master_admin_pin', '9999')
 
-    # 6. Read historical sales & cash drawer balancing grouped by date
+    # 7. Sales History
     sales_history = []
     cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='Sales'")
     if cursor.fetchone():
         sales_ledger_df = pd.read_sql("SELECT * FROM Sales ORDER BY Sale_Date DESC, Sale_Time DESC", conn)
-        
         drawer_df = pd.DataFrame()
         cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='Cash_Drawer_Logs'")
         if cursor.fetchone():
@@ -710,23 +667,19 @@ def web_sales_tab(username):
 
         if not sales_ledger_df.empty:
             sales_ledger_df['Sale_Date'] = sales_ledger_df['Sale_Date'].astype(str)
-            unique_dates = sales_ledger_df['Sale_Date'].unique()
-
-            for u_date in unique_dates:
+            for u_date in sales_ledger_df['Sale_Date'].unique():
                 day_entries = sales_ledger_df[sales_ledger_df['Sale_Date'] == u_date]
-                
-                product_lines = day_entries[~day_entries['Product_Name'].str.startswith('Discount:')]
-                total_qty = float(pd.to_numeric(product_lines['Quantity'], errors='coerce').fillna(0.0).sum())
-                
-                gross_revenue = float(pd.to_numeric(day_entries[day_entries['Total_Amount'] > 0]['Total_Amount'], errors='coerce').fillna(0.0).sum())
-                discount_total = abs(float(pd.to_numeric(day_entries[day_entries['Total_Amount'] < 0]['Total_Amount'], errors='coerce').fillna(0.0).sum()))
-                net_revenue = float(pd.to_numeric(day_entries['Total_Amount'], errors='coerce').fillna(0.0).sum())
+                prod_lines = day_entries[~day_entries['Product_Name'].str.startswith('Discount:')]
+                t_qty = float(pd.to_numeric(prod_lines['Quantity'], errors='coerce').fillna(0.0).sum())
+                g_rev = float(pd.to_numeric(day_entries[day_entries['Total_Amount'] > 0]['Total_Amount'], errors='coerce').fillna(0.0).sum())
+                d_tot = abs(float(pd.to_numeric(day_entries[day_entries['Total_Amount'] < 0]['Total_Amount'], errors='coerce').fillna(0.0).sum()))
+                n_rev = float(pd.to_numeric(day_entries['Total_Amount'], errors='coerce').fillna(0.0).sum())
 
                 day_drawer = None
                 if not drawer_df.empty and 'Date' in drawer_df.columns:
-                    match_drawer = drawer_df[drawer_df['Date'] == u_date]
-                    if not match_drawer.empty:
-                        d_row = match_drawer.iloc[0]
+                    match_d = drawer_df[drawer_df['Date'] == u_date]
+                    if not match_d.empty:
+                        d_row = match_d.iloc[0]
                         day_drawer = {
                             'starting_float': float(d_row.get('Starting_Float') or 0.0),
                             'cash_sales': float(d_row.get('Cash_Sales') or 0.0),
@@ -749,13 +702,8 @@ def web_sales_tab(username):
                         }
 
                 sales_history.append({
-                    'date': u_date,
-                    'total_qty': total_qty,
-                    'total_revenue': net_revenue,
-                    'gross_revenue': gross_revenue,
-                    'discount_total': discount_total,
-                    'drawer': day_drawer,
-                    'entries': day_entries.to_dict('records')
+                    'date': u_date, 'total_qty': t_qty, 'total_revenue': n_rev, 'gross_revenue': g_rev,
+                    'discount_total': d_tot, 'drawer': day_drawer, 'entries': day_entries.to_dict('records')
                 })
 
     conn.close()
@@ -773,6 +721,8 @@ def web_sales_tab(username):
         pos_discounts=pos_discounts,
         pos_tenders=pos_tenders,
         live_pos_summary=live_pos_summary,
+        pos_starting_float=pos_starting_float,
+        active_shift_info=active_shift_info,
         store_settings=store_settings,
         sales_history=sales_history,
         msg=request.args.get('msg', feedback_msg),

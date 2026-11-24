@@ -1,4 +1,4 @@
-# routes/expenses.py - Advanced Business Analytics & Filtering Engine
+# routes/expenses.py - Advanced Business Analytics & Anti-Fraud Security Governance Engine
 from flask import Blueprint, request, redirect, session, render_template
 from modules.database import InventoryDB
 from datetime import datetime, timedelta
@@ -52,6 +52,39 @@ def ensure_expenses_schema(conn):
             cursor.execute(f"ALTER TABLE Expenses ADD COLUMN {col_name} {col_def}")
     conn.commit()
 
+def verify_supervisor_pin(conn, entered_pin):
+    """
+    Validates entered PIN against Master Admin PIN in Store_Settings or active Store Manager PIN in Staff_Accounts.
+    Returns: (is_valid: bool, auth_label: str)
+    """
+    pin = str(entered_pin or '').strip()
+    if not pin:
+        return False, "PIN required."
+
+    cur = conn.cursor()
+    # 1. Master Admin PIN Check from Store_Settings
+    cur.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='Store_Settings'")
+    if cur.fetchone():
+        cur.execute("SELECT Setting_Value FROM Store_Settings WHERE Setting_Key = 'master_admin_pin'")
+        row = cur.fetchone()
+        master_pin = row[0] if row and row[0] else '9999'
+        if pin == master_pin:
+            return True, "Master Security PIN Override"
+
+    # 2. Staff Accounts Manager / Admin PIN Check
+    cur.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='Staff_Accounts'")
+    if cur.fetchone():
+        cur.execute("""
+            SELECT Display_Name, Role FROM Staff_Accounts 
+            WHERE PIN = ? AND (Role LIKE '%Manager%' OR Role LIKE '%Owner%' OR Role LIKE '%Admin%')
+              AND (Active = 'Yes' OR Active = 'YES')
+        """, (pin,))
+        mgr = cur.fetchone()
+        if mgr:
+            return True, f"Authorized by {mgr[1]} ({mgr[0]})"
+
+    return False, "Invalid Master Security PIN or Manager PIN."
+
 @expenses_bp.route('/portal/<username>/expenses', methods=['GET', 'POST'])
 def web_expenses_tab(username):
     username = username.lower().strip()
@@ -60,7 +93,20 @@ def web_expenses_tab(username):
 
     client_db_path = f"data/client_{username}.db"
     db = InventoryDB(client_db_path)
-    operator = session.get('logged_in_user', username)
+    
+    # 1. RESOLVE ACTIVE RBAC CLEARANCE
+    active_role = session.get('staff_role')
+    if not active_role and session.get('logged_in_user') == username:
+        active_role = 'Platform Owner Admin'
+        session['staff_role'] = active_role
+    elif not active_role:
+        active_role = 'Barista / Kitchen Crew'
+
+    is_owner = (active_role == 'Platform Owner Admin')
+    is_manager = (active_role in ['Store Manager', 'Platform Owner Admin'])
+    is_crew = not is_manager
+    logged_user = session.get('staff_username') or session.get('logged_in_user', username).title()
+
     feedback_msg = None
     alert_type = "success"
 
@@ -72,7 +118,7 @@ def web_expenses_tab(username):
         pass
 
     # ==========================================
-    # 1. POST METHOD: DATA WRITE OPERATIONS
+    # 1. POST METHOD: DATA WRITE & ANTI-FRAUD GATING
     # ==========================================
     if request.method == 'POST':
         action = request.form.get('action_type')
@@ -96,6 +142,9 @@ def web_expenses_tab(username):
                     alert_type = "danger"
                 else:
                     success, msg = False, ""
+                    user_tag = f"Logged by: {logged_user} ({active_role})"
+                    combined_notes = f"{notes} | {user_tag}".strip(" | ") if notes else user_tag
+
                     if hasattr(db, 'add_expense'):
                         try:
                             success, msg = db.add_expense({
@@ -105,7 +154,7 @@ def web_expenses_tab(username):
                                 'Amount': amount,
                                 'Category': category if category else 'Misc Overhead',
                                 'Payment_Method': payment_method if payment_method else 'Petty Cash',
-                                'Notes': notes
+                                'Notes': combined_notes
                             })
                         except Exception:
                             success = False
@@ -119,7 +168,7 @@ def web_expenses_tab(username):
                         cursor.execute("""
                             INSERT INTO Expenses (Expense_ID, Expense_Date, Expense_Type, Description, Amount, Category, Payment_Method, Notes)
                             VALUES (?, ?, 'Operational', ?, ?, ?, ?, ?)
-                        """, (exp_id, expense_date, description, amount, category, payment_method, notes))
+                        """, (exp_id, expense_date, description, amount, category, payment_method, combined_notes))
                         conn.commit()
                         conn.close()
                         msg = f"Success: Expense '{description}' (PHP {amount:,.2f}) recorded to ledger."
@@ -131,7 +180,7 @@ def web_expenses_tab(username):
                 feedback_msg = "Error: Invalid numeric formatting supplied in Amount field."
                 alert_type = "danger"
 
-        # 2. EDIT EXISTING EXPENSE RECORD
+        # 2. EDIT EXISTING EXPENSE RECORD (REQUIRES SUPERVISOR AUTHORIZATION FOR CREW)
         elif action == 'edit_expense':
             expense_rowid = request.form.get('expense_rowid', '').strip()
             expense_id = request.form.get('expense_id', '').strip()
@@ -141,6 +190,30 @@ def web_expenses_tab(username):
             category = request.form.get('category', 'Misc Overhead').strip()
             payment_method = request.form.get('payment_method', 'Petty Cash').strip()
             notes = request.form.get('notes', '').strip()
+            security_pin = request.form.get('security_pin', '').strip()
+
+            conn = sqlite3.connect(client_db_path, timeout=20.0)
+
+            # Security Policy Gate
+            authorized = False
+            auth_label = ""
+            if is_manager:
+                authorized = True
+                auth_label = f"{active_role} ({logged_user})"
+            else:
+                if not security_pin:
+                    conn.close()
+                    feedback_msg = "Security Policy Block: Crew accounts cannot edit historical expenses without Master Security PIN or Manager authorization."
+                    return redirect(f"/portal/{username}/expenses?msg={feedback_msg}&alert_type={alert_type}")
+                
+                is_valid, label = verify_supervisor_pin(conn, security_pin)
+                if is_valid:
+                    authorized = True
+                    auth_label = f"{label} (Operator: {logged_user})"
+                else:
+                    conn.close()
+                    feedback_msg = f"Security Violation: {label} Edit modification rejected."
+                    return redirect(f"/portal/{username}/expenses?msg={feedback_msg}&alert_type={alert_type}")
 
             try:
                 amount = float(amount_str)
@@ -151,23 +224,22 @@ def web_expenses_tab(username):
                     feedback_msg = "Error: Description field cannot be blank."
                     alert_type = "danger"
                 else:
-                    conn = sqlite3.connect(client_db_path, timeout=20.0)
                     cursor = conn.cursor()
+                    audit_entry_notes = f"{notes} | Edited by: {auth_label} on {datetime.now().strftime('%Y-%m-%d %H:%M')}".strip(" | ")
                     if expense_rowid:
                         cursor.execute("""
                             UPDATE Expenses 
                             SET Expense_Date = ?, Description = ?, Amount = ?, Category = ?, Payment_Method = ?, Notes = ?
                             WHERE rowid = ?
-                        """, (expense_date, description, amount, category, payment_method, notes, expense_rowid))
+                        """, (expense_date, description, amount, category, payment_method, audit_entry_notes, expense_rowid))
                     elif expense_id:
                         cursor.execute("""
                             UPDATE Expenses 
                             SET Expense_Date = ?, Description = ?, Amount = ?, Category = ?, Payment_Method = ?, Notes = ?
                             WHERE Expense_ID = ?
-                        """, (expense_date, description, amount, category, payment_method, notes, expense_id))
+                        """, (expense_date, description, amount, category, payment_method, audit_entry_notes, expense_id))
                     conn.commit()
-                    conn.close()
-                    feedback_msg = f"Success: Expense '{description}' (PHP {amount:,.2f}) updated successfully."
+                    feedback_msg = f"Success: Expense '{description}' (PHP {amount:,.2f}) updated successfully. Authenticated by {auth_label}."
                     alert_type = "success"
             except ValueError:
                 feedback_msg = "Error: Invalid numeric formatting supplied in Amount field."
@@ -175,29 +247,71 @@ def web_expenses_tab(username):
             except Exception as e:
                 feedback_msg = f"Database Error: {str(e)}"
                 alert_type = "danger"
+            finally:
+                conn.close()
 
-        # 3. VOID EXPENSE OUTFLOW RECORD (AUDIT COMPLIANCE SAFEGUARD)
+        # 3. VOID EXPENSE OUTFLOW RECORD (STRICT ANTI-FRAUD PIN GATING)
         elif action == 'void_expense':
             expense_rowid = request.form.get('expense_rowid', '').strip()
-            void_reason = request.form.get('void_reason', '').strip() or "Operator void correction"
+            expense_id = request.form.get('expense_id', '').strip()
+            void_reason = request.form.get('void_reason', '').strip()
+            security_pin = request.form.get('security_pin', '').strip()
 
-            if expense_rowid:
+            if not void_reason or len(void_reason) < 4:
+                feedback_msg = "Compliance Error: A descriptive mandatory void explanation note is required."
+                return redirect(f"/portal/{username}/expenses?msg={feedback_msg}&alert_type={alert_type}")
+
+            conn = sqlite3.connect(client_db_path, timeout=20.0)
+
+            # Security Policy Gate
+            authorized = False
+            auth_label = ""
+            if is_manager:
+                authorized = True
+                auth_label = f"{active_role} ({logged_user})"
+            else:
+                # Crew MUST supply Master PIN or Manager PIN
+                if not security_pin:
+                    conn.close()
+                    feedback_msg = "Security Policy Block: Crew accounts cannot void expenses without Master Security PIN or Manager authorization."
+                    return redirect(f"/portal/{username}/expenses?msg={feedback_msg}&alert_type={alert_type}")
+
+                is_valid, label = verify_supervisor_pin(conn, security_pin)
+                if is_valid:
+                    authorized = True
+                    auth_label = f"{label} (Operator: {logged_user})"
+                else:
+                    conn.close()
+                    feedback_msg = f"Security Violation: {label} Void neutralization attempt rejected."
+                    return redirect(f"/portal/{username}/expenses?msg={feedback_msg}&alert_type={alert_type}")
+
+            if expense_rowid or expense_id:
                 try:
-                    conn = sqlite3.connect(client_db_path, timeout=20.0)
                     cursor = conn.cursor()
-                    cursor.execute("SELECT Amount, Description FROM Expenses WHERE rowid = ?", (expense_rowid,))
+                    if expense_rowid:
+                        cursor.execute("SELECT Amount, Description FROM Expenses WHERE rowid = ?", (expense_rowid,))
+                    else:
+                        cursor.execute("SELECT Amount, Description FROM Expenses WHERE Expense_ID = ?", (expense_id,))
+                    
                     rec = cursor.fetchone()
                     if rec:
                         orig_amt, orig_desc = rec
-                        new_desc = f"[VOIDED] {orig_desc} | Auth: {operator} | Reason: {void_reason}"
-                        cursor.execute("UPDATE Expenses SET Amount = 0.0, Description = ? WHERE rowid = ?", (new_desc, expense_rowid))
+                        new_desc = f"[VOIDED] {orig_desc} | Auth: {auth_label} | Reason: {void_reason}"
+                        if expense_rowid:
+                            cursor.execute("UPDATE Expenses SET Amount = 0.0, Description = ? WHERE rowid = ?", (new_desc, expense_rowid))
+                        else:
+                            cursor.execute("UPDATE Expenses SET Amount = 0.0, Description = ? WHERE Expense_ID = ?", (new_desc, expense_id))
                         conn.commit()
-                        feedback_msg = f"Success: Expense neutralized to PHP 0.00 in general ledger."
+                        feedback_msg = f"Success: Expense of PHP {orig_amt:,.2f} neutralized to PHP 0.00. Authenticated by {auth_label}."
                         alert_type = "warning"
-                    conn.close()
+                    else:
+                        feedback_msg = "Error: Expense record could not be found."
+                        alert_type = "danger"
                 except Exception as e:
                     feedback_msg = f"Database Error: {str(e)}"
                     alert_type = "danger"
+                finally:
+                    conn.close()
 
         return redirect(f"/portal/{username}/expenses?msg={feedback_msg}&alert_type={alert_type}")
 
@@ -374,6 +488,10 @@ def web_expenses_tab(username):
     return render_template(
         'expenses.html',
         username=username,
+        is_owner=is_owner,
+        is_manager=is_manager,
+        is_crew=is_crew,
+        active_role=active_role,
         expenses=final_list,
         categories=categories_list,
         kpi_month_total=total_this_month,

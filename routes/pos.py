@@ -1,4 +1,4 @@
-# routes/pos.py - Live Counter POS Terminal & Instant Ledger Engine with Dynamic Thermal Printing
+# routes/pos.py - Live Counter POS Terminal, Instant Ledger, Shift Lifecycle & Orders Void Engine
 from flask import Blueprint, request, jsonify, render_template, session, redirect
 from modules.database import InventoryDB
 from datetime import datetime
@@ -9,10 +9,31 @@ import json
 pos_bp = Blueprint('pos', __name__)
 
 def ensure_pos_tables_exist(db_path, username="STORE"):
-    """Ensures Sales, Cash_Drawer_Logs, Recipes, Ingredients, Modifiers, Modifier_Groups, Product_Modifiers, Staff_Accounts, and Store_Settings exist."""
+    """Ensures Sales, Shift_Logs, Cash_Drawer_Logs, Recipes, Ingredients, Modifiers, Modifier_Groups, Product_Modifiers, Staff_Accounts, and Store_Settings exist."""
     conn = sqlite3.connect(db_path, timeout=20.0)
     cursor = conn.cursor()
     
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS Shift_Logs (
+            Shift_ID TEXT PRIMARY KEY,
+            Cashier_Open TEXT,
+            Cashier_Close TEXT,
+            Date TEXT,
+            Time_Opened TEXT,
+            Time_Closed TEXT,
+            Starting_Float REAL DEFAULT 0.0,
+            Cash_Sales REAL DEFAULT 0.0,
+            Cash_Paid_Outs REAL DEFAULT 0.0,
+            Expected_Cash REAL DEFAULT 0.0,
+            Actual_Counted_Cash REAL DEFAULT 0.0,
+            Discrepancy_Over_Short REAL DEFAULT 0.0,
+            Total_Net_Sales REAL DEFAULT 0.0,
+            Total_Transactions INTEGER DEFAULT 0,
+            Status TEXT DEFAULT 'OPEN',
+            Notes TEXT
+        )
+    """)
+
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS Sales (
             Sale_ID TEXT PRIMARY KEY,
@@ -146,7 +167,8 @@ def ensure_pos_tables_exist(db_path, username="STORE"):
         'receipt_feed_lines': '4',
         'receipt_show_tin': 'yes',
         'receipt_show_wifi': 'no',
-        'receipt_show_signature': 'no'
+        'receipt_show_signature': 'no',
+        'master_admin_pin': '9999'
     }
     for k, v in default_settings.items():
         cursor.execute("INSERT OR IGNORE INTO Store_Settings (Setting_Key, Setting_Value) VALUES (?, ?)", (k, v))
@@ -154,8 +176,30 @@ def ensure_pos_tables_exist(db_path, username="STORE"):
     conn.commit()
     conn.close()
 
+def verify_supervisor_pin(conn, entered_pin):
+    pin = str(entered_pin or '').strip()
+    if not pin:
+        return False, "PIN cannot be empty."
+
+    cur = conn.cursor()
+    cur.execute("SELECT Setting_Value FROM Store_Settings WHERE Setting_Key = 'master_admin_pin'")
+    row = cur.fetchone()
+    master_pin = row[0] if row and row[0] else '9999'
+    if pin == master_pin:
+        return True, "Master Security PIN Override"
+
+    cur.execute("""
+        SELECT Display_Name, Role FROM Staff_Accounts 
+        WHERE PIN = ? AND (Role LIKE '%Manager%' OR Role LIKE '%Owner%' OR Role LIKE '%Admin%')
+          AND (Active = 'Yes' OR Active = 'YES')
+    """, (pin,))
+    mgr = cur.fetchone()
+    if mgr:
+        return True, f"Authorized by {mgr[1]} ({mgr[0]})"
+
+    return False, "Invalid Master Security PIN or Manager PIN."
+
 def get_receipt_config(db_path, username="STORE"):
-    """Retrieves all customized receipt and hardware formatting options from Store_Settings."""
     ensure_pos_tables_exist(db_path, username)
     conn = sqlite3.connect(db_path, timeout=20.0)
     cursor = conn.cursor()
@@ -163,6 +207,30 @@ def get_receipt_config(db_path, username="STORE"):
     settings = {row[0]: row[1] for row in cursor.fetchall()}
     conn.close()
     return settings
+
+def get_active_shift(conn):
+    cursor = conn.cursor()
+    cursor.execute("""
+        SELECT Shift_ID, Cashier_Open, Date, Time_Opened, Starting_Float, Cash_Sales, Cash_Paid_Outs, Total_Net_Sales, Total_Transactions, Status
+        FROM Shift_Logs 
+        WHERE Status = 'OPEN' 
+        ORDER BY Shift_ID DESC LIMIT 1
+    """)
+    row = cursor.fetchone()
+    if row:
+        return {
+            'Shift_ID': row[0],
+            'Cashier_Open': row[1],
+            'Date': row[2],
+            'Time_Opened': row[3],
+            'Starting_Float': float(row[4] or 0.0),
+            'Cash_Sales': float(row[5] or 0.0),
+            'Cash_Paid_Outs': float(row[6] or 0.0),
+            'Total_Net_Sales': float(row[7] or 0.0),
+            'Total_Transactions': int(row[8] or 0),
+            'Status': row[9]
+        }
+    return None
 
 @pos_bp.route('/portal/<username>/pos/switch-staff', methods=['POST'])
 def switch_pos_staff(username):
@@ -202,7 +270,7 @@ def switch_pos_staff(username):
             'role': role
         })
 
-    if pin in ['1234', '0000']:
+    if pin in ['1234', '0000', '9999']:
         session['staff_username'] = username.title()
         session['staff_role'] = 'Platform Owner Admin'
         return jsonify({
@@ -213,6 +281,364 @@ def switch_pos_staff(username):
 
     return jsonify({'status': 'error', 'message': 'Invalid 4-digit PIN'}), 401
 
+@pos_bp.route('/portal/<username>/pos/shift/open', methods=['POST'])
+def open_pos_shift(username):
+    username = username.lower().strip()
+    db_path = f"data/client_{username}.db"
+    ensure_pos_tables_exist(db_path, username)
+
+    if request.is_json:
+        payload = request.get_json(force=True) or {}
+        starting_float = float(payload.get('starting_float', 0.0) or 0.0)
+        notes = str(payload.get('notes', '')).strip()
+    else:
+        starting_float = float(request.form.get('starting_float', 0.0) or 0.0)
+        notes = str(request.form.get('notes', '')).strip()
+
+    cashier = session.get('staff_username') or session.get('logged_in_user', username).title()
+
+    now = datetime.now()
+    shift_id = f"SHF{now.strftime('%Y%m%d_%H%M%S')}"
+    date_str = now.strftime("%Y-%m-%d")
+    time_str = now.strftime("%H:%M:%S")
+
+    conn = sqlite3.connect(db_path, timeout=20.0)
+    cursor = conn.cursor()
+
+    existing_shift = get_active_shift(conn)
+    if existing_shift:
+        conn.close()
+        if request.is_json:
+            return jsonify({'status': 'error', 'message': f"Shift {existing_shift['Shift_ID']} is already open."}), 400
+        return redirect(f"/portal/{username}/pos")
+
+    cursor.execute("""
+        INSERT INTO Shift_Logs (Shift_ID, Cashier_Open, Date, Time_Opened, Starting_Float, Status, Notes)
+        VALUES (?, ?, ?, ?, ?, 'OPEN', ?)
+    """, (shift_id, cashier, date_str, time_str, starting_float, notes))
+    conn.commit()
+    conn.close()
+
+    if request.is_json:
+        return jsonify({
+            'status': 'success',
+            'message': f"Shift {shift_id} opened successfully.",
+            'shift': {
+                'Shift_ID': shift_id,
+                'Cashier_Open': cashier,
+                'Date': date_str,
+                'Time_Opened': time_str,
+                'Starting_Float': starting_float,
+                'Status': 'OPEN'
+            }
+        })
+
+    return redirect(f"/portal/{username}/pos")
+
+@pos_bp.route('/portal/<username>/pos/shift/current', methods=['GET'])
+def get_current_shift_status(username):
+    username = username.lower().strip()
+    db_path = f"data/client_{username}.db"
+    ensure_pos_tables_exist(db_path, username)
+
+    conn = sqlite3.connect(db_path, timeout=20.0)
+    active_shift = get_active_shift(conn)
+    conn.close()
+
+    if not active_shift:
+        return jsonify({'status': 'none', 'active': False})
+
+    return jsonify({'status': 'success', 'active': True, 'shift': active_shift})
+
+@pos_bp.route('/portal/<username>/pos/shift/close', methods=['POST'])
+def close_pos_shift(username):
+    username = username.lower().strip()
+    db_path = f"data/client_{username}.db"
+    ensure_pos_tables_exist(db_path, username)
+
+    if request.is_json:
+        payload = request.get_json(force=True) or {}
+        actual_cash = float(payload.get('actual_counted_cash', 0.0) or 0.0)
+        notes = str(payload.get('notes', '')).strip()
+    else:
+        actual_cash = float(request.form.get('actual_counted_cash', 0.0) or 0.0)
+        notes = str(request.form.get('notes', '')).strip()
+
+    cashier = session.get('staff_username') or session.get('logged_in_user', username).title()
+
+    now = datetime.now()
+    close_time = now.strftime("%H:%M:%S")
+
+    conn = sqlite3.connect(db_path, timeout=20.0)
+    cursor = conn.cursor()
+
+    active_shift = get_active_shift(conn)
+    if not active_shift:
+        conn.close()
+        if request.is_json:
+            return jsonify({'status': 'error', 'message': 'No open register shift found to close.'}), 400
+        return redirect(f"/portal/{username}/pos")
+
+    shift_id = active_shift['Shift_ID']
+    starting_float = active_shift['Starting_Float']
+    cash_sales = active_shift['Cash_Sales']
+    cash_paid_outs = active_shift['Cash_Paid_Outs']
+    total_net = active_shift['Total_Net_Sales']
+    total_txns = active_shift['Total_Transactions']
+
+    expected_cash = starting_float + cash_sales - cash_paid_outs
+    over_short = actual_cash - expected_cash
+
+    cursor.execute("""
+        UPDATE Shift_Logs 
+        SET Cashier_Close = ?, Time_Closed = ?, Expected_Cash = ?, Actual_Counted_Cash = ?, 
+            Discrepancy_Over_Short = ?, Status = 'CLOSED', Notes = ?
+        WHERE Shift_ID = ?
+    """, (cashier, close_time, expected_cash, actual_cash, over_short, notes, shift_id))
+
+    drawer_id = f"{shift_id}-ZREAD"
+    cursor.execute("""
+        INSERT OR REPLACE INTO Cash_Drawer_Logs (
+            Drawer_Tx_ID, Batch_ID, Date, Time, Starting_Float, Cash_Sales, Cash_Paid_Outs,
+            Expected_Cash, Actual_Counted_Cash, Discrepancy_Over_Short, Total_Settled_Tenders,
+            Tender_Variance, Explanation_Notes, Recorded_By
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0.0, ?, ?)
+    """, (
+        drawer_id, shift_id, active_shift['Date'], close_time, starting_float, cash_sales, cash_paid_outs,
+        expected_cash, actual_cash, over_short, actual_cash, notes, cashier
+    ))
+
+    conn.commit()
+    conn.close()
+
+    z_report_data = {
+        'shift_id': shift_id,
+        'date': active_shift['Date'],
+        'time_opened': active_shift['Time_Opened'],
+        'time_closed': close_time,
+        'cashier_open': active_shift['Cashier_Open'],
+        'cashier_close': cashier,
+        'starting_float': starting_float,
+        'cash_sales': cash_sales,
+        'cash_paid_outs': cash_paid_outs,
+        'expected_cash': expected_cash,
+        'actual_cash': actual_cash,
+        'over_short': over_short,
+        'total_net': total_net,
+        'transactions': total_txns,
+        'notes': notes
+    }
+
+    if request.is_json:
+        return jsonify({
+            'status': 'success',
+            'message': f"Shift {shift_id} closed successfully.",
+            'z_report': z_report_data
+        })
+
+    session['print_z_report'] = z_report_data
+    return redirect(f"/portal/{username}/pos")
+
+@pos_bp.route('/portal/<username>/pos/orders', methods=['GET'])
+def get_recent_pos_orders(username):
+    username = username.lower().strip()
+    db_path = f"data/client_{username}.db"
+    ensure_pos_tables_exist(db_path, username)
+
+    date_filter = request.args.get('date', datetime.now().strftime("%Y-%m-%d")).strip()
+
+    conn = sqlite3.connect(db_path, timeout=20.0)
+    cursor = conn.cursor()
+
+    cursor.execute("""
+        SELECT Sale_ID, Sale_Date, Sale_Time, Product_ID, Product_Name, Quantity, Price, Total_Amount, Reason, Recorded_By
+        FROM Sales
+        WHERE Sale_Date = ? AND Sale_ID LIKE 'POS%'
+        ORDER BY Sale_Date DESC, Sale_Time DESC, Sale_ID DESC
+    """, (date_filter,))
+    rows = cursor.fetchall()
+
+    cursor.execute("SELECT Drawer_Tx_ID, Explanation_Notes, Actual_Counted_Cash, Total_Settled_Tenders FROM Cash_Drawer_Logs WHERE Date = ?", (date_filter,))
+    drawer_rows = cursor.fetchall()
+    tender_map = {}
+    for d_tx, exp_notes, act_cash, tot_settled in drawer_rows:
+        base_txn = d_tx.replace('-TNDR', '').replace('-ZREAD', '')
+        t_type = "Cash"
+        if "Channel:" in str(exp_notes):
+            t_type = str(exp_notes).split("Channel:")[1].split("|")[0].strip()
+        tender_map[base_txn] = t_type
+
+    conn.close()
+
+    orders_grouped = {}
+    for s_id, s_date, s_time, p_id, p_name, qty, price, total_amt, reason, operator in rows:
+        base_id = s_id.split('-')[0] if '-' in s_id else s_id
+
+        if base_id not in orders_grouped:
+            orders_grouped[base_id] = {
+                'txn_id': base_id,
+                'date': s_date,
+                'time': s_time,
+                'cashier': operator,
+                'tender_type': tender_map.get(base_id, 'Cash'),
+                'total_amount': 0.0,
+                'items': [],
+                'is_voided': '[VOIDED]' in str(reason),
+                'reason': reason or ''
+            }
+
+        orders_grouped[base_id]['total_amount'] += float(total_amt or 0.0)
+        orders_grouped[base_id]['items'].append({
+            'line_id': s_id,
+            'product_id': p_id,
+            'name': p_name,
+            'qty': float(qty or 0.0),
+            'price': float(price or 0.0),
+            'total': float(total_amt or 0.0)
+        })
+
+    orders_list = sorted(list(orders_grouped.values()), key=lambda x: x['time'], reverse=True)
+
+    return jsonify({
+        'status': 'success',
+        'orders': orders_list
+    })
+
+@pos_bp.route('/portal/<username>/pos/order/void', methods=['POST'])
+def void_pos_order(username):
+    username = username.lower().strip()
+    db_path = f"data/client_{username}.db"
+    ensure_pos_tables_exist(db_path, username)
+
+    try:
+        payload = request.get_json(force=True)
+    except Exception:
+        return jsonify({'status': 'error', 'message': 'Invalid payload'}), 400
+
+    txn_id = str(payload.get('txn_id', '')).strip()
+    void_reason = str(payload.get('reason', '')).strip()
+    security_pin = str(payload.get('security_pin', '')).strip()
+    operator = session.get('staff_username') or session.get('logged_in_user', username).title()
+
+    if not txn_id or not void_reason:
+        return jsonify({'status': 'error', 'message': 'Transaction ID and Mandatory Void Reason are required.'}), 400
+
+    conn = sqlite3.connect(db_path, timeout=30.0)
+
+    is_valid, auth_label = verify_supervisor_pin(conn, security_pin)
+    if not is_valid:
+        conn.close()
+        return jsonify({'status': 'error', 'message': f"Security Policy Block: {auth_label}"}), 403
+
+    cursor = conn.cursor()
+
+    cursor.execute("""
+        SELECT Sale_ID, Product_ID, Product_Name, Quantity, Price, Total_Amount, Reason
+        FROM Sales
+        WHERE Sale_ID LIKE ? AND Total_Amount > 0
+    """, (f"{txn_id}%",))
+    lines = cursor.fetchall()
+
+    if not lines:
+        conn.close()
+        return jsonify({'status': 'error', 'message': 'Transaction not found or has already been voided.'}), 404
+
+    cursor.execute("SELECT Product_ID, Ingredient_ID, Quantity_Required FROM Recipes")
+    recipe_map = {}
+    for pid, iid, rqty in cursor.fetchall():
+        if float(rqty or 0) > 0:
+            recipe_map.setdefault(str(pid), []).append((str(iid), float(rqty)))
+
+    cursor.execute("SELECT Modifier_ID, Ingredient_ID, Quantity_Required FROM Modifier_Recipes")
+    mod_recipe_map = {}
+    for mid, iid, rqty in cursor.fetchall():
+        if float(rqty or 0) > 0:
+            mod_recipe_map.setdefault(str(mid), []).append((str(iid), float(rqty)))
+
+    cursor.execute("SELECT Ingredient_ID, Ingredient_Name, Current_Stock, Unit FROM Ingredients")
+    ing_stock = {str(r[0]): {'name': r[1], 'stock': float(r[2] or 0.0), 'unit': r[3]} for r in cursor.fetchall()}
+
+    total_void_amount = 0.0
+    restored_items_summary = []
+    now = datetime.now()
+    date_str = now.strftime("%Y-%m-%d")
+    time_str = now.strftime("%H:%M:%S")
+
+    for s_id, p_id, p_name, qty, price, total_amt, orig_reason in lines:
+        qty_f = float(qty or 0.0)
+        total_void_amount += float(total_amt or 0.0)
+
+        if str(p_id) in recipe_map:
+            for i_id, req_qty in recipe_map[str(p_id)]:
+                total_return = req_qty * qty_f
+                if i_id in ing_stock:
+                    cur_amt = ing_stock[i_id]['stock']
+                    new_amt = cur_amt + total_return
+                    ing_stock[i_id]['stock'] = new_amt
+
+                    cursor.execute("UPDATE Ingredients SET Current_Stock = ? WHERE Ingredient_ID = ?", (new_amt, i_id))
+                    cursor.execute("""
+                        INSERT INTO Inventory_Audit_Log (Audit_ID, Date, Ingredient_Name, Theoretical, Physical, Variance, Notes)
+                        VALUES (?, ?, ?, ?, ?, ?, ?)
+                    """, (
+                        f"VOD{now.strftime('%H%M%S')}",
+                        f"{date_str} {time_str}",
+                        ing_stock[i_id]['name'],
+                        cur_amt,
+                        new_amt,
+                        total_return,
+                        f"[VOID RESTORE] {qty_f:g}x {p_name} ({txn_id}) | Auth: {auth_label}"
+                    ))
+                    restored_items_summary.append(f"+{total_return:g} {ing_stock[i_id]['unit']} of {ing_stock[i_id]['name']}")
+
+        if str(p_id) in mod_recipe_map:
+            for i_id, req_qty in mod_recipe_map[str(p_id)]:
+                total_return = req_qty * qty_f
+                if i_id in ing_stock:
+                    cur_amt = ing_stock[i_id]['stock']
+                    new_amt = cur_amt + total_return
+                    ing_stock[i_id]['stock'] = new_amt
+
+                    cursor.execute("UPDATE Ingredients SET Current_Stock = ? WHERE Ingredient_ID = ?", (new_amt, i_id))
+                    cursor.execute("""
+                        INSERT INTO Inventory_Audit_Log (Audit_ID, Date, Ingredient_Name, Theoretical, Physical, Variance, Notes)
+                        VALUES (?, ?, ?, ?, ?, ?, ?)
+                    """, (
+                        f"VOD{now.strftime('%H%M%S')}",
+                        f"{date_str} {time_str}",
+                        ing_stock[i_id]['name'],
+                        cur_amt,
+                        new_amt,
+                        total_return,
+                        f"[VOID RESTORE] Modifier {qty_f:g}x {p_name} ({txn_id}) | Auth: {auth_label}"
+                    ))
+                    restored_items_summary.append(f"+{total_return:g} {ing_stock[i_id]['unit']} of {ing_stock[i_id]['name']}")
+
+        cursor.execute("""
+            UPDATE Sales 
+            SET Quantity = 0.0, Total_Amount = 0.0, 
+                Reason = ?
+            WHERE Sale_ID = ?
+        """, (f"[VOIDED] Reason: {void_reason} | Auth: {auth_label} | By: {operator}", s_id))
+
+    cursor.execute("""
+        UPDATE Shift_Logs 
+        SET Cash_Sales = MAX(0.0, Cash_Sales - ?), 
+            Total_Net_Sales = MAX(0.0, Total_Net_Sales - ?), 
+            Total_Transactions = MAX(0, Total_Transactions - 1)
+        WHERE Status = 'OPEN'
+    """, (total_void_amount, total_void_amount))
+
+    conn.commit()
+    conn.close()
+
+    return jsonify({
+        'status': 'success',
+        'message': f"Order {txn_id} successfully voided. Amount PHP {total_void_amount:,.2f} neutralized.",
+        'restored_inventory': restored_items_summary,
+        'auth': auth_label
+    })
+
 @pos_bp.route('/portal/<username>/pos', methods=['GET'])
 def live_pos_screen(username):
     username = username.lower().strip()
@@ -222,6 +648,9 @@ def live_pos_screen(username):
     db_path = f"data/client_{username}.db"
     ensure_pos_tables_exist(db_path, username)
     db = InventoryDB(db_path)
+
+    conn = sqlite3.connect(db_path, timeout=20.0)
+    active_shift = get_active_shift(conn)
 
     products_df = db.read_tab('Products')
     categories = []
@@ -245,7 +674,6 @@ def live_pos_screen(username):
     modifier_groups_master = {}
 
     try:
-        conn = sqlite3.connect(db_path, timeout=20.0)
         cursor = conn.cursor()
 
         cursor.execute("SELECT Ingredient_ID, Ingredient_Name, Current_Stock, Unit FROM Ingredients")
@@ -278,7 +706,6 @@ def live_pos_screen(username):
             if rqty_f > 0:
                 mod_recipe_map.setdefault(str(mid), []).append((str(iid), rqty_f))
 
-        # Query all active Modifier Groups and their Options
         cursor.execute("""
             SELECT mg.Group_ID, mg.Group_Name, mg.Selection_Type,
                    m.Modifier_ID, m.Modifier_Name, m.Price
@@ -315,7 +742,6 @@ def live_pos_screen(username):
                 'limiting_ingredient': limiting_name
             })
 
-        # Query Product-to-Modifier-Group link mappings
         cursor.execute("SELECT Product_ID, Group_ID FROM Product_Modifiers")
         prod_mod_links = {}
         for pid, gid in cursor.fetchall():
@@ -324,13 +750,8 @@ def live_pos_screen(username):
                 prod_mod_links[pid_s] = []
             prod_mod_links[pid_s].append(str(gid).strip())
 
-        conn.close()
-
-        # Attach limiting ingredients and relational modifier groups per product
         for p in products_list:
             pid = str(p.get('Product_ID', '')).strip()
-            
-            # Product Bottleneck Stock
             if pid in recipe_map and len(recipe_map[pid]) > 0:
                 bottleneck_val = None
                 bottleneck_name = ""
@@ -370,14 +791,13 @@ def live_pos_screen(username):
                 p['depleted_ingredients'] = []
                 p['deficit_breakdown'] = []
 
-            # Attach ONLY specifically toggled modifier sets
             assigned_group_ids = prod_mod_links.get(pid, [])
             p['modifier_groups'] = [
                 modifier_groups_master[gid] for gid in assigned_group_ids if gid in modifier_groups_master
             ]
 
     except Exception as e:
-        print(f"Product stock & modifier query notice: {e}")
+        print(f"Product stock query notice: {e}")
         for p in products_list:
             p['portions_left'] = None
             p['limiting_ingredient'] = None
@@ -385,8 +805,11 @@ def live_pos_screen(username):
             p['deficit_breakdown'] = []
             p['modifier_groups'] = []
 
+    conn.close()
+
     active_cashier = session.get('staff_username', session.get('logged_in_user', username)).title()
     receipt_config = get_receipt_config(db_path, username)
+    print_z_data = session.pop('print_z_report', None)
 
     store_info = {
         'name': receipt_config.get('receipt_header_name', username.upper()),
@@ -400,7 +823,9 @@ def live_pos_screen(username):
         products=products_list,
         categories=categories,
         store_info=store_info,
-        receipt_config=receipt_config
+        receipt_config=receipt_config,
+        active_shift=active_shift,
+        print_z_data=print_z_data
     )
 
 @pos_bp.route('/portal/<username>/pos/checkout', methods=['POST'])
@@ -442,26 +867,21 @@ def process_pos_checkout(username):
     conn = sqlite3.connect(db_path, timeout=30.0)
     cursor = conn.cursor()
 
+    active_shift = get_active_shift(conn)
+    shift_tag = f"Shift: {active_shift['Shift_ID']}" if active_shift else "No Open Shift"
+
     try:
         cursor.execute("SELECT Product_ID, Ingredient_ID, Quantity_Required FROM Recipes")
         recipe_map = {}
         for pid, iid, rqty in cursor.fetchall():
-            try:
-                rqty_f = float(rqty or 0.0)
-            except (ValueError, TypeError):
-                rqty_f = 0.0
-            if rqty_f > 0:
-                recipe_map.setdefault(str(pid), []).append((str(iid), rqty_f))
+            if float(rqty or 0.0) > 0:
+                recipe_map.setdefault(str(pid), []).append((str(iid), float(rqty)))
 
         cursor.execute("SELECT Modifier_ID, Ingredient_ID, Quantity_Required FROM Modifier_Recipes")
         mod_recipe_map = {}
         for mid, iid, rqty in cursor.fetchall():
-            try:
-                rqty_f = float(rqty or 0.0)
-            except (ValueError, TypeError):
-                rqty_f = 0.0
-            if rqty_f > 0:
-                mod_recipe_map.setdefault(str(mid), []).append((str(iid), rqty_f))
+            if float(rqty or 0.0) > 0:
+                mod_recipe_map.setdefault(str(mid), []).append((str(iid), float(rqty)))
 
         cursor.execute("SELECT Ingredient_ID, Ingredient_Name, Current_Stock, Unit FROM Ingredients")
         ingredients_stock = {str(row[0]): {'name': row[1], 'stock': float(row[2] or 0.0), 'unit': row[3]} for row in cursor.fetchall()}
@@ -474,7 +894,7 @@ def process_pos_checkout(username):
             unit_price = float(item.get('price', 0.0) or 0.0)
             line_total = qty * unit_price
 
-            notes_summary = []
+            notes_summary = [shift_tag]
             if item.get('prep_notes'):
                 notes_summary.extend(item.get('prep_notes'))
             if item.get('special_instruction'):
@@ -484,14 +904,10 @@ def process_pos_checkout(username):
             sale_line_id = f"{txn_id}-P{line_counter:02d}"
             line_counter += 1
 
-            reason_str = "Live POS Order"
-            if prep_str:
-                reason_str += f" | {prep_str}"
-
             cursor.execute("""
                 INSERT INTO Sales (Sale_ID, Sale_Date, Sale_Time, Product_ID, Product_Name, Quantity, Price, Total_Amount, Reason, Recorded_By)
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            """, (sale_line_id, sale_date, sale_time, p_id, p_name, qty, unit_price, line_total, reason_str, operator))
+            """, (sale_line_id, sale_date, sale_time, p_id, p_name, qty, unit_price, line_total, f"Live POS Order | {prep_str}", operator))
 
             if p_id in recipe_map:
                 for ing_id, req_qty in recipe_map[p_id]:
@@ -502,7 +918,6 @@ def process_pos_checkout(username):
                         ingredients_stock[ing_id]['stock'] = new_stock
 
                         cursor.execute("UPDATE Ingredients SET Current_Stock = ? WHERE Ingredient_ID = ?", (new_stock, ing_id))
-
                         cursor.execute("""
                             INSERT INTO Inventory_Audit_Log (Audit_ID, Date, Ingredient_Name, Theoretical, Physical, Variance, Notes)
                             VALUES (?, ?, ?, ?, ?, ?, ?)
@@ -531,8 +946,8 @@ def process_pos_checkout(username):
 
                     cursor.execute("""
                         INSERT INTO Sales (Sale_ID, Sale_Date, Sale_Time, Product_ID, Product_Name, Quantity, Price, Total_Amount, Reason, Recorded_By)
-                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'Live POS Modifier', ?)
-                    """, (mod_line_id, sale_date, sale_time, m_id, f"Modifier: {m_name}", m_qty, m_price, m_total, operator))
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """, (mod_line_id, sale_date, sale_time, m_id, f"Modifier: {m_name}", m_qty, m_price, m_total, f"Live POS Modifier | {shift_tag}", operator))
 
                     if has_recipe:
                         for ing_id, req_qty in mod_recipe_map[m_id]:
@@ -543,7 +958,6 @@ def process_pos_checkout(username):
                                 ingredients_stock[ing_id]['stock'] = new_stock
 
                                 cursor.execute("UPDATE Ingredients SET Current_Stock = ? WHERE Ingredient_ID = ?", (new_stock, ing_id))
-
                                 cursor.execute("""
                                     INSERT INTO Inventory_Audit_Log (Audit_ID, Date, Ingredient_Name, Theoretical, Physical, Variance, Notes)
                                     VALUES (?, ?, ?, ?, ?, ?, ?)
@@ -564,8 +978,8 @@ def process_pos_checkout(username):
 
             cursor.execute("""
                 INSERT INTO Sales (Sale_ID, Sale_Date, Sale_Time, Product_ID, Product_Name, Quantity, Price, Total_Amount, Reason, Recorded_By)
-                VALUES (?, ?, ?, 'DISCOUNT', ?, 1, ?, ?, 'Live POS Discount', ?)
-            """, (f"{txn_id}-D01", sale_date, sale_time, disc_label, -discount_amount, -discount_amount, operator))
+                VALUES (?, ?, ?, 'DISCOUNT', ?, 1, ?, ?, ?, ?)
+            """, (f"{txn_id}-D01", sale_date, sale_time, disc_label, -discount_amount, -discount_amount, f"Live POS Discount | {shift_tag}", operator))
 
         cash_val = net_total if tender_type == 'Cash' else 0.0
         gcash_val = net_total if tender_type == 'GCash' else 0.0
@@ -592,6 +1006,15 @@ def process_pos_checkout(username):
             gcash_val, maya_val, card_val, grab_net, panda_net,
             net_total, memo_str, operator
         ))
+
+        if active_shift:
+            cursor.execute("""
+                UPDATE Shift_Logs 
+                SET Cash_Sales = Cash_Sales + ?, 
+                    Total_Net_Sales = Total_Net_Sales + ?, 
+                    Total_Transactions = Total_Transactions + 1
+                WHERE Shift_ID = ?
+            """, (cash_val, net_total, active_shift['Shift_ID']))
 
         conn.commit()
         conn.close()
