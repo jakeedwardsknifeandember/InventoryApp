@@ -47,6 +47,60 @@
         color: #cbd5e1 !important;
         font-weight: 500;
     }
+
+    /* SEARCHABLE COMBOBOX STYLES */
+    .searchable-combo-wrap {
+        position: relative;
+        width: 100%;
+    }
+    .searchable-combo-menu {
+        display: none;
+        position: absolute;
+        top: 100%;
+        left: 0;
+        right: 0;
+        z-index: 1060;
+        max-height: 220px;
+        overflow-y: auto;
+        background: #181820;
+        border: 1px solid #3b82f6;
+        border-radius: 0 0 6px 6px;
+        box-shadow: 0 8px 20px rgba(0, 0, 0, 0.7);
+    }
+    .searchable-combo-item {
+        padding: 8px 12px;
+        cursor: pointer;
+        font-size: 13px;
+        color: #f8fafc;
+        border-bottom: 1px solid #27272f;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+    }
+    .searchable-combo-item:hover {
+        background: #2563eb;
+        color: #ffffff;
+    }
+    .searchable-combo-item small {
+        color: #94a3b8;
+        font-size: 11px;
+    }
+    .searchable-combo-item:hover small {
+        color: #e2e8f0;
+    }
+    .section-divider-header {
+        background: #181822;
+        border: 1px solid #313244;
+        border-radius: 6px;
+        padding: 8px 12px;
+        margin-bottom: 10px;
+    }
+    .live-cost-bar {
+        background: #15151e;
+        border: 1px solid #313244;
+        border-radius: 8px;
+        padding: 10px 14px;
+    }
 </style>
 
 <div class="container-fluid mt-3">
@@ -212,7 +266,7 @@
             </div>
         </div>
 
-        <!-- RIGHT DATA VIEWER -->
+        <!-- RIGHT DATA VIEWER (AUTO-GROUPED INGREDIENTS & PACKAGING) -->
         <div class="col-md-8">
             <div class="card border-secondary bg-dark text-white h-100" style="min-height: 45vh;">
                 <div class="card-header bg-secondary text-white fw-bold">Recipe Specifications Summary Report</div>
@@ -268,7 +322,7 @@
 
                         <table class="table table-dark table-hover mb-0 border-bottom border-secondary">
                             <thead>
-                                <tr class="text-secondary font-monospace" style="font-size: 13px;">
+                                <tr class="text-secondary font-monospace" style="font-size: 12.5px;">
                                     <th>INGREDIENT CONSTITUENT COMPONENT</th>
                                     <th>QTY REQUIRED</th>
                                     <th>UNIT</th>
@@ -277,19 +331,45 @@
                                 </tr>
                             </thead>
                             <tbody>
-                                {% for item in r['Items'] %}
-                                <tr>
-                                    <td class="text-white fw-bold">{{ item['Name'] }} <small class="high-contrast-subtext font-monospace">({{ item['ID'] }})</small></td>
-                                    <td class="text-light font-monospace">{{ item['Qty'] }}</td>
-                                    <td><span class="badge bg-secondary">{{ item['Unit'] }}</span></td>
-                                    <td class="text-light font-monospace">₱{{ "%.4f"|format(item['Cost']) }} / {{ item['Base_Unit'] }}</td>
-                                    <td class="text-end text-warning fw-bold font-monospace">₱{{ "%.2f"|format(item['Total']) }}</td>
-                                </tr>
+                                {% if r['Items'] %}
+                                    <!-- GROUP 1: RECIPE INGREDIENTS -->
+                                    <tr style="background: #15151e;">
+                                        <td colspan="4" class="text-info fw-bold font-monospace py-1" style="font-size: 11px; letter-spacing: 0.6px;">RECIPE INGREDIENTS</td>
+                                        <td class="text-end text-info fw-bold font-monospace py-1" style="font-size: 11px;">Subtotal: ₱{{ "%.2f"|format(r['Ingredient_Cost']) }}</td>
+                                    </tr>
+                                    {% for item in r['Ingredient_Items'] %}
+                                    <tr>
+                                        <td class="text-white fw-bold">{{ item['Name'] }} <small class="high-contrast-subtext font-monospace">({{ item['ID'] }})</small></td>
+                                        <td class="text-light font-monospace">{{ item['Qty'] }}</td>
+                                        <td><span class="badge bg-secondary">{{ item['Unit'] }}</span></td>
+                                        <td class="text-light font-monospace">₱{{ "%.4f"|format(item['Cost']) }} / {{ item['Base_Unit'] }}</td>
+                                        <td class="text-end text-warning fw-bold font-monospace">₱{{ "%.2f"|format(item['Total']) }}</td>
+                                    </tr>
+                                    {% else %}
+                                    <tr><td colspan="5" class="text-muted small py-2 ps-3">No food/beverage ingredients mapped.</td></tr>
+                                    {% endfor %}
+
+                                    <!-- GROUP 2: PACKAGING & DISPOSABLES -->
+                                    {% if r['Packaging_Items'] %}
+                                    <tr style="background: #15151e;">
+                                        <td colspan="4" class="text-warning fw-bold font-monospace py-1" style="font-size: 11px; letter-spacing: 0.6px;">PACKAGING & DISPOSABLES</td>
+                                        <td class="text-end text-warning fw-bold font-monospace py-1" style="font-size: 11px;">Subtotal: ₱{{ "%.2f"|format(r['Packaging_Cost']) }}</td>
+                                    </tr>
+                                    {% for item in r['Packaging_Items'] %}
+                                    <tr>
+                                        <td class="text-white fw-bold">{{ item['Name'] }} <small class="high-contrast-subtext font-monospace">({{ item['ID'] }})</small></td>
+                                        <td class="text-light font-monospace">{{ item['Qty'] }}</td>
+                                        <td><span class="badge bg-secondary">{{ item['Unit'] }}</span></td>
+                                        <td class="text-light font-monospace">₱{{ "%.4f"|format(item['Cost']) }} / {{ item['Base_Unit'] }}</td>
+                                        <td class="text-end text-warning fw-bold font-monospace">₱{{ "%.2f"|format(item['Total']) }}</td>
+                                    </tr>
+                                    {% endfor %}
+                                    {% endif %}
                                 {% else %}
                                 <tr>
                                     <td colspan="5" class="text-center text-muted py-4">No ingredients mapped to this formula yet. Click "Edit Formula" above to add ingredients.</td>
                                 </tr>
-                                {% endfor %}
+                                {% endif %}
                             </tbody>
                         </table>
 
@@ -297,8 +377,11 @@
                             <div class="row g-2 text-center justify-content-center">
                                 <div class="col-4">
                                     <div class="p-3 rounded border border-secondary" style="background-color: #222222;">
-                                        <span class="d-block text-info fw-bold text-uppercase mb-1" style="font-size: 11px; letter-spacing: 0.5px;">{% if current_tab != 'prep' %}Computed Material Cost{% else %}Total Batch Formula Cost{% endif %}</span>
+                                        <span class="d-block text-info fw-bold text-uppercase mb-1" style="font-size: 11px; letter-spacing: 0.5px;">{% if current_tab != 'prep' %}Total Material Cost{% else %}Total Batch Formula Cost{% endif %}</span>
                                         <h3 class="m-0 text-warning fw-bold">₱{{ "%.2f"|format(r['Total_Cost']) }}</h3>
+                                        {% if current_tab != 'prep' %}
+                                        <small class="text-secondary font-monospace" style="font-size: 10.5px;">Ing: ₱{{ "%.2f"|format(r['Ingredient_Cost']) }} | Pkg: ₱{{ "%.2f"|format(r['Packaging_Cost']) }}</small>
+                                        {% endif %}
                                     </div>
                                 </div>
                                 {% if current_tab == 'prep' %}
@@ -528,7 +611,7 @@
 </div>
 
 <!-- CREATION MODAL -->
-<div class="modal fade" id="createRecipeModal" tabindex="-1">
+<div class="modal fade recipe-formula-modal" id="createRecipeModal" tabindex="-1" data-modal-key="create" data-selling-price="0">
     <div class="modal-dialog modal-lg">
         <div class="modal-content bg-dark text-white border border-secondary">
             <form method="post" enctype="multipart/form-data">
@@ -541,24 +624,40 @@
                     <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
                 </div>
                 <div class="modal-body">
-                    <label class="form-label fw-bold text-light">
-                        {% if current_tab != 'prep' %}Select Target Menu Item:{% else %}Select Target Kitchen Prepped Component:{% endif %}
-                    </label>
-                    <select name="product_id" class="form-select bg-secondary text-white border-0 mb-4" required>
-                        <option value="" disabled selected>Choose target profile...</option>
-                        {% if current_tab != 'prep' %}
-                            {% for prod in all_products %}
-                                <option value="{{ prod.Product_ID }}">{{ prod.Product_Name }} ({{ prod.Product_ID }})</option>
-                            {% endfor %}
-                        {% else %}
-                            {% for prep_ing in unallocated_prepped_items %}
-                                <option value="{{ prep_ing.Ingredient_ID }}">{{ prep_ing.Ingredient_Name }} ({{ prep_ing.Ingredient_ID }} in {{ prep_ing.Unit }})</option>
-                            {% endfor %}
-                        {% endif %}
-                    </select>
+                    <div class="row g-3 mb-3">
+                        <div class="col-md-7">
+                            <label class="form-label fw-bold text-light">
+                                {% if current_tab != 'prep' %}Select Target Menu Item:{% else %}Select Target Kitchen Prepped Component:{% endif %}
+                            </label>
+                            <select name="product_id" id="createTargetProductSelect" class="form-select bg-secondary text-white border-0" onchange="updateCreateModalPrice()" required>
+                                <option value="" disabled selected>Choose target profile...</option>
+                                {% if current_tab != 'prep' %}
+                                    {% for prod in all_products %}
+                                        <option value="{{ prod.Product_ID }}">{{ prod.Product_Name }} ({{ prod.Product_ID }})</option>
+                                    {% endfor %}
+                                {% else %}
+                                    {% for prep_ing in unallocated_prepped_items %}
+                                        <option value="{{ prep_ing.Ingredient_ID }}">{{ prep_ing.Ingredient_Name }} ({{ prep_ing.Ingredient_ID }} in {{ prep_ing.Unit }})</option>
+                                    {% endfor %}
+                                {% endif %}
+                            </select>
+                        </div>
+                        <div class="col-md-5">
+                            <label class="form-label text-warning">Copy Formula From (Optional):</label>
+                            <div class="input-group input-group-sm">
+                                <select id="copySource-create" class="form-select">
+                                    <option value="">-- Select existing recipe --</option>
+                                    {% for r in recipe_data if r['Items'] %}
+                                    <option value="{{ r['Product_ID'] }}">{{ r['Product_Name'] }}</option>
+                                    {% endfor %}
+                                </select>
+                                <button type="button" class="btn btn-warning fw-bold text-dark" onclick="copyFormulaIntoModal('create')">Load</button>
+                            </div>
+                        </div>
+                    </div>
 
                     {% if current_tab == 'prep' %}
-                    <div class="p-3 mb-4 rounded border border-info" style="background-color: #172554;">
+                    <div class="p-3 mb-3 rounded border border-info" style="background-color: #172554;">
                         <div class="row g-2">
                             <div class="col-md-3">
                                 <label class="form-label text-info">BATCH YIELD:</label>
@@ -580,14 +679,45 @@
                     </div>
                     {% endif %}
 
-                    <div class="row text-secondary fw-bold mb-2 font-monospace" style="font-size: 12px;">
-                        <div class="col-5">INGREDIENT STOCK MATERIAL COMPONENT</div>
-                        <div class="col-3">QTY REQUIRED</div>
-                        <div class="col-3">MEASUREMENT UNIT</div>
-                        <div class="col-1"></div>
+                    <!-- SECTION 1: RECIPE INGREDIENTS -->
+                    <div class="section-divider-header d-flex justify-content-between align-items-center">
+                        <span class="text-info fw-bold font-monospace" style="font-size: 12px;">1. RECIPE INGREDIENTS (TYPE TO SEARCH)</span>
+                        <button type="button" class="btn btn-xs btn-info fw-bold py-0 px-2" style="font-size: 11.5px;" onclick="appendSearchableRow('ingRows-create', false)">+ Add Ingredient</button>
                     </div>
-                    
-                    <div id="creationRecipeRowsDiv"></div>
+                    <div id="ingRows-create" class="mb-3"></div>
+
+                    <!-- SECTION 2: PACKAGING & DISPOSABLES -->
+                    {% if current_tab != 'prep' %}
+                    <div class="section-divider-header d-flex justify-content-between align-items-center">
+                        <span class="text-warning fw-bold font-monospace" style="font-size: 12px;">2. PACKAGING & DISPOSABLES (CATEGORY: PACKAGING)</span>
+                        <button type="button" class="btn btn-xs btn-warning text-dark fw-bold py-0 px-2" style="font-size: 11.5px;" onclick="appendSearchableRow('pkgRows-create', true)">+ Add Packaging</button>
+                    </div>
+                    <div id="pkgRows-create" class="mb-3"></div>
+                    {% endif %}
+
+                    <!-- LIVE COST & MARGIN BAR -->
+                    <div class="live-cost-bar mb-3 d-flex justify-content-between align-items-center flex-wrap gap-2">
+                        <div>
+                            <small class="text-secondary text-uppercase d-block" style="font-size: 10px;">Food/Bev Cost</small>
+                            <strong id="liveIngCost-create" class="text-info font-monospace">₱0.00</strong>
+                        </div>
+                        {% if current_tab != 'prep' %}
+                        <div>
+                            <small class="text-secondary text-uppercase d-block" style="font-size: 10px;">Packaging Cost</small>
+                            <strong id="livePkgCost-create" class="text-warning font-monospace">₱0.00</strong>
+                        </div>
+                        {% endif %}
+                        <div>
+                            <small class="text-secondary text-uppercase d-block" style="font-size: 10px;">Total Cost</small>
+                            <strong id="liveTotalCost-create" class="text-white font-monospace">₱0.00</strong>
+                        </div>
+                        {% if current_tab != 'prep' %}
+                        <div class="text-end">
+                            <small class="text-secondary text-uppercase d-block" style="font-size: 10px;">Est. Margin %</small>
+                            <strong id="liveMarginPct-create" class="text-success font-monospace">0.0%</strong>
+                        </div>
+                        {% endif %}
+                    </div>
 
                     <hr class="border-secondary my-3">
                     {% if current_tab == 'prep' %}
@@ -614,8 +744,8 @@
                     </div>
                     {% endif %}
                 </div>
-                <div class="modal-footer border-secondary justify-content-between">
-                    <button type="button" class="btn btn-info fw-bold" onclick="appendDynamicIngredientInputRow('creationRecipeRowsDiv')">+ Add Ingredient Line</button>
+                <div class="modal-footer border-secondary">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
                     <button type="submit" class="btn btn-success fw-bold px-4">Confirm Formula Data Entry</button>
                 </div>
             </form>
@@ -623,9 +753,9 @@
     </div>
 </div>
 
-<!-- EDIT MODAL -->
+<!-- EDIT MODALS -->
 {% for r in recipe_data %}
-<div class="modal fade" id="editModal{{ r['Product_ID'] }}" tabindex="-1">
+<div class="modal fade recipe-formula-modal" id="editModal{{ r['Product_ID'] }}" tabindex="-1" data-modal-key="{{ r['Product_ID'] }}" data-selling-price="{{ r['Selling_Price'] }}">
     <div class="modal-dialog modal-lg">
         <div class="modal-content bg-dark text-white border border-secondary">
             <form method="post" enctype="multipart/form-data">
@@ -633,13 +763,31 @@
                 <input type="hidden" name="recipe_type" value="{{ current_tab }}">
                 <input type="hidden" name="product_id" value="{{ r['Product_ID'] }}">
                 <div class="modal-header border-secondary">
-                    <h5 class="modal-title fw-bold text-info">Modify Formula Specification Matrix: {{ r['Product_Name'] }}</h5>
+                    <h5 class="modal-title fw-bold text-info">Modify Formula: {{ r['Product_Name'] }}</h5>
                     <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
                 </div>
                 <div class="modal-body">
+
+                    <!-- COPY FORMULA FROM BAR -->
+                    <div class="row g-2 align-items-center mb-3 p-2 rounded border border-secondary" style="background: #181822;">
+                        <div class="col-md-5">
+                            <small class="text-warning fw-bold text-uppercase" style="font-size: 11px;">Copy Formula From Existing Recipe:</small>
+                        </div>
+                        <div class="col-md-7">
+                            <div class="input-group input-group-sm">
+                                <select id="copySource-{{ r['Product_ID'] }}" class="form-select">
+                                    <option value="">-- Pick recipe to clone --</option>
+                                    {% for other in recipe_data if other['Items'] and other['Product_ID'] != r['Product_ID'] %}
+                                    <option value="{{ other['Product_ID'] }}">{{ other['Product_Name'] }}</option>
+                                    {% endfor %}
+                                </select>
+                                <button type="button" class="btn btn-warning fw-bold text-dark" onclick="copyFormulaIntoModal('{{ r['Product_ID'] }}')">Load</button>
+                            </div>
+                        </div>
+                    </div>
                     
                     {% if current_tab == 'prep' %}
-                    <div class="p-3 mb-4 rounded border border-info" style="background-color: #172554;">
+                    <div class="p-3 mb-3 rounded border border-info" style="background-color: #172554;">
                         <div class="row g-2">
                             <div class="col-md-3">
                                 <label class="form-label text-info">YIELD ({{ r['Base_Unit'] }}):</label>
@@ -661,35 +809,90 @@
                     </div>
                     {% endif %}
 
-                    <div class="row text-secondary fw-bold mb-2 font-monospace" style="font-size: 12px;">
-                        <div class="col-5">INGREDIENT CONSTITUENT COMPONENT</div>
-                        <div class="col-3">QTY REQUIRED</div>
-                        <div class="col-3">MEASUREMENT UNIT</div>
-                        <div class="col-1"></div>
+                    <!-- SECTION 1: RECIPE INGREDIENTS -->
+                    <div class="section-divider-header d-flex justify-content-between align-items-center">
+                        <span class="text-info fw-bold font-monospace" style="font-size: 12px;">1. RECIPE INGREDIENTS (TYPE TO SEARCH)</span>
+                        <button type="button" class="btn btn-xs btn-info fw-bold py-0 px-2" style="font-size: 11.5px;" onclick="appendSearchableRow('ingRows-{{ r['Product_ID'] }}', false)">+ Add Ingredient</button>
                     </div>
-                    <div id="recipeRows{{ r['Product_ID'] }}">
-                        {% for item in r['Items'] %}
-                        <div class="row mb-2 align-items-center tracking-ingredient-row-block">
+                    <div id="ingRows-{{ r['Product_ID'] }}" class="mb-3">
+                        {% for item in r['Ingredient_Items'] %}
+                        <div class="row g-2 mb-2 align-items-center tracking-ingredient-row-block" data-is-packaging="false">
                             <div class="col-5">
-                                <select name="ingredient_id[]" class="form-select bg-secondary text-white border-0 ingredient-selector-node" onchange="synchronizeRowMeasurementUnitOptions(this)" required>
-                                    {% for i in ingredients %}
-                                        <option value="{{ i.Ingredient_ID }}" data-native-unit="{{ i.Unit }}" {% if i.Ingredient_ID == item.ID %}selected{% endif %}>{{ i.Ingredient_Name }}</option>
-                                    {% endfor %}
-                                </select>
+                                <div class="searchable-combo-wrap">
+                                    <input type="hidden" name="ingredient_id[]" class="combo-hidden-id" value="{{ item['ID'] }}">
+                                    <input type="text" class="form-control combo-search-input" value="{{ item['Name'] }}" placeholder="Type to search ingredient..." autocomplete="off" onfocus="openComboMenu(this, false)" oninput="filterComboMenu(this, false)">
+                                    <div class="searchable-combo-menu"></div>
+                                </div>
                             </div>
                             <div class="col-3">
-                                <input type="number" step="any" name="quantity[]" class="form-control bg-light border-0 text-dark fw-bold font-monospace" value="{{ item.Qty }}" required>
+                                <input type="number" step="any" name="quantity[]" class="form-control bg-light border-0 text-dark fw-bold font-monospace qty-input-node" value="{{ item['Qty'] }}" oninput="recalcModalLiveCost('{{ r['Product_ID'] }}')" required>
                             </div>
                             <div class="col-3">
-                                <select name="unit[]" class="form-select bg-secondary text-white border-0 unit-selector-node" required>
-                                    <option value="{{ item.Unit }}" selected>{{ item.Unit }}</option>
+                                <select name="unit[]" class="form-select unit-selector-node" data-saved-unit="{{ item['Unit'] }}" onchange="recalcModalLiveCost('{{ r['Product_ID'] }}')" required>
+                                    <option value="{{ item['Unit'] }}" selected>{{ item['Unit'] }}</option>
                                 </select>
                             </div>
                             <div class="col-1 text-center">
-                                <button type="button" class="btn btn-sm btn-danger fw-bold" onclick="this.parentElement.parentElement.remove()">X</button>
+                                <button type="button" class="btn btn-sm btn-danger fw-bold" onclick="removeFormulaRow(this, '{{ r['Product_ID'] }}')">X</button>
                             </div>
                         </div>
                         {% endfor %}
+                    </div>
+
+                    <!-- SECTION 2: PACKAGING & DISPOSABLES -->
+                    {% if current_tab != 'prep' %}
+                    <div class="section-divider-header d-flex justify-content-between align-items-center">
+                        <span class="text-warning fw-bold font-monospace" style="font-size: 12px;">2. PACKAGING & DISPOSABLES (CATEGORY: PACKAGING)</span>
+                        <button type="button" class="btn btn-xs btn-warning text-dark fw-bold py-0 px-2" style="font-size: 11.5px;" onclick="appendSearchableRow('pkgRows-{{ r['Product_ID'] }}', true)">+ Add Packaging</button>
+                    </div>
+                    <div id="pkgRows-{{ r['Product_ID'] }}" class="mb-3">
+                        {% for item in r['Packaging_Items'] %}
+                        <div class="row g-2 mb-2 align-items-center tracking-ingredient-row-block" data-is-packaging="true">
+                            <div class="col-5">
+                                <div class="searchable-combo-wrap">
+                                    <input type="hidden" name="ingredient_id[]" class="combo-hidden-id" value="{{ item['ID'] }}">
+                                    <input type="text" class="form-control combo-search-input" value="{{ item['Name'] }}" placeholder="Type to search packaging..." autocomplete="off" onfocus="openComboMenu(this, true)" oninput="filterComboMenu(this, true)">
+                                    <div class="searchable-combo-menu"></div>
+                                </div>
+                            </div>
+                            <div class="col-3">
+                                <input type="number" step="any" name="quantity[]" class="form-control bg-light border-0 text-dark fw-bold font-monospace qty-input-node" value="{{ item['Qty'] }}" oninput="recalcModalLiveCost('{{ r['Product_ID'] }}')" required>
+                            </div>
+                            <div class="col-3">
+                                <select name="unit[]" class="form-select unit-selector-node" data-saved-unit="{{ item['Unit'] }}" onchange="recalcModalLiveCost('{{ r['Product_ID'] }}')" required>
+                                    <option value="{{ item['Unit'] }}" selected>{{ item['Unit'] }}</option>
+                                </select>
+                            </div>
+                            <div class="col-1 text-center">
+                                <button type="button" class="btn btn-sm btn-danger fw-bold" onclick="removeFormulaRow(this, '{{ r['Product_ID'] }}')">X</button>
+                            </div>
+                        </div>
+                        {% endfor %}
+                    </div>
+                    {% endif %}
+
+                    <!-- LIVE COST & MARGIN BAR -->
+                    <div class="live-cost-bar mb-3 d-flex justify-content-between align-items-center flex-wrap gap-2">
+                        <div>
+                            <small class="text-secondary text-uppercase d-block" style="font-size: 10px;">Food/Bev Cost</small>
+                            <strong id="liveIngCost-{{ r['Product_ID'] }}" class="text-info font-monospace">₱{{ "%.2f"|format(r['Ingredient_Cost']) }}</strong>
+                        </div>
+                        {% if current_tab != 'prep' %}
+                        <div>
+                            <small class="text-secondary text-uppercase d-block" style="font-size: 10px;">Packaging Cost</small>
+                            <strong id="livePkgCost-{{ r['Product_ID'] }}" class="text-warning font-monospace">₱{{ "%.2f"|format(r['Packaging_Cost']) }}</strong>
+                        </div>
+                        {% endif %}
+                        <div>
+                            <small class="text-secondary text-uppercase d-block" style="font-size: 10px;">Total Cost</small>
+                            <strong id="liveTotalCost-{{ r['Product_ID'] }}" class="text-white font-monospace">₱{{ "%.2f"|format(r['Total_Cost']) }}</strong>
+                        </div>
+                        {% if current_tab != 'prep' %}
+                        <div class="text-end">
+                            <small class="text-secondary text-uppercase d-block" style="font-size: 10px;">Est. Margin % (Price: ₱{{ "%.2f"|format(r['Selling_Price']) }})</small>
+                            <strong id="liveMarginPct-{{ r['Product_ID'] }}" class="text-success font-monospace">{{ "%.1f"|format(r['Margin']) }}%</strong>
+                        </div>
+                        {% endif %}
                     </div>
 
                     <hr class="border-secondary my-3">
@@ -743,8 +946,8 @@
                     </div>
                     {% endif %}
                 </div>
-                <div class="modal-footer border-secondary justify-content-between">
-                    <button type="button" class="btn btn-info fw-bold" onclick="appendDynamicIngredientInputRow('recipeRows{{ r['Product_ID'] }}')">+ Add Component Line</button>
+                <div class="modal-footer border-secondary">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
                     <button type="submit" class="btn btn-success fw-bold px-4">Update Specification Changes</button>
                 </div>
             </form>
@@ -754,6 +957,212 @@
 {% endfor %}
 
 <script>
+const ALL_INGREDIENTS = {{ ingredients_json|safe }};
+const RECIPES_COPY_MAP = {{ recipes_copy_json|safe }};
+const PRODUCT_PRICES_MAP = {{ product_prices_json|safe }};
+const ING_BY_ID = {};
+ALL_INGREDIENTS.forEach(i => { ING_BY_ID[i.id] = i; });
+
+function getModalKeyFromEl(el) {
+    const modal = el.closest('.recipe-formula-modal');
+    return modal ? modal.getAttribute('data-modal-key') : 'create';
+}
+
+function populateUnitDropdown(unitSelect, nativeUnit, preferredUnit) {
+    const nat = (nativeUnit || 'pcs').trim().toLowerCase();
+    const pref = (preferredUnit || '').trim().toLowerCase();
+    unitSelect.innerHTML = '';
+
+    if (nat === 'g' || nat === 'kg') {
+        unitSelect.innerHTML = `<option value="g">g</option><option value="kg">kg</option>`;
+        unitSelect.value = (pref === 'kg') ? 'kg' : 'g';
+    } else if (nat === 'ml' || nat === 'l') {
+        unitSelect.innerHTML = `<option value="ml">ml</option><option value="L">L</option>`;
+        unitSelect.value = (pref === 'l') ? 'L' : 'ml';
+    } else {
+        unitSelect.innerHTML = `<option value="${nativeUnit || 'pcs'}">${nativeUnit || 'pcs'}</option>`;
+        unitSelect.value = nativeUnit || 'pcs';
+    }
+}
+
+function appendSearchableRow(containerId, isPackaging, prefill = null) {
+    const container = document.getElementById(containerId);
+    if (!container) return;
+    const modalKey = getModalKeyFromEl(container);
+    const placeholder = isPackaging ? 'Type to search packaging...' : 'Type to search ingredient...';
+    const defaultQty = prefill ? prefill.qty : (isPackaging ? '1' : '');
+    const preId = prefill ? prefill.id : '';
+    const preName = prefill ? prefill.name : '';
+    const preUnit = prefill ? prefill.unit : (isPackaging ? 'pcs' : '');
+
+    const rowHtml = `
+        <div class="row g-2 mb-2 align-items-center tracking-ingredient-row-block" data-is-packaging="${isPackaging ? 'true' : 'false'}">
+            <div class="col-5">
+                <div class="searchable-combo-wrap">
+                    <input type="hidden" name="ingredient_id[]" class="combo-hidden-id" value="${preId}">
+                    <input type="text" class="form-control combo-search-input" value="${preName}" placeholder="${placeholder}" autocomplete="off" onfocus="openComboMenu(this, ${isPackaging})" oninput="filterComboMenu(this, ${isPackaging})">
+                    <div class="searchable-combo-menu"></div>
+                </div>
+            </div>
+            <div class="col-3">
+                <input type="number" step="any" name="quantity[]" class="form-control bg-light border-0 text-dark fw-bold font-monospace qty-input-node" value="${defaultQty}" placeholder="0.00" oninput="recalcModalLiveCost('${modalKey}')" required>
+            </div>
+            <div class="col-3">
+                <select name="unit[]" class="form-select unit-selector-node" onchange="recalcModalLiveCost('${modalKey}')" required>
+                    <option value="${preUnit}" selected>${preUnit || 'Unit...'}</option>
+                </select>
+            </div>
+            <div class="col-1 text-center">
+                <button type="button" class="btn btn-sm btn-danger fw-bold" onclick="removeFormulaRow(this, '${modalKey}')">X</button>
+            </div>
+        </div>
+    `;
+    container.insertAdjacentHTML('beforeend', rowHtml);
+
+    if (prefill && ING_BY_ID[prefill.id]) {
+        const lastRow = container.lastElementChild;
+        const unitSel = lastRow.querySelector('.unit-selector-node');
+        populateUnitDropdown(unitSel, ING_BY_ID[prefill.id].unit, prefill.unit);
+    }
+    recalcModalLiveCost(modalKey);
+}
+
+function removeFormulaRow(btn, modalKey) {
+    btn.closest('.tracking-ingredient-row-block').remove();
+    recalcModalLiveCost(modalKey);
+}
+
+function openComboMenu(inputEl, isPackaging) {
+    document.querySelectorAll('.searchable-combo-menu').forEach(m => m.style.display = 'none');
+    filterComboMenu(inputEl, isPackaging);
+}
+
+function filterComboMenu(inputEl, isPackaging) {
+    const query = (inputEl.value || '').toLowerCase().trim();
+    const wrap = inputEl.closest('.searchable-combo-wrap');
+    const menu = wrap.querySelector('.searchable-combo-menu');
+    const matches = ALL_INGREDIENTS.filter(i => {
+        if (Boolean(i.is_packaging) !== Boolean(isPackaging)) return false;
+        return !query || i.name.toLowerCase().includes(query) || i.id.toLowerCase().includes(query);
+    }).slice(0, 40);
+
+    if (matches.length === 0) {
+        menu.innerHTML = `<div class="p-2 text-muted small text-center">No matching ${isPackaging ? 'packaging' : 'ingredients'} found</div>`;
+    } else {
+        menu.innerHTML = matches.map(m => `
+            <div class="searchable-combo-item" onmousedown="selectComboItem(this, '${m.id}')">
+                <span>${m.name}</span>
+                <small>${m.unit} • ₱${m.cost.toFixed(2)}</small>
+            </div>
+        `).join('');
+    }
+    menu.style.display = 'block';
+}
+
+function selectComboItem(itemEl, ingId) {
+    const ing = ING_BY_ID[ingId];
+    if (!ing) return;
+    const row = itemEl.closest('.tracking-ingredient-row-block');
+    const wrap = itemEl.closest('.searchable-combo-wrap');
+    wrap.querySelector('.combo-hidden-id').value = ing.id;
+    wrap.querySelector('.combo-search-input').value = ing.name;
+    wrap.querySelector('.searchable-combo-menu').style.display = 'none';
+
+    const unitSel = row.querySelector('.unit-selector-node');
+    populateUnitDropdown(unitSel, ing.unit, ing.unit);
+
+    const qtyInput = row.querySelector('.qty-input-node');
+    if (ing.is_packaging && (!qtyInput.value || qtyInput.value === '0')) {
+        qtyInput.value = '1';
+    }
+
+    recalcModalLiveCost(getModalKeyFromEl(row));
+}
+
+document.addEventListener('click', function(e) {
+    if (!e.target.closest('.searchable-combo-wrap')) {
+        document.querySelectorAll('.searchable-combo-menu').forEach(m => m.style.display = 'none');
+    }
+});
+
+function copyFormulaIntoModal(modalKey) {
+    const sourceSelect = document.getElementById('copySource-' + modalKey);
+    if (!sourceSelect || !sourceSelect.value) return;
+    const sourceData = RECIPES_COPY_MAP[sourceSelect.value];
+    if (!sourceData || !sourceData.items) return;
+
+    const ingBox = document.getElementById('ingRows-' + modalKey);
+    const pkgBox = document.getElementById('pkgRows-' + modalKey);
+    if (ingBox) ingBox.innerHTML = '';
+    if (pkgBox) pkgBox.innerHTML = '';
+
+    sourceData.items.forEach(item => {
+        if (item.is_packaging && pkgBox) {
+            appendSearchableRow('pkgRows-' + modalKey, true, item);
+        } else if (ingBox) {
+            appendSearchableRow('ingRows-' + modalKey, false, item);
+        }
+    });
+    recalcModalLiveCost(modalKey);
+}
+
+function updateCreateModalPrice() {
+    const sel = document.getElementById('createTargetProductSelect');
+    const modal = document.getElementById('createRecipeModal');
+    if (!sel || !modal) return;
+    const price = PRODUCT_PRICES_MAP[sel.value] || 0;
+    modal.setAttribute('data-selling-price', price);
+    recalcModalLiveCost('create');
+}
+
+function recalcModalLiveCost(modalKey) {
+    const modal = document.querySelector(`.recipe-formula-modal[data-modal-key="${modalKey}"]`);
+    if (!modal) return;
+    const sellingPrice = parseFloat(modal.getAttribute('data-selling-price') || '0') || 0;
+
+    let ingCost = 0;
+    let pkgCost = 0;
+
+    modal.querySelectorAll('.tracking-ingredient-row-block').forEach(row => {
+        const ingId = (row.querySelector('.combo-hidden-id')?.value || '').trim();
+        const qty = parseFloat(row.querySelector('.qty-input-node')?.value || '0') || 0;
+        const selUnit = (row.querySelector('.unit-selector-node')?.value || '').trim().toLowerCase();
+        const ing = ING_BY_ID[ingId];
+        if (!ing || qty <= 0) return;
+
+        const baseU = (ing.unit || '').trim().toLowerCase();
+        let effQty = qty;
+        if ((baseU === 'kg' && selUnit === 'g') || (baseU === 'l' && selUnit === 'ml')) {
+            effQty = qty / 1000.0;
+        } else if ((baseU === 'g' && selUnit === 'kg') || (baseU === 'ml' && selUnit === 'l')) {
+            effQty = qty * 1000.0;
+        }
+
+        const lineCost = effQty * ing.cost;
+        if (ing.is_packaging) {
+            pkgCost += lineCost;
+        } else {
+            ingCost += lineCost;
+        }
+    });
+
+    const totalCost = ingCost + pkgCost;
+    const marginPct = sellingPrice > 0 ? ((sellingPrice - totalCost) / sellingPrice) * 100.0 : 0.0;
+
+    const ingEl = document.getElementById('liveIngCost-' + modalKey);
+    const pkgEl = document.getElementById('livePkgCost-' + modalKey);
+    const totEl = document.getElementById('liveTotalCost-' + modalKey);
+    const marEl = document.getElementById('liveMarginPct-' + modalKey);
+
+    if (ingEl) ingEl.textContent = '₱' + ingCost.toFixed(2);
+    if (pkgEl) pkgEl.textContent = '₱' + pkgCost.toFixed(2);
+    if (totEl) totEl.textContent = '₱' + totalCost.toFixed(2);
+    if (marEl) {
+        marEl.textContent = marginPct.toFixed(1) + '%';
+        marEl.className = 'font-monospace ' + (marginPct >= 60 ? 'text-success' : (marginPct >= 35 ? 'text-warning' : 'text-danger'));
+    }
+}
+
 function appendPrepStepRow(containerId) {
     const container = document.getElementById(containerId);
     if (!container) return;
@@ -798,51 +1207,6 @@ function openRecipeParentVariants(index) {
     const caret = document.getElementById('caret-' + index);
     childRows.forEach(row => { row.style.display = 'block'; });
     if (caret) caret.textContent = '^';
-}
-
-function synchronizeRowMeasurementUnitOptions(selectElement) {
-    const row = selectElement.closest('.tracking-ingredient-row-block');
-    const activeOption = selectElement.options[selectElement.selectedIndex];
-    const nativeUnit = (activeOption.getAttribute('data-native-unit') || 'pcs').trim().toLowerCase();
-    const unitDropdown = row.querySelector('.unit-selector-node');
-    const previousSelectionValue = (unitDropdown.value || '').trim().toLowerCase();
-    unitDropdown.innerHTML = '';
-    
-    if (nativeUnit === 'g' || nativeUnit === 'kg') {
-        unitDropdown.innerHTML = `<option value="g">g</option><option value="kg">kg</option>`;
-        unitDropdown.value = (previousSelectionValue === 'kg') ? 'kg' : 'g';
-    } else if (nativeUnit === 'ml' || nativeUnit === 'l') {
-        unitDropdown.innerHTML = `<option value="ml">ml</option><option value="L">L</option>`;
-        unitDropdown.value = (previousSelectionValue === 'l') ? 'L' : 'ml';
-    } else {
-        unitDropdown.innerHTML = `<option value="${nativeUnit}">${nativeUnit}</option>`;
-        unitDropdown.value = nativeUnit;
-    }
-}
-
-function appendDynamicIngredientInputRow(containerElementId) {
-    document.getElementById(containerElementId).insertAdjacentHTML('beforeend', `
-        <div class="row mb-2 align-items-center tracking-ingredient-row-block">
-            <div class="col-5">
-                <select name="ingredient_id[]" class="form-select bg-secondary text-white border-0 ingredient-selector-node" onchange="synchronizeRowMeasurementUnitOptions(this)" required>
-                    <option value="" disabled selected>Select ingredient constituent...</option>
-                    {% for i in ingredients %}
-                    <option value="{{ i.Ingredient_ID }}" data-native-unit="{{ i.Unit }}">{{ i.Ingredient_Name }}</option>
-                    {% endfor %}
-                </select>
-            </div>
-            <div class="col-3">
-                <input type="number" step="any" name="quantity[]" class="form-control bg-light border-0 text-dark fw-bold font-monospace" placeholder="0.00" required>
-            </div>
-            <div class="col-3">
-                <select name="unit[]" class="form-select bg-secondary text-white border-0 unit-selector-node" required>
-                    <option value="" disabled selected>Unit...</option>
-                </select>
-            </div>
-            <div class="col-1 text-center">
-                <button type="button" class="btn btn-sm btn-danger fw-bold" onclick="this.parentElement.parentElement.remove()">X</button>
-            </div>
-        </div>`);
 }
 
 function switchActiveRecipeDisplay(productIdCode) {
@@ -937,13 +1301,20 @@ function clearRecipeDashboardFilters() {
 }
 
 document.addEventListener("DOMContentLoaded", function() {
-    appendDynamicIngredientInputRow('creationRecipeRowsDiv');
+    // Seed initial empty row in Create modal
+    appendSearchableRow('ingRows-create', false);
     if (document.getElementById('createPrepStepsDiv')) {
         appendPrepStepRow('createPrepStepsDiv');
     }
-    
-    document.querySelectorAll('.ingredient-selector-node').forEach(sel => {
-        if (sel.value !== "") synchronizeRowMeasurementUnitOptions(sel);
+
+    // Populate unit dropdowns for pre-loaded Edit modal rows
+    document.querySelectorAll('.tracking-ingredient-row-block').forEach(row => {
+        const ingId = (row.querySelector('.combo-hidden-id')?.value || '').trim();
+        const unitSel = row.querySelector('.unit-selector-node');
+        if (ingId && ING_BY_ID[ingId] && unitSel) {
+            const savedUnit = unitSel.getAttribute('data-saved-unit') || unitSel.value;
+            populateUnitDropdown(unitSel, ING_BY_ID[ingId].unit, savedUnit);
+        }
     });
     
     const urlParams = new URLSearchParams(window.location.search);

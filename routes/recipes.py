@@ -1,10 +1,11 @@
-# routes/recipes.py - 3-Tab Recipes Studio (Bar, Kitchen Plating, Kitchen Prep) with Station Routing & Custom Print Templates
+# routes/recipes.py - 3-Tab Recipes Studio with Atomic SQLite Transactions (Race-Condition Safe), Searchable Comboboxes, Packaging Split, Copy Formula & NaN-Safe Math
 from flask import Blueprint, request, redirect, session, render_template, flash
 from werkzeug.utils import secure_filename
 from modules.database import InventoryDB
 import pandas as pd
 import sqlite3
 import json
+import math
 import os
 import time
 
@@ -12,6 +13,20 @@ recipes_bp = Blueprint('recipes', __name__)
 
 UPLOAD_FOLDER = os.path.join('static', 'uploads', 'recipes')
 ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'webp'}
+
+def safe_float(val, default=0.0):
+    """Safely converts any value to float, turning None, blanks, and pandas NaN/Inf into default (0.0)."""
+    if val is None:
+        return default
+    try:
+        if pd.isna(val):
+            return default
+        num = float(val)
+        if math.isnan(num) or math.isinf(num):
+            return default
+        return num
+    except (ValueError, TypeError):
+        return default
 
 def allowed_file(filename):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
@@ -55,6 +70,80 @@ def ensure_recipe_guides_table(db_path):
     conn.commit()
     conn.close()
 
+def atomic_save_product_recipe(db_path, product_id, recipe_items):
+    """Atomically updates ONLY this product's rows in Recipes without ever dropping or replacing the table."""
+    conn = sqlite3.connect(db_path, timeout=30.0)
+    cursor = conn.cursor()
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS Recipes (
+            Recipe_ID TEXT,
+            Product_ID TEXT,
+            Ingredient_ID TEXT,
+            Quantity_Required REAL,
+            Unit TEXT
+        )
+    """)
+    cursor.execute("BEGIN IMMEDIATE")
+    try:
+        cursor.execute("DELETE FROM Recipes WHERE Product_ID = ?", (str(product_id),))
+        for idx, item in enumerate(recipe_items, start=1):
+            cursor.execute(
+                "INSERT INTO Recipes (Recipe_ID, Product_ID, Ingredient_ID, Quantity_Required, Unit) VALUES (?, ?, ?, ?, ?)",
+                (f"{product_id}-REC{idx:03d}", str(product_id), str(item['ingredient_id']), float(item['quantity']), str(item['unit']))
+            )
+        conn.commit()
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        conn.close()
+
+def atomic_save_prep_recipe(db_path, prepped_id, recipe_items, batch_yield):
+    """Atomically updates ONLY this prepped item's rows in Prep_Recipes without ever dropping or replacing the table."""
+    conn = sqlite3.connect(db_path, timeout=30.0)
+    cursor = conn.cursor()
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS Prep_Recipes (
+            Prep_Recipe_ID TEXT,
+            Prepped_Ingredient_ID TEXT,
+            Raw_Ingredient_ID TEXT,
+            Quantity_Required REAL,
+            Unit TEXT,
+            Batch_Yield REAL
+        )
+    """)
+    cursor.execute("BEGIN IMMEDIATE")
+    try:
+        cursor.execute("DELETE FROM Prep_Recipes WHERE Prepped_Ingredient_ID = ?", (str(prepped_id),))
+        for idx, item in enumerate(recipe_items, start=1):
+            cursor.execute(
+                "INSERT INTO Prep_Recipes (Prep_Recipe_ID, Prepped_Ingredient_ID, Raw_Ingredient_ID, Quantity_Required, Unit, Batch_Yield) VALUES (?, ?, ?, ?, ?, ?)",
+                (f"{prepped_id}-PREP{idx:03d}", str(prepped_id), str(item['ingredient_id']), float(item['quantity']), str(item['unit']), float(batch_yield))
+            )
+        conn.commit()
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        conn.close()
+
+def atomic_delete_recipe(db_path, recipe_type, target_id):
+    """Atomically deletes ONLY the targeted product or prep recipe rows."""
+    conn = sqlite3.connect(db_path, timeout=30.0)
+    cursor = conn.cursor()
+    cursor.execute("BEGIN IMMEDIATE")
+    try:
+        if recipe_type == 'prep':
+            cursor.execute("DELETE FROM Prep_Recipes WHERE Prepped_Ingredient_ID = ?", (str(target_id),))
+        else:
+            cursor.execute("DELETE FROM Recipes WHERE Product_ID = ?", (str(target_id),))
+        conn.commit()
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        conn.close()
+
 def get_bar_categories(db_path, all_categories):
     """Retrieves the list of categories assigned to the Bar tab. Auto-detects beverage categories on first run."""
     ensure_recipe_guides_table(db_path)
@@ -72,7 +161,6 @@ def get_bar_categories(db_path, all_categories):
         except Exception:
             pass
 
-    # First-time smart default: auto-assign beverage/coffee categories to Bar
     bar_keywords = ['coffee', 'espresso', 'tea', 'beverage', 'drink', 'frappe', 'milk', 'bar', 'latte', 'soda', 'juice']
     default_bar = [c for c in all_categories if any(kw in c.lower() for kw in bar_keywords)]
     return default_bar
@@ -106,7 +194,6 @@ def get_recipe_guides_map(db_path):
         except Exception:
             steps_list = []
 
-        # Fallback: if Steps_JSON is empty but legacy Procedures text exists, convert lines to steps
         if not steps_list and r[2]:
             steps_list = [{'text': line.strip(), 'image': ''} for line in str(r[2]).splitlines() if line.strip()]
 
@@ -215,7 +302,7 @@ def web_recipes_tab(username):
             base_unit_map[str(ing['Ingredient_ID'])] = str(ing.get('Unit', '') or '').strip().lower()
 
     # ==========================================
-    # 1. POST METHOD: COMMIT CONFIGURATIONS
+    # 1. POST METHOD: COMMIT CONFIGURATIONS (ATOMIC)
     # ==========================================
     if request.method == 'POST':
         action = request.form.get('action_type')
@@ -234,45 +321,30 @@ def web_recipes_tab(username):
             description_text = request.form.get('description', '').strip()
             procedures_text = request.form.get('procedures', '').strip()
             
-            batch_yield_val = float(request.form.get('batch_yield', 1.0) or 1.0)
+            batch_yield_val = safe_float(request.form.get('batch_yield', 1.0), 1.0)
             if batch_yield_val <= 0:
                 batch_yield_val = 1.0
             
             recipe_items = []
             for i, q, u in zip(ing_ids, qtys, units):
-                if i and q:
-                    raw_val = float(q)
-                    base_u = base_unit_map.get(str(i), '')
+                i_clean = str(i or '').strip()
+                if i_clean and q:
+                    raw_val = safe_float(q, 0.0)
+                    if raw_val <= 0:
+                        continue
+                    base_u = base_unit_map.get(i_clean, '')
                     stored_val = convert_input_to_base_qty(raw_val, u, base_u)
                     recipe_items.append({
-                        'ingredient_id': i,
+                        'ingredient_id': i_clean,
                         'quantity': stored_val,
                         'unit': u
                     })
             
             if recipe_type in ['bar', 'kitchen', 'product']:
-                db.save_recipe(target_id, recipe_items)
+                atomic_save_product_recipe(db_path, target_id, recipe_items)
             elif recipe_type == 'prep':
-                prep_df = db.read_tab('Prep_Recipes')
-                if not prep_df.empty:
-                    prep_df = prep_df[prep_df['Prepped_Ingredient_ID'] != target_id]
-                
-                new_records = []
-                for idx, item in enumerate(recipe_items):
-                    new_records.append({
-                        'Prep_Recipe_ID': f"{target_id}-PREP{idx+1:03d}",
-                        'Prepped_Ingredient_ID': target_id,
-                        'Raw_Ingredient_ID': item['ingredient_id'],
-                        'Quantity_Required': item['quantity'],
-                        'Unit': item['unit'],
-                        'Batch_Yield': batch_yield_val
-                    })
-                
-                if new_records:
-                    prep_df = pd.concat([prep_df, pd.DataFrame(new_records)], ignore_index=True)
-                db.save_tab('Prep_Recipes', prep_df)
+                atomic_save_prep_recipe(db_path, target_id, recipe_items, batch_yield_val)
 
-            # Main product / plating photo upload (Bar & Kitchen Plating)
             uploaded_img_path = None
             photo_file = request.files.get('recipe_image')
             if photo_file and photo_file.filename and allowed_file(photo_file.filename):
@@ -283,7 +355,6 @@ def web_recipes_tab(username):
                 photo_file.save(full_save_path)
                 uploaded_img_path = f"/static/uploads/recipes/{safe_name}"
 
-            # Kitchen Prep: metadata + individual step photos
             storage_val = request.form.get('storage', '').strip()
             shelf_life_val = request.form.get('shelf_life', '').strip()
             prep_time_val = request.form.get('prep_time', '').strip()
@@ -328,14 +399,7 @@ def web_recipes_tab(username):
             return redirect(f"/portal/{username}/recipes?tab={recipe_type}&product_id={target_id}")
             
         elif action == 'delete_recipe':
-            if recipe_type in ['bar', 'kitchen', 'product']:
-                db.delete_recipe(target_id)
-            elif recipe_type == 'prep':
-                prep_df = db.read_tab('Prep_Recipes')
-                if not prep_df.empty:
-                    prep_df = prep_df[prep_df['Prepped_Ingredient_ID'] != target_id]
-                    db.save_tab('Prep_Recipes', prep_df)
-                    
+            atomic_delete_recipe(db_path, recipe_type, target_id)
             db.update_all_product_costs()
             return redirect(f"/portal/{username}/recipes?tab={recipe_type}")
 
@@ -357,7 +421,6 @@ def web_recipes_tab(username):
     prep_recipes_df = db.read_tab('Prep_Recipes')
     guides_map = get_recipe_guides_map(db_path)
 
-    # Master list of all store product categories for the Bar/Kitchen tickbox modal
     master_cats_set = set()
     if not cats_df.empty and 'Category_Name' in cats_df.columns:
         for c in cats_df['Category_Name'].dropna().unique():
@@ -374,11 +437,14 @@ def web_recipes_tab(username):
     ing_lookup = {}
     if not ingredients_df.empty:
         for _, ing in ingredients_df.iterrows():
+            cat_str = str(ing.get('Category', 'General') or 'General').strip()
             ing_lookup[str(ing['Ingredient_ID'])] = {
-                'name': ing['Ingredient_Name'],
+                'name': str(ing['Ingredient_Name']),
                 'base_unit': str(ing.get('Unit', '') or '').strip(),
-                'cost': float(ing['Cost_Per_Unit'] or 0),
-                'type': ing.get('Ingredient_Type', 'RAW')
+                'cost': safe_float(ing.get('Cost_Per_Unit'), 0.0),
+                'type': str(ing.get('Ingredient_Type', 'RAW') or 'RAW').strip(),
+                'category': cat_str,
+                'is_packaging': (cat_str.lower() == 'packaging')
             }
 
     dropdown_ingredients = []
@@ -389,6 +455,19 @@ def web_recipes_tab(username):
         else:
             dropdown_ingredients = ingredients_df.to_dict('records')
 
+    ingredients_js = []
+    for i in dropdown_ingredients:
+        cat_val = str(i.get('Category', 'General') or 'General').strip()
+        ingredients_js.append({
+            'id': str(i['Ingredient_ID']),
+            'name': str(i['Ingredient_Name']),
+            'unit': str(i.get('Unit', 'pcs') or 'pcs').strip(),
+            'category': cat_val,
+            'is_packaging': (cat_val.lower() == 'packaging'),
+            'cost': safe_float(i.get('Cost_Per_Unit'), 0.0)
+        })
+    ingredients_js.sort(key=lambda x: x['name'].lower())
+
     all_active_products = []
     if not products_df.empty and 'Active' in products_df.columns:
         active_prod_df = products_df[products_df['Active'].astype(str).str.upper() == 'YES']
@@ -398,8 +477,8 @@ def web_recipes_tab(username):
     grouped_recipes = {}
     categories = []
     tab_products_list = []
+    product_prices_map = {}
 
-    # SCENARIO A: BAR OR KITCHEN PLATING TAB
     if current_tab in ['bar', 'kitchen']:
         for p in all_active_products:
             p_cat = str(p.get('Category', 'General') or 'General').strip()
@@ -409,6 +488,7 @@ def web_recipes_tab(username):
             if current_tab == 'kitchen' and is_bar_item:
                 continue
             tab_products_list.append(p)
+            product_prices_map[str(p['Product_ID'])] = safe_float(p.get('Selling_Price'), 0.0)
 
         categories = sorted(list(set(str(p.get('Category', 'General') or 'General').strip() for p in tab_products_list))) if tab_products_list else []
         
@@ -416,28 +496,45 @@ def web_recipes_tab(username):
             p_id = str(p['Product_ID'])
             df = db.get_product_recipes(p_id)
             items = []
-            total_cost = 0.0
+            ingredient_items = []
+            packaging_items = []
+            ingredient_cost = 0.0
+            packaging_cost = 0.0
             
             if df is not None and not df.empty:
                 for _, row in df.iterrows():
                     ing_id = str(row.get('Ingredient_ID'))
-                    qty = float(row.get('Quantity_Required', 0))
+                    qty = safe_float(row.get('Quantity_Required'), 0.0)
                     unit = str(row.get('Unit', '') or '').strip()
                     
-                    lookup = ing_lookup.get(ing_id, {'name': row.get('Ingredient_Name'), 'base_unit': '', 'cost': float(row.get('Cost_Per_Unit', 0))})
-                    cost = lookup['cost']
-                    total = qty * cost
-                    total_cost += total
-                    display_qty = convert_base_to_display_qty(qty, unit, lookup['base_unit'])
-
-                    items.append({
-                        'ID': ing_id, 'Name': lookup['name'], 'Qty': display_qty, 
-                        'Unit': unit, 'Base_Unit': lookup['base_unit'], 'Cost': cost, 'Total': total
+                    lookup = ing_lookup.get(ing_id, {
+                        'name': str(row.get('Ingredient_Name', ing_id)),
+                        'base_unit': '',
+                        'cost': safe_float(row.get('Cost_Per_Unit'), 0.0),
+                        'is_packaging': False
                     })
+                    cost = safe_float(lookup.get('cost'), 0.0)
+                    total = qty * cost
+                    display_qty = convert_base_to_display_qty(qty, unit, lookup['base_unit'])
+                    is_pkg = bool(lookup.get('is_packaging', False))
+
+                    item_dict = {
+                        'ID': ing_id, 'Name': lookup['name'], 'Qty': display_qty, 
+                        'Unit': unit, 'Base_Unit': lookup['base_unit'],
+                        'Cost': cost, 'Total': total, 'Is_Packaging': is_pkg
+                    }
+                    items.append(item_dict)
+                    if is_pkg:
+                        packaging_items.append(item_dict)
+                        packaging_cost += total
+                    else:
+                        ingredient_items.append(item_dict)
+                        ingredient_cost += total
             
-            selling_price = float(p.get('Selling_Price', 0))
+            total_cost = ingredient_cost + packaging_cost
+            selling_price = safe_float(p.get('Selling_Price'), 0.0)
             profit = selling_price - total_cost
-            margin = (profit / selling_price * 100) if selling_price > 0 else 0
+            margin = (profit / selling_price * 100.0) if selling_price > 0 else 0.0
             
             parent_item_name = str(p.get('Parent_Item') or p.get('Product_Name') or 'Uncategorized').strip()
             variant_item_name = str(p.get('Variant_Name') or 'Regular').strip()
@@ -450,7 +547,12 @@ def web_recipes_tab(username):
                 'Variant_Name': variant_item_name,
                 'Category': p.get('Category', 'General') or 'General', 
                 'Selling_Price': selling_price, 
-                'Items': items, 'Total_Cost': total_cost, 'Profit': profit, 'Margin': margin,
+                'Items': items,
+                'Ingredient_Items': ingredient_items,
+                'Packaging_Items': packaging_items,
+                'Ingredient_Cost': ingredient_cost,
+                'Packaging_Cost': packaging_cost,
+                'Total_Cost': total_cost, 'Profit': profit, 'Margin': margin,
                 'Description': guide_meta['description'],
                 'Procedures': guide_meta['procedures'],
                 'Image_Path': guide_meta['image_path'],
@@ -460,7 +562,6 @@ def web_recipes_tab(username):
             recipe_data.append(recipe_obj)
             grouped_recipes.setdefault(parent_item_name, []).append(recipe_obj)
 
-    # SCENARIO B: KITCHEN PREP SUB-RECIPES TAB
     elif current_tab == 'prep' and not ingredients_df.empty:
         prepped_ingredients_df = ingredients_df[ingredients_df['Ingredient_Type'] == 'PREPPED']
         categories = sorted(list(set(i.get('Category', 'General') for i in prepped_ingredients_df.to_dict('records') if i.get('Category')))) if not prepped_ingredients_df.empty else []
@@ -468,35 +569,44 @@ def web_recipes_tab(username):
         for _, ing_row in prepped_ingredients_df.iterrows():
             ing_id = str(ing_row['Ingredient_ID'])
             items = []
-            total_cost = 0.0
+            ingredient_items = []
+            packaging_items = []
+            ingredient_cost = 0.0
+            packaging_cost = 0.0
             existing_yield = 1.0
             
             if not prep_recipes_df.empty:
                 sub_formula = prep_recipes_df[prep_recipes_df['Prepped_Ingredient_ID'] == ing_id]
                 if not sub_formula.empty and 'Batch_Yield' in sub_formula.columns:
-                    try:
-                        existing_yield = float(sub_formula['Batch_Yield'].iloc[0])
-                        if existing_yield <= 0:
-                            existing_yield = 1.0
-                    except Exception:
+                    existing_yield = safe_float(sub_formula['Batch_Yield'].iloc[0], 1.0)
+                    if existing_yield <= 0:
                         existing_yield = 1.0
 
                 for _, row in sub_formula.iterrows():
                     raw_id = str(row.get('Raw_Ingredient_ID'))
-                    qty = float(row.get('Quantity_Required', 0))
+                    qty = safe_float(row.get('Quantity_Required'), 0.0)
                     unit = str(row.get('Unit', '') or '').strip()
                     
-                    lookup = ing_lookup.get(raw_id, {'name': 'Unknown Raw Material', 'base_unit': '', 'cost': 0.0})
-                    cost = lookup['cost']
+                    lookup = ing_lookup.get(raw_id, {'name': 'Unknown Raw Material', 'base_unit': '', 'cost': 0.0, 'is_packaging': False})
+                    cost = safe_float(lookup.get('cost'), 0.0)
                     total = qty * cost
-                    total_cost += total
                     display_qty = convert_base_to_display_qty(qty, unit, lookup['base_unit'])
+                    is_pkg = bool(lookup.get('is_packaging', False))
 
-                    items.append({
+                    item_dict = {
                         'ID': raw_id, 'Name': lookup['name'], 'Qty': display_qty, 
-                        'Unit': unit, 'Base_Unit': lookup['base_unit'], 'Cost': cost, 'Total': total
-                    })
+                        'Unit': unit, 'Base_Unit': lookup['base_unit'],
+                        'Cost': cost, 'Total': total, 'Is_Packaging': is_pkg
+                    }
+                    items.append(item_dict)
+                    if is_pkg:
+                        packaging_items.append(item_dict)
+                        packaging_cost += total
+                    else:
+                        ingredient_items.append(item_dict)
+                        ingredient_cost += total
             
+            total_cost = ingredient_cost + packaging_cost
             guide_meta = guides_map.get(ing_id, {'description': '', 'procedures': '', 'image_path': '', 'storage': '', 'shelf_life': '', 'prep_time': '', 'steps': []})
             amortized_cost = (total_cost / existing_yield) if existing_yield > 0 else total_cost
 
@@ -504,8 +614,13 @@ def web_recipes_tab(username):
                 'Product_Name': ing_row['Ingredient_Name'], 'Product_ID': ing_id, 
                 'Parent_Item': ing_row['Ingredient_Name'], 'Variant_Name': f"Batch ({existing_yield:g} {ing_row.get('Unit', '')})",
                 'Category': ing_row.get('Category', 'General') or 'General',
-                'Selling_Price': float(ing_row['Cost_Per_Unit'] or 0), 
-                'Items': items, 'Total_Cost': total_cost, 'Profit': 0.0, 'Margin': 0.0,
+                'Selling_Price': safe_float(ing_row.get('Cost_Per_Unit'), 0.0), 
+                'Items': items,
+                'Ingredient_Items': ingredient_items,
+                'Packaging_Items': packaging_items,
+                'Ingredient_Cost': ingredient_cost,
+                'Packaging_Cost': packaging_cost,
+                'Total_Cost': total_cost, 'Profit': 0.0, 'Margin': 0.0,
                 'Batch_Yield': existing_yield,
                 'Base_Unit': ing_row.get('Unit', 'pcs'),
                 'Amortized_Cost': amortized_cost,
@@ -521,6 +636,23 @@ def web_recipes_tab(username):
             recipe_data.append(recipe_obj)
             grouped_recipes[ing_row['Ingredient_Name']] = [recipe_obj]
 
+    recipes_copy_map = {}
+    for r in recipe_data:
+        if r['Items']:
+            recipes_copy_map[r['Product_ID']] = {
+                'name': r['Product_Name'],
+                'items': [
+                    {
+                        'id': it['ID'],
+                        'name': it['Name'],
+                        'qty': it['Qty'],
+                        'unit': it['Unit'],
+                        'is_packaging': it['Is_Packaging']
+                    }
+                    for it in r['Items']
+                ]
+            }
+
     return render_template(
         'recipes.html', 
         username=username, 
@@ -532,6 +664,9 @@ def web_recipes_tab(username):
         bar_categories=bar_categories,
         current_tab=current_tab,
         ingredients=dropdown_ingredients,
+        ingredients_json=json.dumps(ingredients_js),
+        recipes_copy_json=json.dumps(recipes_copy_map),
+        product_prices_json=json.dumps(product_prices_map),
         unallocated_prepped_items=[i for i in ingredients_df.to_dict('records') if i.get('Ingredient_Type') == 'PREPPED'] if not ingredients_df.empty else []
     )
 
@@ -630,7 +765,7 @@ def export_recipe_guide(username):
                         if meta_i['category'] == 'packaging':
                             continue
 
-                        qty = float(r.get('Quantity_Required', 0))
+                        qty = safe_float(r.get('Quantity_Required'), 0.0)
                         unit = str(r.get('Unit', '') or '').strip()
                         ing_list.append({
                             'name': meta_i['name'],
@@ -676,9 +811,8 @@ def export_recipe_guide(username):
                 if not prep_recipes_df.empty:
                     sub = prep_recipes_df[prep_recipes_df['Prepped_Ingredient_ID'] == ing_id]
                     if not sub.empty and 'Batch_Yield' in sub.columns:
-                        try:
-                            batch_yield = float(sub['Batch_Yield'].iloc[0])
-                        except Exception:
+                        batch_yield = safe_float(sub['Batch_Yield'].iloc[0], 1.0)
+                        if batch_yield <= 0:
                             batch_yield = 1.0
                     for _, r in sub.iterrows():
                         raw_id = str(r.get('Raw_Ingredient_ID'))
@@ -687,7 +821,7 @@ def export_recipe_guide(username):
                         if meta_i['category'] == 'packaging':
                             continue
 
-                        qty = float(r.get('Quantity_Required', 0))
+                        qty = safe_float(r.get('Quantity_Required'), 0.0)
                         unit = str(r.get('Unit', '') or '').strip()
                         ing_list.append({
                             'name': meta_i['name'],
@@ -716,7 +850,6 @@ def export_recipe_guide(username):
                     'has_step_photos': has_step_photos
                 })
 
-    # Group Bar items by Parent Item
     grouped_export = []
     parent_buckets = {}
     for rec in export_records:

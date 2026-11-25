@@ -1,8 +1,9 @@
-# routes/settings.py - Enterprise Settings Engine with Sub-Tab Routing, Color-Coded Excel/CSV Sync, Token-Sorted Key Matching, Integrity Guard & Master Security PIN
+# routes/settings.py - Enterprise Settings Engine with Sub-Tab Routing, Color-Coded Excel/CSV Sync, Clickable Dropdowns, Strict Auto-ID, Carry-Down & Master Security PIN
 from flask import Blueprint, request, redirect, session, render_template, send_file
 from modules.database import InventoryDB
 from openpyxl.styles import PatternFill, Font, Alignment, Border, Side
 from openpyxl.utils import get_column_letter
+from openpyxl.worksheet.datavalidation import DataValidation
 import sqlite3
 import pandas as pd
 from datetime import datetime
@@ -22,19 +23,19 @@ EDITABLE_COLUMNS_MAP = {
         'Purchase_Unit', 'Active', 'Supplier', 'Description'
     },
     'products': {
-        'Product_Name', 'Parent_Item', 'Variant_Name', 'Category',
+        'Parent_Item', 'Variant_Name', 'Category',
         'Selling_Price', 'Active'
     },
     'recipes': {
-        'Product_ID', 'Ingredient_ID', 'Quantity_Required', 'Unit'
+        'Product_Name', 'Ingredient_Name', 'Quantity_Required', 'Unit'
     },
     'prep_recipes': {
-        'Prepped_ID', 'Raw_Ingredient_ID', 'Quantity_Required', 'Unit', 'Batch_Yield'
+        'Prepped_Name', 'Raw_Ingredient_Name', 'Quantity_Required', 'Unit', 'Batch_Yield'
     }
 }
 
-def build_styled_excel_buffer(df, data_type):
-    """Generates a color-coded .xlsx workbook in memory with Green (Editable) and Gray (Auto/System) highlights plus an Instructions tab."""
+def build_styled_excel_buffer(df, data_type, ref_lists=None):
+    """Generates a color-coded .xlsx workbook with Green (Editable) / Gray (Auto) highlights, clickable dropdowns, and an Instructions tab."""
     buffer = io.BytesIO()
     editable_set = EDITABLE_COLUMNS_MAP.get(data_type, set())
 
@@ -53,22 +54,22 @@ def build_styled_excel_buffer(df, data_type):
         thin_side = Side(style='thin', color='CBD5E1')
         cell_border = Border(left=thin_side, right=thin_side, top=thin_side, bottom=thin_side)
 
-        # Highlight at least 40 blank rows on empty templates so staff see where to type
-        max_styled_row = max(len(df) + 1, 41)
+        # Style at least 50 rows on templates so staff can immediately see editable zones
+        max_styled_row = max(len(df) + 1, 51)
+        max_dropdown_row = max(len(df) + 100, 200)
 
+        col_letter_map = {}
         for col_idx, col_name in enumerate(df.columns, start=1):
             is_editable = col_name in editable_set
             h_fill = green_header_fill if is_editable else gray_header_fill
             c_fill = green_cell_fill if is_editable else gray_cell_fill
 
-            # Style header cell
             h_cell = ws.cell(row=1, column=col_idx)
             h_cell.fill = h_fill
             h_cell.font = header_font
             h_cell.alignment = Alignment(horizontal='center', vertical='center')
             h_cell.border = cell_border
 
-            # Style data/template cells
             max_len = len(str(col_name))
             for r_idx in range(2, max_styled_row + 1):
                 c = ws.cell(row=r_idx, column=col_idx)
@@ -79,21 +80,69 @@ def build_styled_excel_buffer(df, data_type):
                     max_len = max(max_len, len(str(c.value)))
 
             col_letter = get_column_letter(col_idx)
-            ws.column_dimensions[col_letter].width = min(max(max_len + 4, 15), 38)
+            col_letter_map[col_name] = col_letter
+            ws.column_dimensions[col_letter].width = min(max(max_len + 4, 16), 40)
 
         ws.row_dimensions[1].height = 24
         ws.freeze_panes = 'A2'
 
-        # Sheet 2: Staff Instructions Legend
+        # Sheet 2: Reference_List + Clickable Excel Dropdowns (for Recipes & Kitchen Prep)
+        if ref_lists:
+            ref_cols = {}
+            max_ref_len = max((len(v) for v in ref_lists.values()), default=0)
+            for k, vals in ref_lists.items():
+                padded = list(vals) + [''] * (max_ref_len - len(vals))
+                ref_cols[k] = padded
+
+            if max_ref_len > 0:
+                ref_df = pd.DataFrame(ref_cols)
+                ref_df.to_excel(writer, sheet_name='Reference_List', index=False)
+                ws_ref = writer.sheets['Reference_List']
+
+                for r_cidx, r_cname in enumerate(ref_df.columns, start=1):
+                    hc = ws_ref.cell(row=1, column=r_cidx)
+                    hc.fill = PatternFill(start_color='1E293B', end_color='1E293B', fill_type='solid')
+                    hc.font = header_font
+                    ws_ref.column_dimensions[get_column_letter(r_cidx)].width = 32
+
+                # Attach Excel DataValidation dropdowns to matching Data columns
+                dropdown_bindings = []
+                if data_type == 'recipes':
+                    dropdown_bindings = [
+                        ('Product_Name', 'Products', 'A'),
+                        ('Ingredient_Name', 'Ingredients', 'B')
+                    ]
+                elif data_type == 'prep_recipes':
+                    dropdown_bindings = [
+                        ('Prepped_Name', 'Prepped_Items', 'A'),
+                        ('Raw_Ingredient_Name', 'Raw_Ingredients', 'B')
+                    ]
+
+                for target_col, ref_key, ref_letter in dropdown_bindings:
+                    item_count = len(ref_lists.get(ref_key, []))
+                    if target_col in col_letter_map and item_count > 0:
+                        dv = DataValidation(
+                            type="list",
+                            formula1=f"=Reference_List!${ref_letter}$2:${ref_letter}${item_count + 1}",
+                            allow_blank=True
+                        )
+                        dv.promptTitle = f"Select {target_col}"
+                        dv.prompt = "Pick an exact registered item from the dropdown list."
+                        ws.add_data_validation(dv)
+                        t_letter = col_letter_map[target_col]
+                        dv.add(f"{t_letter}2:{t_letter}{max_dropdown_row}")
+
+        # Sheet 3: Staff Instructions Legend
         inst_rows = [
             ['COLOR GUIDE', 'MEANING', 'WHAT TO DO'],
-            ['GREEN COLUMNS', 'Manual Entry / Editable', 'Fill out or update these columns directly.'],
-            ['GRAY COLUMNS', 'Auto-Filled / System Calculated', 'DO NOT EDIT. Leave blank for new items; the app calculates or fills these automatically on upload.'],
+            ['GREEN COLUMNS', 'Manual Entry / Editable', 'Fill out or pick from the dropdown menu in these columns.'],
+            ['GRAY COLUMNS', 'Auto-Filled / System Calculated', 'DO NOT EDIT. Leave blank for new items; the app auto-fills IDs and costs on upload.'],
             ['', '', ''],
             ['IMPORTANT RULES', '', ''],
             ['1. Do not rename headers', 'Keep Row 1 column names on the Data tab exactly as they are.', ''],
             ['2. Upload directly', 'Save this Excel (.xlsx) file and upload it directly in Settings -> Bulk Excel & CSV Data Sync.', ''],
-            ['3. New vs. Existing items', 'For new Ingredients or Products, leave the ID column blank. For existing items, keep the ID intact to update them.', '']
+            ['3. Carry-Down Shortcut', 'For Recipes & Kitchen Prep, enter Product_Name (or Prepped_Name & Batch_Yield) on the first row only and leave blank for the remaining ingredients underneath. Do NOT sort rows if using blank carry-down.', ''],
+            ['4. Exact Name Matching', 'Capitalization does not matter, but exact spelling and spaces must match your registered items (use the dropdowns to avoid typos).', '']
         ]
         inst_df = pd.DataFrame(inst_rows[1:], columns=inst_rows[0])
         inst_df.to_excel(writer, sheet_name='Instructions', index=False)
@@ -113,7 +162,7 @@ def build_styled_excel_buffer(df, data_type):
 
         ws_inst.column_dimensions['A'].width = 24
         ws_inst.column_dimensions['B'].width = 36
-        ws_inst.column_dimensions['C'].width = 65
+        ws_inst.column_dimensions['C'].width = 85
 
     buffer.seek(0)
     return buffer
@@ -140,7 +189,7 @@ def alphanumeric_text_key(text):
     return re.sub(r'[^a-zA-Z0-9]', '', str(text).lower())
 
 def build_entity_resolver(id_name_pairs):
-    """Constructs a multi-stage entity resolver."""
+    """Constructs a multi-stage entity resolver for Products/Ingredients upsert."""
     valid_ids = set()
     exact_map = {}
     norm_map = {}
@@ -187,6 +236,41 @@ def build_entity_resolver(id_name_pairs):
         return None
 
     return valid_ids, resolve
+
+def build_strict_entity_resolver(id_name_pairs):
+    """Strict case-insensitive exact-name (and exact-space) resolver for Recipe & Prep Recipe imports."""
+    valid_ids = set()
+    exact_lower_map = {}
+
+    for item_id, name in id_name_pairs:
+        if not item_id or pd.isna(item_id):
+            continue
+        iid = str(item_id).strip()
+        valid_ids.add(iid)
+        if name and pd.notna(name):
+            exact_lower_map[str(name).strip().lower()] = iid
+
+    def resolve_strict(val_id, val_name):
+        # Prioritize exact name match (case-insensitive, exact spaces)
+        if val_name and pd.notna(val_name):
+            n_clean = str(val_name).strip().lower()
+            if n_clean and n_clean not in ['nan', 'none', 'null']:
+                if n_clean in exact_lower_map:
+                    return exact_lower_map[n_clean]
+                # If a name was explicitly typed and does not match exactly, do NOT guess
+                return None
+
+        # Fallback to exact ID match only if name was left blank
+        if val_id and pd.notna(val_id):
+            id_clean = str(val_id).strip()
+            if id_clean in valid_ids:
+                return id_clean
+            if id_clean.lower() in exact_lower_map:
+                return exact_lower_map[id_clean.lower()]
+
+        return None
+
+    return valid_ids, resolve_strict
 
 def ensure_store_settings_exist(client_db_path, username="STORE"):
     """Ensures the Store_Settings key-value table exists with complete anti-theft, master PIN, and thermal printer defaults."""
@@ -502,11 +586,10 @@ def web_settings_tab(username):
                         stream = io.StringIO(decoded_text, newline=None)
                         df = pd.read_csv(stream)
 
-                    # Drop completely empty rows (e.g., styled blank rows from Excel templates)
                     df = df.dropna(how='all')
                     conn = sqlite3.connect(client_db_path, timeout=20.0)
 
-                    # SCENARIO A: PRODUCT RECIPES
+                    # SCENARIO A: PRODUCT RECIPES (STRICT CASE-INSENSITIVE NAME + CARRY-DOWN)
                     if target_table == 'recipes':
                         col_map = {str(col).lower().strip().replace(' ', '_'): col for col in df.columns}
                         
@@ -521,30 +604,52 @@ def web_settings_tab(username):
                         ingredients_db = pd.read_sql("SELECT Ingredient_ID, Ingredient_Name, Unit FROM Ingredients", conn)
 
                         prod_pairs = list(zip(products_db['Product_ID'], products_db['Product_Name']))
-                        valid_prod_ids, resolve_product = build_entity_resolver(prod_pairs)
+                        _, resolve_product_strict = build_strict_entity_resolver(prod_pairs)
 
                         ing_pairs = list(zip(ingredients_db['Ingredient_ID'], ingredients_db['Ingredient_Name']))
-                        valid_ing_ids, resolve_ingredient = build_entity_resolver(ing_pairs)
-                        ing_id_to_default_unit = {str(iid).strip(): str(u).strip() for iid, u in zip(ingredients_db['Ingredient_ID'], ingredients_db['Unit']) if pd.notna(u)}
+                        _, resolve_ingredient_strict = build_strict_entity_resolver(ing_pairs)
+                        ing_id_to_default_unit = {
+                            str(iid).strip(): str(u).strip()
+                            for iid, u in zip(ingredients_db['Ingredient_ID'], ingredients_db['Unit'])
+                            if pd.notna(u) and str(u).strip()
+                        }
 
                         recipes_by_product = {}
                         skipped_rows = []
+                        last_resolved_pid = None
 
                         for row_idx, row in df.iterrows():
                             raw_pid = str(row[pid_col]).strip() if pid_col and pd.notna(row.get(pid_col)) else ""
                             raw_pname = str(row[pname_col]).strip() if pname_col and pd.notna(row.get(pname_col)) else ""
-
-                            resolved_pid = resolve_product(raw_pid, raw_pname)
-                            if not resolved_pid:
-                                skipped_rows.append(f"Row {row_idx+2}: Unknown Product '{raw_pname or raw_pid}' (not found in Products catalog)")
-                                continue
+                            if raw_pid.lower() in ['nan', 'none', 'null']: raw_pid = ""
+                            if raw_pname.lower() in ['nan', 'none', 'null']: raw_pname = ""
 
                             raw_iid = str(row[iid_col]).strip() if iid_col and pd.notna(row.get(iid_col)) else ""
                             raw_iname = str(row[iname_col]).strip() if iname_col and pd.notna(row.get(iname_col)) else ""
+                            if raw_iid.lower() in ['nan', 'none', 'null']: raw_iid = ""
+                            if raw_iname.lower() in ['nan', 'none', 'null']: raw_iname = ""
 
-                            resolved_iid = resolve_ingredient(raw_iid, raw_iname)
+                            if not raw_pid and not raw_pname and not raw_iid and not raw_iname:
+                                continue
+
+                            # Carry-down Product from previous row if left blank
+                            if not raw_pid and not raw_pname:
+                                if last_resolved_pid:
+                                    resolved_pid = last_resolved_pid
+                                else:
+                                    skipped_rows.append(f"Row {row_idx+2}: Missing Product Name/ID and no previous product to carry down.")
+                                    continue
+                            else:
+                                resolved_pid = resolve_product_strict(raw_pid, raw_pname)
+                                if not resolved_pid:
+                                    last_resolved_pid = None
+                                    skipped_rows.append(f"Row {row_idx+2}: Exact match not found for Product '{raw_pname or raw_pid}' (check spelling & spaces).")
+                                    continue
+                                last_resolved_pid = resolved_pid
+
+                            resolved_iid = resolve_ingredient_strict(raw_iid, raw_iname)
                             if not resolved_iid:
-                                skipped_rows.append(f"Row {row_idx+2}: Unknown Ingredient '{raw_iname or raw_iid}' (not found in Ingredients catalog)")
+                                skipped_rows.append(f"Row {row_idx+2}: Exact match not found for Ingredient '{raw_iname or raw_iid}' (check spelling & spaces).")
                                 continue
 
                             try:
@@ -556,12 +661,13 @@ def web_settings_tab(username):
                                 skipped_rows.append(f"Row {row_idx+2}: Invalid quantity ({qty_val}) for product {resolved_pid}")
                                 continue
 
-                            unit_val = str(row[unit_col]).strip() if unit_col and pd.notna(row.get(unit_col)) else ing_id_to_default_unit.get(resolved_iid, 'pcs')
+                            raw_unit = str(row[unit_col]).strip() if unit_col and pd.notna(row.get(unit_col)) else ""
+                            if raw_unit.lower() in ['nan', 'none', 'null', '']:
+                                unit_val = ing_id_to_default_unit.get(resolved_iid, 'pcs')
+                            else:
+                                unit_val = raw_unit
 
-                            if resolved_pid not in recipes_by_product:
-                                recipes_by_product[resolved_pid] = []
-
-                            recipes_by_product[resolved_pid].append({
+                            recipes_by_product.setdefault(resolved_pid, []).append({
                                 'ingredient_id': resolved_iid,
                                 'quantity': qty_val,
                                 'unit': unit_val
@@ -604,12 +710,12 @@ def web_settings_tab(username):
                             conn.close()
                             if skipped_rows:
                                 session['skipped_errors'] = skipped_rows
-                                feedback_msg = f"Import Notice: All {len(skipped_rows)} rows skipped because items were not found."
+                                feedback_msg = f"Import Notice: All {len(skipped_rows)} rows skipped because exact item names were not found."
                             else:
                                 feedback_msg = "Error: No valid recipe rows found in uploaded file."
                             alert_type = "danger"
 
-                    # SCENARIO B: KITCHEN PREP RECIPES
+                    # SCENARIO B: KITCHEN PREP RECIPES (STRICT CASE-INSENSITIVE NAME + CARRY-DOWN FOR NAME & BATCH_YIELD)
                     elif target_table == 'prep_recipes':
                         col_map = {str(col).lower().strip().replace(' ', '_'): col for col in df.columns}
                         
@@ -623,27 +729,65 @@ def web_settings_tab(username):
 
                         ingredients_db = pd.read_sql("SELECT Ingredient_ID, Ingredient_Name, Unit FROM Ingredients", conn)
                         ing_pairs = list(zip(ingredients_db['Ingredient_ID'], ingredients_db['Ingredient_Name']))
-                        valid_ing_ids, resolve_ingredient = build_entity_resolver(ing_pairs)
-                        ing_id_to_default_unit = {str(iid).strip(): str(u).strip() for iid, u in zip(ingredients_db['Ingredient_ID'], ingredients_db['Unit']) if pd.notna(u)}
+                        _, resolve_ingredient_strict = build_strict_entity_resolver(ing_pairs)
+                        ing_id_to_default_unit = {
+                            str(iid).strip(): str(u).strip()
+                            for iid, u in zip(ingredients_db['Ingredient_ID'], ingredients_db['Unit'])
+                            if pd.notna(u) and str(u).strip()
+                        }
 
                         prep_recipes_by_item = {}
                         skipped_rows = []
+                        last_resolved_pid = None
+                        last_yield_val = 1.0
 
                         for row_idx, row in df.iterrows():
                             raw_pid = str(row[prepped_id_col]).strip() if prepped_id_col and pd.notna(row.get(prepped_id_col)) else ""
                             raw_pname = str(row[prepped_name_col]).strip() if prepped_name_col and pd.notna(row.get(prepped_name_col)) else ""
-
-                            resolved_pid = resolve_ingredient(raw_pid, raw_pname)
-                            if not resolved_pid:
-                                skipped_rows.append(f"Row {row_idx+2}: Prepped component '{raw_pname or raw_pid}' not found in Ingredients.")
-                                continue
+                            if raw_pid.lower() in ['nan', 'none', 'null']: raw_pid = ""
+                            if raw_pname.lower() in ['nan', 'none', 'null']: raw_pname = ""
 
                             raw_iid = str(row[raw_id_col]).strip() if raw_id_col and pd.notna(row.get(raw_id_col)) else ""
                             raw_iname = str(row[raw_name_col]).strip() if raw_name_col and pd.notna(row.get(raw_name_col)) else ""
+                            if raw_iid.lower() in ['nan', 'none', 'null']: raw_iid = ""
+                            if raw_iname.lower() in ['nan', 'none', 'null']: raw_iname = ""
 
-                            resolved_iid = resolve_ingredient(raw_iid, raw_iname)
+                            if not raw_pid and not raw_pname and not raw_iid and not raw_iname:
+                                continue
+
+                            # Parse Batch_Yield if provided on this row
+                            row_yield_provided = False
+                            row_yield_val = None
+                            if yield_col and pd.notna(row.get(yield_col)) and str(row.get(yield_col)).strip() != "":
+                                try:
+                                    parsed_y = float(row[yield_col])
+                                    if parsed_y > 0:
+                                        row_yield_val = parsed_y
+                                        row_yield_provided = True
+                                except (ValueError, TypeError):
+                                    pass
+
+                            # Carry-down Prepped Item & Batch_Yield from previous row if left blank
+                            if not raw_pid and not raw_pname:
+                                if last_resolved_pid:
+                                    resolved_pid = last_resolved_pid
+                                    yield_val = row_yield_val if row_yield_provided else last_yield_val
+                                else:
+                                    skipped_rows.append(f"Row {row_idx+2}: Missing Prepped Name/ID and no previous prep item to carry down.")
+                                    continue
+                            else:
+                                resolved_pid = resolve_ingredient_strict(raw_pid, raw_pname)
+                                if not resolved_pid:
+                                    last_resolved_pid = None
+                                    skipped_rows.append(f"Row {row_idx+2}: Exact match not found for Prepped Item '{raw_pname or raw_pid}' (check spelling & spaces).")
+                                    continue
+                                last_resolved_pid = resolved_pid
+                                yield_val = row_yield_val if row_yield_provided else 1.0
+                                last_yield_val = yield_val
+
+                            resolved_iid = resolve_ingredient_strict(raw_iid, raw_iname)
                             if not resolved_iid:
-                                skipped_rows.append(f"Row {row_idx+2}: Raw ingredient '{raw_iname or raw_iid}' not found in Ingredients.")
+                                skipped_rows.append(f"Row {row_idx+2}: Exact match not found for Raw Ingredient '{raw_iname or raw_iid}' (check spelling & spaces).")
                                 continue
 
                             try:
@@ -655,23 +799,19 @@ def web_settings_tab(username):
                                 skipped_rows.append(f"Row {row_idx+2}: Invalid quantity ({qty_val}) for prepped item {resolved_pid}")
                                 continue
 
-                            unit_val = str(row[unit_col]).strip() if unit_col and pd.notna(row.get(unit_col)) else ing_id_to_default_unit.get(resolved_iid, 'g')
-
-                            try:
-                                yield_val = float(row[yield_col]) if yield_col and pd.notna(row.get(yield_col)) else 1.0
-                                if yield_val <= 0:
-                                    yield_val = 1.0
-                            except (ValueError, TypeError):
-                                yield_val = 1.0
+                            raw_unit = str(row[unit_col]).strip() if unit_col and pd.notna(row.get(unit_col)) else ""
+                            if raw_unit.lower() in ['nan', 'none', 'null', '']:
+                                unit_val = ing_id_to_default_unit.get(resolved_iid, 'g')
+                            else:
+                                unit_val = raw_unit
 
                             if resolved_pid not in prep_recipes_by_item:
                                 prep_recipes_by_item[resolved_pid] = {
                                     'yield': yield_val,
                                     'items': []
                                 }
-
-                            if yield_val > 1.0:
-                                prep_recipes_by_item[resolved_pid]['yield'] = yield_val
+                            elif row_yield_provided and row_yield_val:
+                                prep_recipes_by_item[resolved_pid]['yield'] = row_yield_val
 
                             prep_recipes_by_item[resolved_pid]['items'].append({
                                 'raw_ingredient_id': resolved_iid,
@@ -720,7 +860,7 @@ def web_settings_tab(username):
                             conn.close()
                             if skipped_rows:
                                 session['skipped_errors'] = skipped_rows
-                                feedback_msg = f"Import Notice: All {len(skipped_rows)} rows skipped because constituents were not found in Ingredients."
+                                feedback_msg = f"Import Notice: All {len(skipped_rows)} rows skipped because exact item names were not found."
                             else:
                                 feedback_msg = "Error: No valid kitchen prep rows found in uploaded file."
                             alert_type = "danger"
@@ -767,8 +907,37 @@ def web_settings_tab(username):
                             row_dict = {k: v for k, v in row.items() if pd.notna(v)}
                             
                             name_val = str(row_dict.get(name_col, '')).strip()
-                            if not name_val or name_val.lower() == 'nan': 
-                                continue
+                            if name_val.lower() in ['nan', 'none', 'null']:
+                                name_val = ''
+
+                            # AUTO-GENERATE PRODUCT NAME FROM PARENT_ITEM + (VARIANT_NAME) WHEN BLANK
+                            if not is_ingredients:
+                                parent_val = str(row_dict.get('Parent_Item', '')).strip()
+                                variant_val = str(row_dict.get('Variant_Name', '')).strip()
+                                if parent_val.lower() in ['nan', 'none', 'null']:
+                                    parent_val = ''
+                                if variant_val.lower() in ['nan', 'none', 'null']:
+                                    variant_val = ''
+
+                                if not name_val and parent_val:
+                                    if variant_val and variant_val.lower() != 'regular':
+                                        name_val = f"{parent_val} ({variant_val})"
+                                    else:
+                                        name_val = parent_val
+                                    row_dict[name_col] = name_val
+
+                                if not name_val:
+                                    continue
+
+                                if not parent_val:
+                                    row_dict['Parent_Item'] = name_val
+                                if not variant_val:
+                                    row_dict['Variant_Name'] = 'Regular'
+                                if not str(row_dict.get('Active', '')).strip():
+                                    row_dict['Active'] = 'Yes'
+                            else:
+                                if not name_val:
+                                    continue
                             
                             csv_id = str(row_dict.get(id_col, '')).strip()
 
@@ -849,27 +1018,41 @@ def web_settings_tab(username):
                     feedback_msg = f"File Format Error: {str(e)}"
                     alert_type = "danger"
 
-        # 8. DOWNLOAD COLOR-CODED EXCEL TEMPLATES (DATA TAB)
+        # 8. DOWNLOAD COLOR-CODED EXCEL TEMPLATES WITH DROPDOWNS (DATA TAB)
         elif action == 'download_template':
             template_type = request.form.get('template_type')
             
             try:
                 conn = sqlite3.connect(client_db_path)
+                ref_lists = None
+
                 if template_type == 'recipes':
                     df = pd.DataFrame(columns=[
                         'Product_ID', 'Product_Name', 'Ingredient_ID', 'Ingredient_Name', 'Quantity_Required', 'Unit'
                     ])
+                    prods = pd.read_sql("SELECT Product_Name FROM Products WHERE UPPER(COALESCE(Active, 'YES')) = 'YES' ORDER BY Product_Name", conn)
+                    ings = pd.read_sql("SELECT Ingredient_Name FROM Ingredients ORDER BY Ingredient_Name", conn)
+                    ref_lists = {
+                        'Products': [str(x).strip() for x in prods['Product_Name'].dropna().tolist() if str(x).strip()],
+                        'Ingredients': [str(x).strip() for x in ings['Ingredient_Name'].dropna().tolist() if str(x).strip()]
+                    }
                 elif template_type == 'prep_recipes':
                     df = pd.DataFrame(columns=[
                         'Prepped_ID', 'Prepped_Name', 'Raw_Ingredient_ID', 'Raw_Ingredient_Name', 'Quantity_Required', 'Unit', 'Batch_Yield'
                     ])
+                    preps = pd.read_sql("SELECT Ingredient_Name FROM Ingredients WHERE UPPER(COALESCE(Ingredient_Type, 'RAW')) = 'PREPPED' ORDER BY Ingredient_Name", conn)
+                    raws = pd.read_sql("SELECT Ingredient_Name FROM Ingredients WHERE UPPER(COALESCE(Ingredient_Type, 'RAW')) != 'PREPPED' ORDER BY Ingredient_Name", conn)
+                    ref_lists = {
+                        'Prepped_Items': [str(x).strip() for x in preps['Ingredient_Name'].dropna().tolist() if str(x).strip()],
+                        'Raw_Ingredients': [str(x).strip() for x in raws['Ingredient_Name'].dropna().tolist() if str(x).strip()]
+                    }
                 elif template_type == 'ingredients':
                     df = pd.read_sql("SELECT * FROM Ingredients LIMIT 0", conn)
                 else:
                     df = pd.read_sql("SELECT * FROM Products LIMIT 0", conn)
                 conn.close()
                 
-                buffer = build_styled_excel_buffer(df, template_type)
+                buffer = build_styled_excel_buffer(df, template_type, ref_lists=ref_lists)
                 filename = f"template_{template_type}_{username}.xlsx"
                 return send_file(
                     buffer,
@@ -882,12 +1065,14 @@ def web_settings_tab(username):
                 alert_type = "danger"
                 target_tab = "data"
 
-        # 9. EXPORT COLOR-CODED EXCEL DATA (DATA TAB)
+        # 9. EXPORT COLOR-CODED EXCEL DATA WITH DROPDOWNS (DATA TAB)
         elif action == 'export_csv':
             export_target = request.form.get('export_target')
             
             try:
                 conn = sqlite3.connect(client_db_path)
+                ref_lists = None
+
                 if export_target == 'recipes':
                     query = """
                         SELECT 
@@ -903,6 +1088,12 @@ def web_settings_tab(username):
                         ORDER BY r.Product_ID, r.Ingredient_ID
                     """
                     df = pd.read_sql(query, conn)
+                    prods = pd.read_sql("SELECT Product_Name FROM Products WHERE UPPER(COALESCE(Active, 'YES')) = 'YES' ORDER BY Product_Name", conn)
+                    ings = pd.read_sql("SELECT Ingredient_Name FROM Ingredients ORDER BY Ingredient_Name", conn)
+                    ref_lists = {
+                        'Products': [str(x).strip() for x in prods['Product_Name'].dropna().tolist() if str(x).strip()],
+                        'Ingredients': [str(x).strip() for x in ings['Ingredient_Name'].dropna().tolist() if str(x).strip()]
+                    }
                     conn.close()
                     if not df.empty and 'Quantity_Required' in df.columns:
                         df['Quantity_Required'] = pd.to_numeric(df['Quantity_Required'], errors='coerce').fillna(0.0)
@@ -923,6 +1114,12 @@ def web_settings_tab(username):
                         ORDER BY pr.Prepped_Ingredient_ID, pr.Raw_Ingredient_ID
                     """
                     df = pd.read_sql(query, conn)
+                    preps = pd.read_sql("SELECT Ingredient_Name FROM Ingredients WHERE UPPER(COALESCE(Ingredient_Type, 'RAW')) = 'PREPPED' ORDER BY Ingredient_Name", conn)
+                    raws = pd.read_sql("SELECT Ingredient_Name FROM Ingredients WHERE UPPER(COALESCE(Ingredient_Type, 'RAW')) != 'PREPPED' ORDER BY Ingredient_Name", conn)
+                    ref_lists = {
+                        'Prepped_Items': [str(x).strip() for x in preps['Ingredient_Name'].dropna().tolist() if str(x).strip()],
+                        'Raw_Ingredients': [str(x).strip() for x in raws['Ingredient_Name'].dropna().tolist() if str(x).strip()]
+                    }
                     conn.close()
                     if not df.empty:
                         df['Quantity_Required'] = pd.to_numeric(df['Quantity_Required'], errors='coerce').fillna(0.0)
@@ -935,7 +1132,7 @@ def web_settings_tab(username):
                     df = pd.read_sql("SELECT * FROM Products", conn)
                     conn.close()
                 
-                buffer = build_styled_excel_buffer(df, export_target)
+                buffer = build_styled_excel_buffer(df, export_target, ref_lists=ref_lists)
                 filename = f"export_{export_target}_{username}_{datetime.now().strftime('%Y%m%d')}.xlsx"
                 return send_file(
                     buffer,
